@@ -1,0 +1,11 @@
+python-dotenv
+requests
+watchdog
+osmium
+nats-py
+elasticsearch[async]>=8.0,<9.0
+typesense
+asyncpg
+sentence-transformers
+fastapi
+uvicorn[standard]
