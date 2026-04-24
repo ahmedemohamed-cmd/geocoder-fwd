@@ -1,0 +1,35 @@
+{{- if .Values.dataVolume.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "geocoder.fullname" . }}-data
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.dataVolume.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.dataVolume.size }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if and .Values.global.aiEnabled .Values.modelVolume.enabled (not .Values.modelVolume.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "geocoder.fullname" . }}-models
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.modelVolume.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.modelVolume.size }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+{{- end }}

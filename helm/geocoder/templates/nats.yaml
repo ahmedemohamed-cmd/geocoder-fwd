@@ -1,0 +1,84 @@
+{{- if .Values.nats.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "geocoder.fullname" . }}-nats
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  ports:
+    - name: client
+      port: {{ .Values.nats.service.clientPort }}
+      targetPort: client
+    - name: monitor
+      port: {{ .Values.nats.service.monitorPort }}
+      targetPort: monitor
+  selector:
+    {{- include "geocoder.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "geocoder.fullname" . }}-nats
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  serviceName: {{ include "geocoder.fullname" . }}-nats
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "geocoder.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "geocoder.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      containers:
+        - name: nats
+          image: "{{ .Values.nats.image.repository }}:{{ .Values.nats.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-js"
+            - "-sd"
+            - "/data"
+            - "-m"
+            - "{{ .Values.nats.service.monitorPort }}"
+          ports:
+            - name: client
+              containerPort: {{ .Values.nats.service.clientPort }}
+            - name: monitor
+              containerPort: {{ .Values.nats.service.monitorPort }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.nats.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 10
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.nats.persistence.size }}
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+{{- end }}

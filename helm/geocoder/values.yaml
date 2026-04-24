@@ -1,0 +1,271 @@
+# Default values for geocoder Helm chart
+# This file supports both standard and AI-enabled configurations
+
+# Global settings
+global:
+  # Set to true to enable AI/vector features with GPU support
+  aiEnabled: false
+  # Image registry for application services
+  imageRegistry: ""
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+  # Storage class for persistent volumes
+  storageClass: ""
+
+# Application image configuration
+app:
+  image:
+    repository: ahmedemohamed-cmd
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# OSM data source URL
+osm:
+  url: "https://download.geofabrik.de/africa/egypt-latest.osm.pbf"
+
+# NATS configuration
+nats:
+  enabled: true
+  image:
+    repository: nats
+    tag: latest
+  service:
+    clientPort: 4222
+    monitorPort: 8222
+  persistence:
+    enabled: true
+    size: 10Gi
+  stream: OSM
+  subject: osm.elements
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# etcd configuration
+etcd:
+  enabled: true
+  image:
+    repository: quay.io/coreos/etcd
+    tag: v3.5.17
+  service:
+    clientPort: 2379
+    peerPort: 2380
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# Elasticsearch configuration
+elasticsearch:
+  enabled: true
+  image:
+    repository: docker.elastic.co/elasticsearch/elasticsearch
+    tag: 8.11.0
+  service:
+    httpPort: 9200
+    transportPort: 9300
+  persistence:
+    enabled: true
+    size: 20Gi
+  javaOpts: "-Xms512m -Xmx512m"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Typesense configuration
+typesense:
+  enabled: true
+  image:
+    repository: typesense/typesense
+    tag: "27.1"
+  service:
+    port: 8108
+  apiKey: typesense-secret-key
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# PostGIS configuration
+postgis:
+  enabled: true
+  image:
+    repository: postgis/postgis
+    tag: "16-3.4-alpine"
+  service:
+    port: 5432
+  auth:
+    username: postgres
+    password: postgres
+    database: postgres
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Embedding model configuration
+embeddings:
+  # Model name (HuggingFace) or local path
+  model: "all-MiniLM-L6-v2"
+  # For AI mode, use local path
+  localModelPath: "/app/models/all-MiniLM-L6-v2"
+  # Cache directory
+  cacheDir: "/app/models"
+
+# Data persistence for downloaded OSM files (shared between downloader and watcher)
+dataVolume:
+  enabled: true
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+# Model storage for AI mode (pre-downloaded embedding models)
+modelVolume:
+  enabled: false
+  size: 5Gi
+  accessMode: ReadWriteOnce
+  # If provided, use an existing PVC with pre-downloaded models
+  existingClaim: ""
+
+# GPU configuration for AI workloads
+gpu:
+  enabled: false
+  # Number of GPUs to request per pod
+  count: 1
+  # Node selector for GPU nodes
+  nodeSelector: {}
+  # Tolerations for GPU nodes
+  tolerations: []
+
+# Downloader service - runs on a CronJob schedule
+downloader:
+  enabled: true
+  # Run monthly (at 00:00 on the 1st day of every month)
+  schedule: "0 0 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# Watcher/parser service - runs on a CronJob schedule (monthly)
+watcher:
+  enabled: true
+  # Run monthly - scheduled 30 minutes after downloader to allow download completion
+  schedule: "30 0 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # If runAsDeployment is true, watcher runs as a Deployment (continuous mode)
+  # If false, runs as a CronJob (monthly scheduled)
+  runAsDeployment: false
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Elasticsearch inserter service
+esInserter:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Typesense inserter service
+tsInserter:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# PostGIS inserter service
+postgisInserter:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Geocoder API service
+geocoder:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: geocoder.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Cleaner service - runs as a Job to reset all data
+cleaner:
+  enabled: false
+  # Run as a manual Job when enabled
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
