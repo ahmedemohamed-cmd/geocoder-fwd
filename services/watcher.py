@@ -17,6 +17,7 @@ from shared import nats_client
 
 SENTINEL = object()
 BATCH_PUBLISH = 100
+QUEUE_MAXSIZE = 100_000
 
 
 def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
@@ -155,7 +156,7 @@ class OSMHandler(osmium.SimpleHandler):
 # ---------------------------------------------------------------------------
 async def publish_file(filepath: str):
     nc, js = await nats_client.connect()
-    q: queue.Queue = queue.Queue(maxsize=10_000)
+    q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
     handler = OSMHandler(q)
 
@@ -188,17 +189,26 @@ async def publish_file(filepath: str):
         except queue.Empty:
             continue
 
+        # Publish batch concurrently for better throughput
+        publish_tasks = []
         for elem in batch:
             try:
-                await js.publish(NATS_SUBJECT, json.dumps(elem).encode(), timeout=10)
+                task = asyncio.create_task(js.publish(NATS_SUBJECT, json.dumps(elem).encode(), timeout=10))
+                publish_tasks.append(task)
             except Exception as e:
-                print(f"[watcher] Error publishing element: {e}", flush=True)
+                print(f"[watcher] Error creating publish task: {e}", flush=True)
                 continue
-        published += len(batch)
+        
+        # Wait for all publishes in batch to complete
+        if publish_tasks:
+            results = await asyncio.gather(*publish_tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    print(f"[watcher] Error publishing element: {result}", flush=True)
+            published += len(publish_tasks)
+        
         if published % 5000 < BATCH_PUBLISH:
             print(f"\r[watcher] Published {published} ...", end="", flush=True)
-        # Small delay between batches to reduce NATS load
-        await asyncio.sleep(0.01)
 
     # flush anything left
     while True:
