@@ -1,3 +1,4 @@
+import os
 from shared.config import EMBEDDING_MODEL, EMBEDDING_DIM, ENABLE_VECTORS
 
 _model = None
@@ -21,7 +22,42 @@ def get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        import torch
+
+        # Detect and use GPU if available
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[embeddings] Using device: {device}")
+
+        cache_folder = os.environ.get('TRANSFORMERS_CACHE')
+        
+        # Check if EMBEDDING_MODEL is a local path that exists
+        if os.path.exists(EMBEDDING_MODEL):
+            print(f"[embeddings] Loading local model from: {EMBEDDING_MODEL}")
+            _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+        else:
+            # EMBEDDING_MODEL is a Hugging Face model name or path that doesn't exist locally
+            if cache_folder:
+                # Ensure cache directory exists
+                os.makedirs(cache_folder, exist_ok=True)
+                
+                # Construct the local path where the model would be cached
+                model_name = EMBEDDING_MODEL.replace('/', '_')
+                local_model_path = os.path.join(cache_folder, model_name)
+                
+                if os.path.exists(local_model_path):
+                    print(f"[embeddings] Loading cached model from: {local_model_path}")
+                    _model = SentenceTransformer(local_model_path, device=device)
+                else:
+                    print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
+                    _model = SentenceTransformer(
+                        EMBEDDING_MODEL,
+                        device=device,
+                        cache_folder=cache_folder
+                    )
+                    print(f"[embeddings] Model downloaded and cached successfully")
+            else:
+                print(f"[embeddings] No cache directory specified, using default cache")
+                _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
     return _model
 
 
@@ -60,8 +96,20 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     """Return embedding vectors for a list of texts.
 
     Returns empty list-of-zeros when ENABLE_VECTORS is False.
+    Optimized for GPU with larger batch sizes.
     """
     if not ENABLE_VECTORS:
         return [[0.0] * EMBEDDING_DIM for _ in texts]
+    
     model = get_model()
-    return model.encode(texts, show_progress_bar=False).tolist()
+    
+    # Use larger batch size on GPU for better throughput
+    import torch
+    batch_size = 128 if torch.cuda.is_available() else 32
+    
+    return model.encode(
+        texts, 
+        batch_size=batch_size,
+        show_progress_bar=False,
+        convert_to_numpy=True
+    ).tolist()
