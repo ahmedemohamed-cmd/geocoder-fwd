@@ -50,6 +50,7 @@ class OSMHandler(osmium.SimpleHandler):
         super().__init__()
         self.q = q
         self.count = 0
+        self.geom_factory = osmium.geom.GeoJSONFactory()
 
     def node(self, n):
         if not n.tags or not n.location.valid():
@@ -103,14 +104,41 @@ class OSMHandler(osmium.SimpleHandler):
         if not r.tags:
             return
         tags = dict(r.tags)
+        
+        # Extract geometry for multipolygons and boundaries
+        geom = None
+        area = 0.0
+        try:
+            # Check if this is a multipolygon or boundary relation
+            rel_type = tags.get("type", "")
+            if rel_type in ("multipolygon", "boundary"):
+                # Use osmium's geometry factory to create multipolygon geometry
+                try:
+                    geojson = self.geom_factory.create_multipolygon(r)
+                    if geojson:
+                        geom = json.loads(geojson)
+                        # Calculate area for each polygon in the multipolygon
+                        if geom.get("type") == "MultiPolygon":
+                            for polygon in geom.get("coordinates", []):
+                                if polygon and polygon[0]:
+                                    coords = [(c[0], c[1]) for c in polygon[0]]
+                                    area += _polygon_area_km2(coords)
+                        elif geom.get("type") == "Polygon" and geom.get("coordinates"):
+                            coords = [(c[0], c[1]) for c in geom["coordinates"][0]]
+                            area = _polygon_area_km2(coords)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
         self.q.put(
             {
                 "osm_id": f"r{r.id}",
                 "osm_type": "relation",
                 "tags": tags,
-                "geom": None,
+                "geom": geom,
                 "admin_level": int(tags.get("admin_level", 0) or 0),
-                "area_km2": 0.0,
+                "area_km2": area,
             }
         )
         self.count += 1
