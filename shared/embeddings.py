@@ -1,3 +1,4 @@
+import os
 from shared.config import EMBEDDING_MODEL, EMBEDDING_DIM, ENABLE_VECTORS
 
 _model = None
@@ -21,7 +22,29 @@ def get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        import torch
+
+        # Detect and use GPU if available
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[embeddings] Using device: {device}")
+
+        # Check if EMBEDDING_MODEL is a local path
+        if os.path.exists(EMBEDDING_MODEL):
+            print(f"[embeddings] Loading local model from: {EMBEDDING_MODEL}")
+            _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+        else:
+            # Use local cache directory if specified
+            cache_folder = os.environ.get('TRANSFORMERS_CACHE')
+            if cache_folder:
+                print(f"[embeddings] Using local model cache: {cache_folder}")
+                _model = SentenceTransformer(
+                    EMBEDDING_MODEL,
+                    device=device,
+                    cache_folder=cache_folder,
+                    local_files_only=True  # Force use of local files only
+                )
+            else:
+                _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
     return _model
 
 
@@ -60,8 +83,20 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     """Return embedding vectors for a list of texts.
 
     Returns empty list-of-zeros when ENABLE_VECTORS is False.
+    Optimized for GPU with larger batch sizes.
     """
     if not ENABLE_VECTORS:
         return [[0.0] * EMBEDDING_DIM for _ in texts]
+    
     model = get_model()
-    return model.encode(texts, show_progress_bar=False).tolist()
+    
+    # Use larger batch size on GPU for better throughput
+    import torch
+    batch_size = 128 if torch.cuda.is_available() else 32
+    
+    return model.encode(
+        texts, 
+        batch_size=batch_size,
+        show_progress_bar=False,
+        convert_to_numpy=True
+    ).tolist()
