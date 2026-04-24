@@ -1,45 +1,146 @@
-# Autocomplete (Typesense) - short prefix
+### Geocoding Service API Examples
+### Base URL: http://localhost:8000
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+
+### Check which features are enabled (vectors, AI)
+GET http://localhost:8000/features
+
+###
+
+# ============================================================================
+# Autocomplete Endpoint (Typesense)
+# Fast prefix/typo-tolerant search with geo-biasing
+# ============================================================================
+
+### Basic autocomplete - short prefix search
 GET http://localhost:8000/autocomplete?q=cai
 
-<> 2026-04-24T145452.200.json
-<> 2026-04-23T152413.200.json
-<> 2026-04-23T151531.200.json
 ###
-# Autocomplete with geo-bias (Cairo center)
+
+### Autocomplete with location bias (Cairo coordinates)
 GET http://localhost:8000/autocomplete?q=cairo&lat=30.0444&lon=31.2357&limit=5
 
-<> 2026-04-24T150510.200.json
-<> 2026-04-23T151543.200.json
 ###
-# Geocode (Elasticsearch) - full text + vector + geo + ranking
+
+### Autocomplete without vector search (faster, text-only)
+GET http://localhost:8000/autocomplete?q=cairo&limit=5&vector=false
+
+###
+
+### Autocomplete with custom limit
+GET http://localhost:8000/autocomplete?q=tahrir&lat=30.0444&lon=31.2357&limit=20
+
+###
+
+### Autocomplete for different query types
+GET http://localhost:8000/autocomplete?q=pyramids&lat=29.9792&lon=31.1342&limit=10
+
+###
+
+### Autocomplete with typo tolerance
+GET http://localhost:8000/autocomplete?q=kahira&lat=30.0444&lon=31.2357&limit=5
+
+###
+
+# ============================================================================
+# Geocode Endpoint (Elasticsearch)
+# Full-text search with vector similarity, geo decay, and ranking
+# ============================================================================
+
+### Basic geocode search
 GET http://localhost:8000/geocode?q=cairo
 
-<> 2026-04-24T150539.200.json
-<> 2026-04-23T151633.200.json
-<> 2026-04-23T151555.500.txt
 ###
-# Geocode with geo-distance decay
+
+### Geocode with geo-distance decay (near Pyramids)
 GET http://localhost:8000/geocode?q=pyramids&lat=29.9792&lon=31.1342&limit=5
 
-<> 2026-04-23T151658.200.json
-<> 2026-04-23T151558.500.txt
+###
+
+### Geocode with location bias (Cairo area)
+GET http://localhost:8000/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10
 
 ###
+
+### Geocode without vector search (faster, text-only)
+GET http://localhost:8000/geocode?q=alexandria&limit=10&vector=false
+
+###
+
+### Geocode with custom result limit
+GET http://localhost:8000/geocode?q=nile&limit=20
+
+###
+
+### Geocode for specific place types
+GET http://localhost:8000/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=15
+
+###
+
+### Geocode with fuzzy matching (typo tolerance)
+GET http://localhost:8000/geocode?q=kahira&lat=30.0444&lon=31.2357&limit=5
+
+###
+
+# ============================================================================
+# Feedback Endpoint
+# Popularity feedback loop to boost future rankings
+# ============================================================================
+
+### Boost popularity for a place (default boost: 1.0)
+POST http://localhost:8000/feedback?osm_id=n271613766&boost=1.0
+
+###
+
+### Boost popularity with custom boost value
+POST http://localhost:8000/feedback?osm_id=n271613766&boost=5.0
+
+###
+
+# ============================================================================
+# Elasticsearch Direct Access (for debugging)
+# ============================================================================
+
+### Count documents in Elasticsearch index
 GET http://localhost:9200/osm_places/_count
 
-<> 2026-04-23T171233.200.json
-<> 2026-04-23T171224.200.json
-<> 2026-04-23T171221.200.json
-<> 2026-04-23T171218.200.json
-<> 2026-04-23T171214.200.json
-<> 2026-04-23T171211.200.json
-<> 2026-04-23T171208.200.json
-<> 2026-04-23T170832.200.json
-<> 2026-04-23T170823.200.json
+###
 
+### Get mapping for Elasticsearch index
+GET http://localhost:9200/osm_places/_mapping
 
 ###
-http://localhost:8000/autocomplete?q=cairo&limit=5&vector=false
 
-<> 2026-04-24T142900.200.json
-<> 2026-04-24T142453.200.json
+### Search Elasticsearch directly (raw query)
+POST http://localhost:9200/osm_places/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match": {
+      "name": "cairo"
+    }
+  },
+  "size": 5
+}
+
+###
+
+# ============================================================================
+# Typesense Direct Access (for debugging)
+# ============================================================================
+
+### Search Typesense collection directly
+GET http://localhost:8108/collections/osm_places/documents/search?q=cairo&query_by=name,name_en,tags_text&per_page=5
+X-TYPESENSE-API-KEY: typesense-secret-key
+
+###
+
+### Get Typesense collection schema
+GET http://localhost:8108/collections/osm_places
+X-TYPESENSE-API-KEY: typesense-secret-key
+
+###
