@@ -100,6 +100,13 @@ services:
       - HF_HOME=/app/models
     volumes:
       - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       nats:
         condition: service_started
@@ -123,6 +130,13 @@ services:
       - HF_HOME=/app/models
     volumes:
       - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       nats:
         condition: service_started
@@ -166,6 +180,13 @@ services:
       - HF_HOME=/app/models
     volumes:
       - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       elasticsearch:
         condition: service_healthy
