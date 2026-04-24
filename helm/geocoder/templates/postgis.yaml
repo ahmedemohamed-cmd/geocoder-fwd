@@ -1,0 +1,90 @@
+{{- if .Values.postgis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "geocoder.fullname" . }}-postgis
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgis
+spec:
+  ports:
+    - name: postgres
+      port: {{ .Values.postgis.service.port }}
+      targetPort: postgres
+  selector:
+    {{- include "geocoder.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "geocoder.fullname" . }}-postgis
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgis
+spec:
+  serviceName: {{ include "geocoder.fullname" . }}-postgis
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "geocoder.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgis
+  template:
+    metadata:
+      labels:
+        {{- include "geocoder.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgis
+    spec:
+      containers:
+        - name: postgis
+          image: "{{ .Values.postgis.image.repository }}:{{ .Values.postgis.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.postgis.service.port }}
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "geocoder.fullname" . }}-postgis
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "geocoder.fullname" . }}-postgis
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "geocoder.fullname" . }}-postgis
+                  key: database
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.postgis.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgis.persistence.size }}
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+{{- end }}

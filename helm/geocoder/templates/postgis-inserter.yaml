@@ -1,0 +1,31 @@
+{{- if .Values.postgisInserter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "geocoder.fullname" . }}-postgis-inserter
+  labels:
+    {{- include "geocoder.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgis-inserter
+spec:
+  replicas: {{ .Values.postgisInserter.replicas }}
+  selector:
+    matchLabels:
+      {{- include "geocoder.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgis-inserter
+  template:
+    metadata:
+      labels:
+        {{- include "geocoder.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgis-inserter
+    spec:
+      containers:
+        - name: postgis-inserter
+          image: {{ include "geocoder.appImage" . }}
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          command: ["python", "-m", "services.postgis_inserter"]
+          env:
+            {{- include "geocoder.commonEnv" . | nindent 12 }}
+            {{- include "geocoder.postgisEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.postgisInserter.resources | nindent 12 }}
+{{- end }}
