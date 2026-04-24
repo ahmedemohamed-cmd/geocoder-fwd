@@ -38,6 +38,15 @@ def _geojson_to_wkt(geom: dict) -> str | None:
             pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
             rings.append(f"({pts})")
         return f"POLYGON({', '.join(rings)})"
+    if gtype == "MultiPolygon":
+        polygons = []
+        for polygon in coords:
+            rings = []
+            for ring in polygon:
+                pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
+                rings.append(f"({pts})")
+            polygons.append(f"({', '.join(rings)})")
+        return f"MULTIPOLYGON({', '.join(polygons)})"
     return None
 
 

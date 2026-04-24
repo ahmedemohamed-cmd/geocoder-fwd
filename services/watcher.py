@@ -16,7 +16,7 @@ from shared.config import DATA_DIR, NATS_SUBJECT
 from shared import nats_client
 
 SENTINEL = object()
-BATCH_PUBLISH = 500
+BATCH_PUBLISH = 100
 
 
 def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
@@ -50,6 +50,9 @@ class OSMHandler(osmium.SimpleHandler):
         super().__init__()
         self.q = q
         self.count = 0
+        self.node_count = 0
+        self.way_count = 0
+        self.relation_count = 0
         self.geom_factory = osmium.geom.GeoJSONFactory()
 
     def node(self, n):
@@ -70,6 +73,7 @@ class OSMHandler(osmium.SimpleHandler):
             }
         )
         self.count += 1
+        self.node_count += 1
 
     def way(self, w):
         if not w.tags:
@@ -99,6 +103,7 @@ class OSMHandler(osmium.SimpleHandler):
             }
         )
         self.count += 1
+        self.way_count += 1
 
     def relation(self, r):
         if not r.tags:
@@ -142,6 +147,7 @@ class OSMHandler(osmium.SimpleHandler):
             }
         )
         self.count += 1
+        self.relation_count += 1
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +189,16 @@ async def publish_file(filepath: str):
             continue
 
         for elem in batch:
-            await js.publish(NATS_SUBJECT, json.dumps(elem).encode())
+            try:
+                await js.publish(NATS_SUBJECT, json.dumps(elem).encode(), timeout=10)
+            except Exception as e:
+                print(f"[watcher] Error publishing element: {e}", flush=True)
+                continue
         published += len(batch)
         if published % 5000 < BATCH_PUBLISH:
             print(f"\r[watcher] Published {published} ...", end="", flush=True)
+        # Small delay between batches to reduce NATS load
+        await asyncio.sleep(0.01)
 
     # flush anything left
     while True:
@@ -194,13 +206,18 @@ async def publish_file(filepath: str):
             item = q.get_nowait()
             if item is SENTINEL:
                 break
-            await js.publish(NATS_SUBJECT, json.dumps(item).encode())
-            published += 1
+            try:
+                await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=10)
+                published += 1
+            except Exception as e:
+                print(f"[watcher] Error publishing element during flush: {e}", flush=True)
+                continue
         except queue.Empty:
             break
 
     thread.join()
-    print(f"\n[watcher] {os.path.basename(filepath)}: published {published} elements")
+    print(f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})")
+    print(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
     await nc.close()
 
 

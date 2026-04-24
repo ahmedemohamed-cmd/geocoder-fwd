@@ -113,12 +113,31 @@ def _centroid(geom: dict) -> list[float] | None:
     coords = geom["coordinates"]
     if gtype == "Point":
         return [coords[1], coords[0]]
-    if gtype in ("LineString", "Polygon"):
-        pts = coords[0] if gtype == "Polygon" else coords
-        if not pts:
+    if gtype == "LineString":
+        if not coords:
             return None
+        avg_lat = sum(c[1] for c in coords) / len(coords)
+        avg_lon = sum(c[0] for c in coords) / len(coords)
+        return [avg_lat, avg_lon]
+    if gtype == "Polygon":
+        if not coords or not coords[0]:
+            return None
+        pts = coords[0]  # exterior ring
         avg_lat = sum(c[1] for c in pts) / len(pts)
         avg_lon = sum(c[0] for c in pts) / len(pts)
+        return [avg_lat, avg_lon]
+    if gtype == "MultiPolygon":
+        if not coords:
+            return None
+        # Collect all points from all polygons
+        all_pts = []
+        for polygon in coords:
+            if polygon and polygon[0]:
+                all_pts.extend(polygon[0])
+        if not all_pts:
+            return None
+        avg_lat = sum(c[1] for c in all_pts) / len(all_pts)
+        avg_lon = sum(c[0] for c in all_pts) / len(all_pts)
         return [avg_lat, avg_lon]
     return None
 
