@@ -85,21 +85,31 @@ def _centroid(geom: dict) -> dict | None:
 
 
 async def ensure_index(es: AsyncElasticsearch):
-    try:
-        if not await es.indices.exists(index=INDEX):
-            await es.indices.create(index=INDEX, **MAPPING)
-            print(f"[es-inserter] Created index {INDEX}", flush=True)
-    except Exception as e:
-        print(f"[es-inserter] Error checking/creating ES index: {e}", flush=True)
-        # Try to create the index anyway
+    max_retries = 5
+    retry_delay = 3
+    
+    for attempt in range(max_retries):
         try:
-            await es.indices.create(index=INDEX, **MAPPING)
-            print(f"[es-inserter] Created ES index {INDEX} (fallback)", flush=True)
-        except Exception as e2:
-            print(f"[es-inserter] Failed to create ES index: {e2}", flush=True)
-            # If index already exists, that's fine
-            if "resource_already_exists" not in str(e2).lower():
-                raise
+            if not await es.indices.exists(index=INDEX):
+                await es.indices.create(index=INDEX, **MAPPING)
+                print(f"[es-inserter] Created index {INDEX}", flush=True)
+            else:
+                print(f"[es-inserter] Index {INDEX} already exists", flush=True)
+            return
+        except Exception as e:
+            print(f"[es-inserter] Error checking/creating ES index (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+            else:
+                # Final attempt - try to create anyway
+                try:
+                    await es.indices.create(index=INDEX, **MAPPING)
+                    print(f"[es-inserter] Created ES index {INDEX} (fallback)", flush=True)
+                except Exception as e2:
+                    print(f"[es-inserter] Failed to create ES index: {e2}", flush=True)
+                    # If index already exists, that's fine
+                    if "resource_already_exists" not in str(e2).lower():
+                        raise
 
 
 async def run():
