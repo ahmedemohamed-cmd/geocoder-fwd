@@ -1,0 +1,54 @@
+# Data directories
+data/
+*.osm.pbf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+env.yaml/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.devin/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment
+.env
+.env.*
+.envrc
+
+# Docker
+docker-compose.yaml
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+README*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+.pytest_cache/
+.coverage
+.mypy_cache/
