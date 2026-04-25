@@ -158,17 +158,26 @@ If you prefer to download the model manually (e.g., for offline environments, pr
 
 #### Method 1: Hugging Face CLI (Recommended)
 
+1. On many enterprise Linux systems, python does not exist — use python3.
 ```bash
-# Install huggingface-cli if not already installed
-pip install huggingface-hub
+python3 --version```
+On many enterprise Linux systems, python does not exist — use python3.
 
-# Download the default model (paraphrase-multilingual-MiniLM-L12-v2)
-huggingface-cli download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir ./models/paraphrase-multilingual-MiniLM-L12-v2
+2. Ensure huggingface_hub is installed (user install is fine)
 
-# Download a different model
-huggingface-cli download sentence-transformers/all-MiniLM-L6-v2 --local-dir ./models/all-MiniLM-L6-v2
+```bash
+pip install --upgrade huggingface_hub```
+
+3. download the model
+```bash
+python3 - << 'EOF'
+from huggingface_hub import snapshot_download
+
+snapshot_download(
+    repo_id="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    local_dir="./models/paraphrase-multilingual-Mini
+
 ```
-
 #### Method 2: Python Script
 
 ```bash
