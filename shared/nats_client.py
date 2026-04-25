@@ -1,5 +1,5 @@
 import nats
-from nats.js.api import StreamConfig
+from nats.js.api import StreamConfig, RetentionPolicy
 from shared.config import NATS_URL, NATS_STREAM, NATS_SUBJECT
 
 
@@ -20,7 +20,7 @@ async def connect():
                     StreamConfig(
                         name=NATS_STREAM,
                         subjects=[NATS_SUBJECT],
-                        retention="file",  # Use file storage for better reliability
+                        retention=RetentionPolicy.LIMITS,  # Keep messages until limits are reached
                         max_age=0,  # Keep messages indefinitely (0 = unlimited)
                         max_bytes=-1,  # No size limit
                         storage="file",  # Store data on disk

@@ -106,6 +106,52 @@ curl "http://localhost:8000/reverse?lat=30.0444&lon=31.2357"
 curl "http://localhost:8000/autocomplete?q=Tahr"
 ```
 
+## Manual Model Download
+
+If you need to download the embedding model manually (e.g., for offline environments or to avoid download delays), you can download it to the `models/` directory:
+
+### Using Hugging Face CLI
+
+```bash
+# Install huggingface-cli if not already installed
+pip install huggingface-hub
+
+# Download the default model (all-MiniLM-L6-v2)
+huggingface-cli download sentence-transformers/all-MiniLM-L6-v2 --local-dir models/all-MiniLM-L6-v2
+```
+
+### Using Python
+
+```bash
+# Install sentence-transformers
+pip install sentence-transformers
+
+# Download the model using Python
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2').save('models/all-MiniLM-L6-v2')"
+```
+
+### Using a Different Model
+
+To use a different model, download it to the `models/` directory and update the `EMBEDDING_MODEL` environment variable to point to the local path:
+
+```bash
+# Download a different model
+huggingface-cli download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir models/paraphrase-multilingual-MiniLM-L12-v2
+
+# Set the environment variable to use the local model
+export EMBEDDING_MODEL=models/paraphrase-multilingual-MiniLM-L12-v2
+```
+
+### Docker Compose with Local Model
+
+When using Docker Compose with a locally downloaded model, mount the models directory and set the model path:
+
+```bash
+docker-compose -f docker-compose-ai.yaml up -d
+```
+
+The `docker-compose-ai.yaml` already includes the volume mount for the models directory and sets `EMBEDDING_MODEL=/app/models/all-MiniLM-L6-v2`.
+
 ## Development
 
 ### Running locally
