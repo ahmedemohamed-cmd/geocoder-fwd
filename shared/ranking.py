@@ -9,6 +9,7 @@ Secondary signals (minor boost):
   4. population   – log-scaled
   5. metadata     – wikidata / wikipedia presence
   6. landuse      – residential > commercial > retail > industrial > ...
+  7. venue type   – amenity/shop/leisure/tourism (restaurant, cinema, hotel, ...)
 
 The final ``offline_rank`` is the weighted sum, kept as a positive float
 so it can be used directly as a Typesense sort field and an ES boost.
@@ -59,6 +60,85 @@ _LANDUSE_SCORES: dict[str, float] = {
     "greenfield": 0.15,
 }
 
+# ── venue importance (0..1) ───────────────────────────────────────────────
+_VENUE_SCORES: dict[str, float] = {
+    # amenity venues
+    "restaurant": 0.80,
+    "cafe": 0.75,
+    "bar": 0.70,
+    "pub": 0.70,
+    "fast_food": 0.60,
+    "food_court": 0.55,
+    "cinema": 0.75,
+    "theatre": 0.80,
+    "arts_centre": 0.70,
+    "music_venue": 0.75,
+    "nightclub": 0.65,
+    "library": 0.70,
+    "museum": 0.80,
+    "gallery": 0.65,
+    "conference_centre": 0.75,
+    "events_venue": 0.70,
+    "hospital": 0.85,
+    "clinic": 0.70,
+    "pharmacy": 0.65,
+    "doctors": 0.60,
+    "dentist": 0.55,
+    "veterinary": 0.50,
+    "school": 0.70,
+    "university": 0.80,
+    "college": 0.70,
+    "kindergarten": 0.60,
+    "bank": 0.65,
+    "atm": 0.50,
+    "post_office": 0.60,
+    "police": 0.70,
+    "fire_station": 0.65,
+    "townhall": 0.75,
+    "courthouse": 0.70,
+    "community_centre": 0.60,
+    "place_of_worship": 0.65,
+    # shop venues
+    "supermarket": 0.75,
+    "department_store": 0.70,
+    "convenience": 0.60,
+    "mall": 0.70,
+    "marketplace": 0.65,
+    "bakery": 0.55,
+    "butcher": 0.50,
+    "clothes": 0.55,
+    "shoes": 0.50,
+    "electronics": 0.60,
+    "books": 0.55,
+    "gift": 0.50,
+    "jewelry": 0.55,
+    "furniture": 0.55,
+    "hardware": 0.55,
+    "sports": 0.55,
+    "toys": 0.50,
+    # leisure venues
+    "sports_centre": 0.70,
+    "stadium": 0.80,
+    "swimming_pool": 0.65,
+    "fitness_centre": 0.60,
+    "golf_course": 0.60,
+    "ice_rink": 0.55,
+    "bowling_alley": 0.50,
+    # tourism venues
+    "hotel": 0.75,
+    "hostel": 0.60,
+    "motel": 0.55,
+    "guest_house": 0.60,
+    "apartment": 0.55,
+    "camp_site": 0.50,
+    "attraction": 0.70,
+    "theme_park": 0.75,
+    "zoo": 0.70,
+    "aquarium": 0.65,
+    "viewpoint": 0.50,
+    "picnic_site": 0.45,
+}
+
 # ── admin_level → score  (OSM admin_level: 2=country … 10=suburb) ─────────
 def _admin_score(admin_level: int) -> float:
     if admin_level <= 0:
@@ -105,6 +185,28 @@ def _landuse_score(tags: dict) -> float:
     return _LANDUSE_SCORES.get(landuse, 0.0)
 
 
+def _venue_score(tags: dict) -> float:
+    """Score based on venue tags (amenity, shop, leisure, tourism)."""
+    score = 0.0
+    # Check amenity tag
+    amenity = tags.get("amenity", "")
+    if amenity:
+        score = max(score, _VENUE_SCORES.get(amenity, 0.0))
+    # Check shop tag
+    shop = tags.get("shop", "")
+    if shop:
+        score = max(score, _VENUE_SCORES.get(shop, 0.0))
+    # Check leisure tag
+    leisure = tags.get("leisure", "")
+    if leisure:
+        score = max(score, _VENUE_SCORES.get(leisure, 0.0))
+    # Check tourism tag
+    tourism = tags.get("tourism", "")
+    if tourism:
+        score = max(score, _VENUE_SCORES.get(tourism, 0.0))
+    return score
+
+
 # ── weights (admin_level and area are dominant) ───────────────────────────
 W_ADMIN = 5.0
 W_AREA = 4.0
@@ -112,7 +214,8 @@ W_PLACE = 2.0
 W_POP = 1.5
 W_META = 0.5
 W_LANDUSE = 1.0
-_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE
+W_VENUE = 7.0
+_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE + W_VENUE
 
 
 def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
@@ -129,6 +232,7 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
         + W_POP * _population_score(tags)
         + W_META * _metadata_score(tags)
         + W_LANDUSE * _landuse_score(tags)
+        + W_VENUE * _venue_score(tags)
     )
     # normalise to 0..10
     return round(raw / _W_TOTAL * 10.0, 4)
