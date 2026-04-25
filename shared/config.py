@@ -31,6 +31,10 @@ TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
 TYPESENSE_PORT = int(os.getenv("TYPESENSE_PORT", "8108"))
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "typesense-secret-key")
 
+# etcd
+ETCD_HOST = os.getenv("ETCD_HOST", "localhost")
+ETCD_PORT = int(os.getenv("ETCD_PORT", "2379"))
+
 # Embeddings
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")  # Hugging Face model name
 EMBEDDING_DIM = 384
