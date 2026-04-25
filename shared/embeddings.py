@@ -29,11 +29,15 @@ def get_model():
         print(f"[embeddings] Using device: {device}")
 
         cache_folder = os.environ.get('TRANSFORMERS_CACHE')
-        
+
         # Check if EMBEDDING_MODEL is a local path that exists
         if os.path.exists(EMBEDDING_MODEL):
             print(f"[embeddings] Loading local model from: {EMBEDDING_MODEL}")
+            # Disable HF Hub access for local models by setting environment variable
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
             _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+            print(f"[embeddings] Local model loaded successfully")
         else:
             # EMBEDDING_MODEL is a Hugging Face model name or path that doesn't exist locally
             if cache_folder:
