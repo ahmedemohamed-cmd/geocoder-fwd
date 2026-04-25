@@ -25,31 +25,51 @@ from shared.nats_client import connect, subscribe
 TABLE = "osm_geometries"
 
 
-def _geojson_to_wkt(geom: dict) -> str | None:
+def _geojson_to_wkt(geom: dict, osm_id: str = "") -> str | None:
     """Convert a GeoJSON geometry dict to WKT."""
-    gtype = geom["type"]
-    coords = geom["coordinates"]
-    if gtype == "Point":
-        return f"POINT({coords[0]} {coords[1]})"
-    if gtype == "LineString":
-        pts = ", ".join(f"{c[0]} {c[1]}" for c in coords)
-        return f"LINESTRING({pts})"
-    if gtype == "Polygon":
-        rings = []
-        for ring in coords:
-            pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
-            rings.append(f"({pts})")
-        return f"POLYGON({', '.join(rings)})"
-    if gtype == "MultiPolygon":
-        polygons = []
-        for polygon in coords:
+    try:
+        gtype = geom.get("type")
+        coords = geom.get("coordinates")
+        
+        if not gtype or coords is None:
+            print(f"[postgis-inserter] Invalid geometry for {osm_id}: missing type or coordinates")
+            return None
+            
+        if gtype == "Point":
+            return f"POINT({coords[0]} {coords[1]})"
+        if gtype == "LineString":
+            if not coords:
+                print(f"[postgis-inserter] Empty LineString for {osm_id}")
+                return None
+            pts = ", ".join(f"{c[0]} {c[1]}" for c in coords)
+            return f"LINESTRING({pts})"
+        if gtype == "Polygon":
+            if not coords:
+                print(f"[postgis-inserter] Empty Polygon for {osm_id}")
+                return None
             rings = []
-            for ring in polygon:
+            for ring in coords:
                 pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
                 rings.append(f"({pts})")
-            polygons.append(f"({', '.join(rings)})")
-        return f"MULTIPOLYGON({', '.join(polygons)})"
-    return None
+            return f"POLYGON({', '.join(rings)})"
+        if gtype == "MultiPolygon":
+            if not coords:
+                print(f"[postgis-inserter] Empty MultiPolygon for {osm_id}")
+                return None
+            polygons = []
+            for polygon in coords:
+                rings = []
+                for ring in polygon:
+                    pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
+                    rings.append(f"({pts})")
+                polygons.append(f"({', '.join(rings)})")
+            return f"MULTIPOLYGON({', '.join(polygons)})"
+        
+        print(f"[postgis-inserter] Unsupported geometry type '{gtype}' for {osm_id}")
+        return None
+    except Exception as e:
+        print(f"[postgis-inserter] Error converting geometry for {osm_id}: {e}")
+        return None
 
 
 async def ensure_table(pool: asyncpg.Pool):
@@ -102,10 +122,13 @@ async def run():
                 await msg.ack()
                 geom = elem.get("geom")
                 if not geom:
+                    print(f"[postgis-inserter] Skipping {elem.get('osm_id', 'unknown')}: no geometry")
                     continue
-                wkt = _geojson_to_wkt(geom)
+                wkt = _geojson_to_wkt(geom, elem.get("osm_id", ""))
                 if wkt:
                     rows.append((elem["osm_id"], elem.get("osm_type", ""), wkt))
+                else:
+                    print(f"[postgis-inserter] Failed to convert geometry for {elem.get('osm_id', 'unknown')}")
 
             if not rows:
                 continue

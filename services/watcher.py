@@ -9,10 +9,11 @@ import queue
 import threading
 
 import osmium
+import etcd3
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from shared.config import DATA_DIR, NATS_SUBJECT
+from shared.config import DATA_DIR, NATS_SUBJECT, ETCD_HOST, ETCD_PORT
 from shared import nats_client
 
 SENTINEL = object()
@@ -47,7 +48,7 @@ def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
 # OSM PBF handler – pushes parsed elements into a thread-safe queue
 # ---------------------------------------------------------------------------
 class OSMHandler(osmium.SimpleHandler):
-    def __init__(self, q: queue.Queue):
+    def __init__(self, q: queue.Queue, etcd_client):
         super().__init__()
         self.q = q
         self.count = 0
@@ -55,10 +56,47 @@ class OSMHandler(osmium.SimpleHandler):
         self.way_count = 0
         self.relation_count = 0
         self.geom_factory = osmium.geom.GeoJSONFactory()
+        self.etcd = etcd_client
+        self.etcd_prefix = "/osm/nodes/"
+
+    def _cache_node_location(self, node_id: int, lon: float, lat: float):
+        """Cache node location in etcd."""
+        try:
+            key = f"{self.etcd_prefix}{node_id}"
+            value = json.dumps({"lon": lon, "lat": lat})
+            self.etcd.put(key, value)
+        except Exception as e:
+            print(f"[watcher] Error caching node {node_id} in etcd: {e}")
+
+    def _get_node_location(self, node_id: int) -> tuple[float, float] | None:
+        """Get node location from etcd."""
+        try:
+            key = f"{self.etcd_prefix}{node_id}"
+            value, _ = self.etcd.get(key)
+            if value:
+                data = json.loads(value.decode())
+                return data["lon"], data["lat"]
+        except Exception as e:
+            print(f"[watcher] Error getting node {node_id} from etcd: {e}")
+        return None
 
     def node(self, n):
-        if not n.tags or not n.location.valid():
+        if self.node_count == 0:
+            print(f"[watcher] First node encountered: {n.id}")
+        if self.node_count > 0 and self.node_count % 100000 == 0:
+            print(f"[watcher] Processed {self.node_count} nodes...")
+        
+        if not n.location.valid():
             return
+        
+        # DON'T cache all nodes in etcd - this is too slow for large files
+        # Instead, we'll use lazy caching in the way processor:
+        # when a way can't be resolved from memory, we'll cache just the nodes we need
+        
+        # Only publish nodes with tags to the queue
+        if not n.tags:
+            return
+            
         tags = dict(n.tags)
         self.q.put(
             {
@@ -77,15 +115,43 @@ class OSMHandler(osmium.SimpleHandler):
         self.node_count += 1
 
     def way(self, w):
-        if not w.tags:
-            return
-        tags = dict(w.tags)
         try:
-            coords = [(n.lon, n.lat) for n in w.nodes]
-        except osmium.InvalidLocationError:
+            if self.way_count == 0:
+                print(f"[watcher] First way encountered: {w.id}")
+            tags = dict(w.tags) if w.tags else {}
+            
+            # Skip ways without tags (they have no semantic meaning)
+            if not tags:
+                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                return
+            
+            coords = []
+            
+            # Use osmium's built-in node resolution
+            try:
+                for n in w.nodes:
+                    if n.location.valid():
+                        coords.append((n.lon, n.lat))
+                    else:
+                        # Node location not available - this way can't be fully resolved
+                        if self.way_count < 10:
+                            print(f"[watcher] Way {w.id}: Node {n.ref} has no location")
+            except osmium.InvalidLocationError:
+                # Node not in memory index - skip this way
+                if self.way_count < 10:
+                    print(f"[watcher] Way {w.id}: Skipped (nodes not in memory index)")
+                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                return
+        except Exception as e:
+            print(f"[watcher] Error processing way {w.id}: {e}")
             return
+        
         if len(coords) < 2:
+            if self.way_count < 10:  # Only print first 10 skips to avoid spam
+                print(f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})")
+            self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
             return
+        
         closed = len(coords) >= 4 and coords[0] == coords[-1]
         geom = (
             {"type": "Polygon", "coordinates": [coords]}
@@ -105,12 +171,14 @@ class OSMHandler(osmium.SimpleHandler):
         )
         self.count += 1
         self.way_count += 1
+        if self.way_count <= 5:
+            print(f"[watcher] Way {w.id}: Added to queue (total ways: {self.way_count})")
 
     def relation(self, r):
-        if not r.tags:
-            return
-        tags = dict(r.tags)
-        
+        if self.relation_count == 0:
+            print(f"[watcher] First relation encountered: {r.id}")
+        tags = dict(r.tags) if r.tags else {}
+
         # Extract geometry for multipolygons and boundaries
         geom = None
         area = 0.0
@@ -132,23 +200,38 @@ class OSMHandler(osmium.SimpleHandler):
                         elif geom.get("type") == "Polygon" and geom.get("coordinates"):
                             coords = [(c[0], c[1]) for c in geom["coordinates"][0]]
                             area = _polygon_area_km2(coords)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        
-        self.q.put(
-            {
-                "osm_id": f"r{r.id}",
-                "osm_type": "relation",
-                "tags": tags,
-                "geom": geom,
-                "admin_level": int(tags.get("admin_level", 0) or 0),
-                "area_km2": area,
-            }
-        )
-        self.count += 1
-        self.relation_count += 1
+                    else:
+                        if self.relation_count < 10:
+                            print(f"[watcher] Relation {r.id}: Geometry factory returned None for type={rel_type}")
+                        self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                except Exception as e:
+                    print(f"[watcher] Relation {r.id}: Error creating multipolygon geometry: {e}")
+                    self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+            else:
+                # Not a multipolygon or boundary relation
+                if self.relation_count < 10:
+                    print(f"[watcher] Relation {r.id}: Skipped (type={rel_type}, not multipolygon/boundary)")
+                self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+        except Exception as e:
+            print(f"[watcher] Relation {r.id}: Error processing relation: {e}")
+            self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+
+        # Only add to queue if we have geometry
+        if geom:
+            self.q.put(
+                {
+                    "osm_id": f"r{r.id}",
+                    "osm_type": "relation",
+                    "tags": tags,
+                    "geom": geom,
+                    "admin_level": int(tags.get("admin_level", 0) or 0),
+                    "area_km2": area,
+                }
+            )
+            self.count += 1
+            self.relation_count += 1
+            if self.relation_count <= 5:
+                print(f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})")
 
 
 # ---------------------------------------------------------------------------
@@ -160,29 +243,74 @@ async def publish_file(filepath: str):
     # Ensure stream exists before publishing
     try:
         await js.stream_info(nats_client.NATS_STREAM)
+        print(f"[watcher] Stream {nats_client.NATS_STREAM} already exists")
     except Exception:
         print(f"[watcher] Stream {nats_client.NATS_STREAM} does not exist, creating it...")
         from nats.js.api import StreamConfig, RetentionPolicy
-        await js.add_stream(
-            StreamConfig(
-                name=nats_client.NATS_STREAM,
-                subjects=[nats_client.NATS_SUBJECT],
-                retention=RetentionPolicy.LIMITS,
-                max_age=86400,  # Keep messages for 24 hours (in seconds)
-                max_bytes=10737418240,  # 10GB max storage
-                storage="file",
-                max_msg_size=1048576,  # 1MB max message size
-                discard="old",  # Discard old messages when limits are reached
+        try:
+            await js.add_stream(
+                StreamConfig(
+                    name=nats_client.NATS_STREAM,
+                    subjects=[nats_client.NATS_SUBJECT],
+                    retention=RetentionPolicy.LIMITS,
+                    max_age=86400,  # Keep messages for 24 hours (in seconds)
+                    max_bytes=10737418240,  # 10GB max storage
+                    storage="file",
+                    max_msg_size=1048576,  # 1MB max message size
+                    discard="old",  # Discard old messages when limits are reached
+                )
             )
-        )
-        print(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
+            print(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
+        except Exception as e:
+            print(f"[watcher] Failed to create stream {nats_client.NATS_STREAM}: {e}")
+            # Try to delete and recreate if it exists in a bad state
+            try:
+                print(f"[watcher] Attempting to delete and recreate stream...")
+                await js.delete_stream(nats_client.NATS_STREAM)
+                await js.add_stream(
+                    StreamConfig(
+                        name=nats_client.NATS_STREAM,
+                        subjects=[nats_client.NATS_SUBJECT],
+                        retention=RetentionPolicy.LIMITS,
+                        max_age=86400,
+                        max_bytes=10737418240,
+                        storage="file",
+                        max_msg_size=1048576,
+                        discard="old",
+                    )
+                )
+                print(f"[watcher] Stream {nats_client.NATS_STREAM} recreated successfully")
+            except Exception as e2:
+                print(f"[watcher] Failed to recreate stream: {e2}")
+                raise
+    
+    # Test publish to verify stream is working
+    print(f"[watcher] Testing stream with a test message...")
+    try:
+        test_msg = json.dumps({"test": True, "osm_id": "test", "osm_type": "node"}).encode()
+        ack = await js.publish(NATS_SUBJECT, test_msg, timeout=10)
+        if ack:
+            print(f"[watcher] Stream test successful")
+        else:
+            print(f"[watcher] Stream test failed: no ack received")
+    except Exception as e:
+        print(f"[watcher] Stream test failed with error: {e}")
+        raise
     
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
-    handler = OSMHandler(q)
+    # Initialize etcd client
+    etcd_client = etcd3.client(host=ETCD_HOST, port=ETCD_PORT)
+    print(f"[watcher] Connected to etcd at {ETCD_HOST}:{ETCD_PORT}")
+
+    handler = OSMHandler(q, etcd_client)
 
     def _parse():
+        # Use locations=True with idx="flex_mem" for node resolution
+        # Note: For very large files, not all ways may be resolvable if they exceed memory capacity
+        print(f"[watcher] Starting to parse {filepath}...")
         handler.apply_file(filepath, locations=True, idx="flex_mem")
+        print(f"[watcher] Finished parsing {filepath}")
         q.put(SENTINEL)
 
     thread = threading.Thread(target=_parse, daemon=True)
@@ -275,8 +403,23 @@ async def publish_file(filepath: str):
             break
 
     thread.join()
+    skipped_ways = getattr(handler, 'skipped_way_count', 0)
+    skipped_relations = getattr(handler, 'skipped_relation_count', 0)
     print(f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})")
+    if skipped_ways > 0:
+        print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_ways} ways (insufficient coordinates)")
+    if skipped_relations > 0:
+        print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_relations} relations (no geometry)")
     print(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
+    
+    # Clear etcd cache after processing to free up space
+    try:
+        print(f"[watcher] Clearing etcd cache...")
+        etcd_client.delete_prefix(handler.etcd_prefix)
+        print(f"[watcher] Etcd cache cleared")
+    except Exception as e:
+        print(f"[watcher] Error clearing etcd cache: {e}")
+    
     await nc.close()
 
 

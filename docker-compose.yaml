@@ -87,8 +87,12 @@ services:
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - DATA_DIR=/app/data
+      - ETCD_HOST=etcd
+      - ETCD_PORT=2379
     depends_on:
       nats:
+        condition: service_started
+      etcd:
         condition: service_started
     restart: unless-stopped
 
@@ -103,7 +107,7 @@ services:
       - NATS_SUBJECT=osm.elements
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
-      - ENABLE_VECTORS=true
+      - ENABLE_VECTORS=false
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
       nats:
@@ -125,7 +129,7 @@ services:
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
-      - ENABLE_VECTORS=true
+      - ENABLE_VECTORS=false
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
       nats:
@@ -166,7 +170,7 @@ services:
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
-      - ENABLE_VECTORS=true
+      - ENABLE_VECTORS=false
       - ENABLE_AI=false
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
