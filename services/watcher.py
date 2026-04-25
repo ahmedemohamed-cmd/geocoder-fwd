@@ -6,7 +6,9 @@ import json
 import math
 import os
 import queue
+import sys
 import threading
+import time
 
 import osmium
 import etcd3
@@ -19,6 +21,76 @@ from shared import nats_client
 SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
 QUEUE_MAXSIZE = 100_000
+
+
+class ProgressTracker:
+    """Simple progress tracker that logs updates at regular intervals."""
+    def __init__(self, description: str, total: int = None, log_interval: int = 5):
+        self.description = description
+        self.total = total
+        self.log_interval = log_interval  # seconds between log updates
+        self.count = 0
+        self.start_time = time.time()
+        self.last_log_time = self.start_time
+
+    def update(self, n: int = 1):
+        """Update progress by n items."""
+        self.count += n
+        current_time = time.time()
+        if current_time - self.last_log_time >= self.log_interval:
+            self._log_progress()
+            self.last_log_time = current_time
+
+    def _log_progress(self):
+        """Log current progress."""
+        elapsed = time.time() - self.start_time
+        if self.total and self.total > 0:
+            percentage = (self.count / self.total) * 100
+            rate = self.count / elapsed if elapsed > 0 else 0
+            print(f"[{self.description}] {self.count}/{self.total} ({percentage:.1f}%) - {rate:.1f} items/sec")
+        else:
+            rate = self.count / elapsed if elapsed > 0 else 0
+            print(f"[{self.description}] {self.count} items processed - {rate:.1f} items/sec")
+
+    def close(self):
+        """Final log when done."""
+        self._log_progress()
+        elapsed = time.time() - self.start_time
+        print(f"[{self.description}] Completed in {elapsed:.1f} seconds")
+
+
+def _has_identifiable_tags(tags: dict) -> bool:
+    """Check if element has identifiable tags like name, address, reference, etc."""
+    if not tags:
+        return False
+
+    # Check for name tags (any language, anywhere in key)
+    for key in tags:
+        if 'name' in key:
+            return True
+
+    # Check for address tags
+    address_tags = ['addr:housenumber', 'addr:street', 'addr:postcode',
+                    'addr:housename']
+    for tag in address_tags:
+        if tag in tags:
+            return True
+
+    # Check for reference tags
+    ref_tags = ['ref', 'ref:1', 'ref:2', 'local_ref', 'nat_ref', 'int_ref',
+                'iata', 'icao', 'pcode', 'phone', 'website', 'email']
+    for tag in ref_tags:
+        if tag in tags:
+            return True
+
+    # Check for other identifiable tags
+    identifiable_tags = ['operator', 'brand', 'brand:wikidata', 'operator:wikidata',
+                        'wikipedia', 'wikidata', 'description', 'note']
+    for tag in identifiable_tags:
+        if tag in tags:
+            return True
+
+    return False
 
 
 def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
@@ -48,7 +120,7 @@ def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
 # OSM PBF handler – pushes parsed elements into a thread-safe queue
 # ---------------------------------------------------------------------------
 class OSMHandler(osmium.SimpleHandler):
-    def __init__(self, q: queue.Queue, etcd_client):
+    def __init__(self, q: queue.Queue, etcd_client, progress_tracker=None):
         super().__init__()
         self.q = q
         self.count = 0
@@ -58,6 +130,7 @@ class OSMHandler(osmium.SimpleHandler):
         self.geom_factory = osmium.geom.GeoJSONFactory()
         self.etcd = etcd_client
         self.etcd_prefix = "/osm/nodes/"
+        self.progress_tracker = progress_tracker
 
     def _cache_node_location(self, node_id: int, lon: float, lat: float):
         """Cache node location in etcd."""
@@ -85,19 +158,24 @@ class OSMHandler(osmium.SimpleHandler):
             print(f"[watcher] First node encountered: {n.id}")
         if self.node_count > 0 and self.node_count % 100000 == 0:
             print(f"[watcher] Processed {self.node_count} nodes...")
-        
+
         if not n.location.valid():
             return
-        
+
         # DON'T cache all nodes in etcd - this is too slow for large files
         # Instead, we'll use lazy caching in the way processor:
         # when a way can't be resolved from memory, we'll cache just the nodes we need
-        
+
         # Only publish nodes with tags to the queue
         if not n.tags:
             return
-            
+
         tags = dict(n.tags)
+
+        # Skip nodes without identifiable tags
+        if not _has_identifiable_tags(tags):
+            return
+
         self.q.put(
             {
                 "osm_id": f"n{n.id}",
@@ -113,15 +191,22 @@ class OSMHandler(osmium.SimpleHandler):
         )
         self.count += 1
         self.node_count += 1
+        if self.progress_tracker is not None:
+            self.progress_tracker.update(1)
 
     def way(self, w):
         try:
             if self.way_count == 0:
                 print(f"[watcher] First way encountered: {w.id}")
             tags = dict(w.tags) if w.tags else {}
-            
+
             # Skip ways without tags (they have no semantic meaning)
             if not tags:
+                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                return
+
+            # Skip ways without identifiable tags
+            if not _has_identifiable_tags(tags):
                 self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
                 return
             
@@ -173,6 +258,8 @@ class OSMHandler(osmium.SimpleHandler):
         self.way_count += 1
         if self.way_count <= 5:
             print(f"[watcher] Way {w.id}: Added to queue (total ways: {self.way_count})")
+        if self.progress_tracker is not None:
+            self.progress_tracker.update(1)
 
     def relation(self, r):
         if self.relation_count == 0:
@@ -232,6 +319,8 @@ class OSMHandler(osmium.SimpleHandler):
             self.relation_count += 1
             if self.relation_count <= 5:
                 print(f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})")
+            if self.progress_tracker is not None:
+                self.progress_tracker.update(1)
 
 
 # ---------------------------------------------------------------------------
@@ -303,75 +392,118 @@ async def publish_file(filepath: str):
     etcd_client = etcd3.client(host=ETCD_HOST, port=ETCD_PORT)
     print(f"[watcher] Connected to etcd at {ETCD_HOST}:{ETCD_PORT}")
 
-    handler = OSMHandler(q, etcd_client)
+    # Create progress tracker for parsing (unknown total)
+    parse_progress = ProgressTracker(f"Parsing {os.path.basename(filepath)}")
+
+    handler = OSMHandler(q, etcd_client, progress_tracker=parse_progress)
 
     def _parse():
         # Use locations=True with idx="flex_mem" for node resolution
         # Note: For very large files, not all ways may be resolvable if they exceed memory capacity
-        print(f"[watcher] Starting to parse {filepath}...")
-        handler.apply_file(filepath, locations=True, idx="flex_mem")
-        print(f"[watcher] Finished parsing {filepath}")
-        q.put(SENTINEL)
+        try:
+            print(f"[watcher] Starting to parse {filepath}...")
+            handler.apply_file(filepath, locations=True, idx="flex_mem")
+            print(f"[watcher] Finished parsing {filepath}")
+        except Exception as e:
+            print(f"[watcher] Error during parsing: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            parse_progress.close()
+            q.put(SENTINEL)
 
     thread = threading.Thread(target=_parse, daemon=True)
     thread.start()
     print(f"[watcher] Parsing {os.path.basename(filepath)} ...")
 
     published = 0
-    while True:
-        batch: list[dict] = []
-        try:
-            item = q.get(timeout=0.5)
-            if item is SENTINEL:
-                break
-            batch.append(item)
-            # drain up to BATCH_PUBLISH
-            while len(batch) < BATCH_PUBLISH:
-                try:
-                    item = q.get_nowait()
-                    if item is SENTINEL:
-                        q.put(SENTINEL)  # re-signal so outer loop exits
-                        break
-                    batch.append(item)
-                except queue.Empty:
-                    break
-        except queue.Empty:
-            continue
+    total_elements = None
+    publish_progress = None
+    publishing_started = False
+    consecutive_failures = 0
+    max_consecutive_failures = 50  # Fail fast after too many consecutive failures
 
-        # Publish batch using batch publish for efficiency
-        try:
-            # Convert batch to JSON messages
-            messages = [json.dumps(elem).encode() for elem in batch]
-            
-            # Publish all messages in the batch at once
-            for msg in messages:
-                max_retries = 300
-                for attempt in range(max_retries):
+    try:
+        while True:
+            batch: list[dict] = []
+            try:
+                item = q.get(timeout=0.5)
+                if item is SENTINEL:
+                    print(f"[watcher] Received SENTINEL, exiting loop")
+                    break
+                batch.append(item)
+                # drain up to BATCH_PUBLISH
+                while len(batch) < BATCH_PUBLISH:
                     try:
-                        ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
-                        if ack:
-                            published += 1
-                            break  # Success, move to next message
-                        else:
-                            print(f"[watcher] No ack received for element (attempt {attempt + 1}/{max_retries})", flush=True)
+                        item = q.get_nowait()
+                        if item is SENTINEL:
+                            q.put(SENTINEL)  # re-signal so outer loop exits
+                            break
+                        batch.append(item)
+                    except queue.Empty:
+                        break
+            except queue.Empty:
+                continue
+
+            # Initialize publishing progress tracker when we start publishing
+            if not publishing_started and len(batch) > 0:
+                publish_progress = ProgressTracker(f"Publishing {os.path.basename(filepath)}")
+                publishing_started = True
+
+            # Update total for publishing progress tracker when parsing completes
+            if total_elements is None and not thread.is_alive() and parse_progress.count > 0:
+                total_elements = handler.count
+                if total_elements > 0 and publish_progress is not None:
+                    publish_progress.total = total_elements
+
+            # Publish batch using batch publish for efficiency
+            try:
+                # Convert batch to JSON messages
+                messages = [json.dumps(elem).encode() for elem in batch]
+
+                # Publish all messages in the batch at once
+                for msg in messages:
+                    max_retries = 300
+                    for attempt in range(max_retries):
+                        try:
+                            ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
+                            if ack:
+                                published += 1
+                                consecutive_failures = 0  # Reset on success
+                                if publish_progress is not None:
+                                    publish_progress.update(1)
+                                break  # Success, move to next message
+                            else:
+                                consecutive_failures += 1
+                                print(f"[watcher] No ack received for element (attempt {attempt + 1}/{max_retries})", flush=True)
+                                if consecutive_failures >= max_consecutive_failures:
+                                    print(f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up", flush=True)
+                                    raise Exception("Too many consecutive NATS failures")
+                                if attempt < max_retries - 1:
+                                    await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                                else:
+                                    print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
+                            # Longer delay to avoid overwhelming NATS
+                            await asyncio.sleep(0.05)  # 50ms delay between publishes
+                        except Exception as e:
+                            consecutive_failures += 1
+                            print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                            if consecutive_failures >= max_consecutive_failures:
+                                print(f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up", flush=True)
+                                raise
                             if attempt < max_retries - 1:
                                 await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                             else:
-                                print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
-                        # Longer delay to avoid overwhelming NATS
-                        await asyncio.sleep(0.05)  # 50ms delay between publishes
-                    except Exception as e:
-                        print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
-                        else:
-                            print(f"[watcher] Failed to publish element after {max_retries} attempts: {e}", flush=True)
-        except Exception as e:
-            print(f"[watcher] Error in batch publishing: {e}", flush=True)
-            await asyncio.sleep(0.1)
-        
-        if published % 5000 < BATCH_PUBLISH:
-            print(f"\r[watcher] Published {published} ...", end="", flush=True)
+                                print(f"[watcher] Failed to publish element after {max_retries} attempts: {e}", flush=True)
+            except Exception as e:
+                print(f"[watcher] Error in batch publishing: {e}", flush=True)
+                await asyncio.sleep(0.1)
+
+    except Exception as e:
+        print(f"[watcher] Fatal error during publishing: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        # Continue with cleanup even if publishing failed
 
     # flush anything left
     while True:
@@ -385,24 +517,44 @@ async def publish_file(filepath: str):
                     ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
                     if ack:
                         published += 1
+                        consecutive_failures = 0  # Reset on success
+                        if publish_progress is not None:
+                            publish_progress.update(1)
                         break  # Success, move to next item
                     else:
+                        consecutive_failures += 1
                         print(f"[watcher] No ack received during flush (attempt {attempt + 1}/{max_retries})", flush=True)
+                        if consecutive_failures >= max_consecutive_failures:
+                            print(f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items", flush=True)
+                            break  # Skip remaining items in flush
                         if attempt < max_retries - 1:
                             await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                         else:
                             print(f"[watcher] Failed to publish element during flush after {max_retries} attempts", flush=True)
                     await asyncio.sleep(0.05)  # Rate limiting (50ms delay)
                 except Exception as e:
+                    consecutive_failures += 1
                     print(f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                    if consecutive_failures >= max_consecutive_failures:
+                        print(f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items", flush=True)
+                        break  # Skip remaining items in flush
                     if attempt < max_retries - 1:
                         await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                     else:
                         print(f"[watcher] Failed to publish element during flush after {max_retries} attempts: {e}", flush=True)
+            # If we had too many consecutive failures, break out of flush loop
+            if consecutive_failures >= max_consecutive_failures:
+                print(f"[watcher] Skipping remaining items in queue due to consecutive failures", flush=True)
+                break
         except queue.Empty:
             break
 
     thread.join()
+
+    # Close publishing progress tracker
+    if publish_progress is not None:
+        publish_progress.close()
+
     skipped_ways = getattr(handler, 'skipped_way_count', 0)
     skipped_relations = getattr(handler, 'skipped_relation_count', 0)
     print(f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})")
@@ -446,6 +598,7 @@ class PBFHandler(FileSystemEventHandler):
 
 
 async def run():
+    print("[watcher] Starting watcher service...")
     os.makedirs(DATA_DIR, exist_ok=True)
 
     # Use lock file to prevent reprocessing
@@ -453,6 +606,7 @@ async def run():
     
     # process existing files first
     existing_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf")))
+    print(f"[watcher] Found {len(existing_files)} PBF files to process")
     for f in existing_files:
         # Create lock file specific to this PBF file
         file_lock = f"{f}.processed"

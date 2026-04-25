@@ -7,12 +7,6 @@ services:
     command: "-js -sd /data -m 8222"
     volumes:
       - nats-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8222/varz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   etcd:
     image: quay.io/coreos/etcd:v3.5.17
@@ -85,7 +79,7 @@ services:
   # Python services
   watcher:
     build: .
-    command: python -m services.watcher
+    command: python -u -m services.watcher
     volumes:
       - ./data:/app/data
     environment:
@@ -97,14 +91,14 @@ services:
       - ETCD_PORT=2379
     depends_on:
       nats:
-        condition: service_healthy
+        condition: service_started
       etcd:
         condition: service_started
     restart: unless-stopped
 
   es-inserter:
     build: .
-    command: python -m services.es_inserter
+    command: python -u -m services.es_inserter
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -125,14 +119,14 @@ services:
               capabilities: [gpu]
     depends_on:
       nats:
-        condition: service_healthy
+        condition: service_started
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
 
   ts-inserter:
     build: .
-    command: python -m services.ts_inserter
+    command: python -u -m services.ts_inserter
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -155,14 +149,14 @@ services:
               capabilities: [gpu]
     depends_on:
       nats:
-        condition: service_healthy
+        condition: service_started
       typesense:
         condition: service_healthy
     restart: unless-stopped
 
   postgis-inserter:
     build: .
-    command: python -m services.postgis_inserter
+    command: python -u -m services.postgis_inserter
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -174,14 +168,14 @@ services:
       - POSTGRES_PASSWORD=postgres
     depends_on:
       nats:
-        condition: service_healthy
+        condition: service_started
       postgis:
         condition: service_healthy
     restart: unless-stopped
 
   geocoder:
     build: .
-    command: python -m services.geocoder
+    command: python -u -m services.geocoder
     ports:
       - "8000:8000"
     environment:
@@ -212,7 +206,7 @@ services:
 
   downloader:
     build: .
-    command: python -m services.downloader
+    command: python -u -m services.downloader
     volumes:
       - ./data:/app/data
     environment:
@@ -222,7 +216,7 @@ services:
 
   cleaner:
     build: .
-    command: python -m services.cleaner
+    command: python -u -m services.cleaner
     environment:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - TYPESENSE_HOST=typesense
@@ -244,7 +238,7 @@ services:
       postgis:
         condition: service_healthy
       nats:
-        condition: service_healthy
+        condition: service_started
     restart: "no"
 
 volumes:
