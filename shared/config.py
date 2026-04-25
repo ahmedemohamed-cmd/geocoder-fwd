@@ -32,9 +32,15 @@ TYPESENSE_PORT = int(os.getenv("TYPESENSE_PORT", "8108"))
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "typesense-secret-key")
 
 # Embeddings
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "/app/models/paraphrase-multilingual-MiniLM-L12-v2")  # Local model path
 EMBEDDING_DIM = 384
 
 # Feature flags
 ENABLE_VECTORS = os.getenv("ENABLE_VECTORS", "true").lower() in ("true", "1", "yes")
 ENABLE_AI = os.getenv("ENABLE_AI", "true").lower() in ("true", "1", "yes")
+
+# Performance tuning
+# When vectors are enabled, use smaller batch sizes to avoid timeouts
+_BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100"))  # Reduced from 2000 to reduce NATS load
+BATCH_SIZE = _BATCH_SIZE // 2 if ENABLE_VECTORS else _BATCH_SIZE  # Smaller batches when generating embeddings
+MAX_CONCURRENT_BATCHES = int(os.getenv("MAX_CONCURRENT_BATCHES", "2")) if ENABLE_VECTORS else int(os.getenv("MAX_CONCURRENT_BATCHES", "4"))

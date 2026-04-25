@@ -15,7 +15,7 @@ import json
 import typesense
 from typesense.exceptions import ObjectNotFound
 
-from shared.config import TYPESENSE_HOST, TYPESENSE_PORT, TYPESENSE_API_KEY, EMBEDDING_DIM, ENABLE_VECTORS
+from shared.config import TYPESENSE_HOST, TYPESENSE_PORT, TYPESENSE_API_KEY, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
 from shared.nats_client import connect, subscribe
 from shared.ranking import compute_offline_rank
 
@@ -166,88 +166,101 @@ async def run():
     
     ensure_collection(client)
 
+    # Pre-load embedding model before starting workers to avoid concurrent download conflicts
+    if ENABLE_VECTORS:
+        print("[ts-inserter] Pre-loading embedding model...", flush=True)
+        from shared.embeddings import get_model
+        get_model()  # Force model download/load
+        print("[ts-inserter] Embedding model loaded", flush=True)
+
     nc, js = await connect()
     sub = await subscribe(js, "ts-consumer")
     loop = asyncio.get_event_loop()
     print("[ts-inserter] Subscription created, listening for messages ...", flush=True)
 
-    iteration = 0
-    while True:
-        iteration += 1
-        if iteration % 10 == 0:
-            print(f"[ts-inserter] Loop iteration {iteration}", flush=True)
-        try:
-            msgs = await asyncio.wait_for(sub.fetch(batch=100, timeout=5), timeout=10)
-            print(f"[ts-inserter] Fetched {len(msgs)} messages", flush=True)
-        except asyncio.TimeoutError:
-            print(f"[ts-inserter] Fetch timeout", flush=True)
-            await asyncio.sleep(1)
-            continue
-        except Exception as e:
-            print(f"[ts-inserter] Fetch error: {e}", flush=True)
-            await asyncio.sleep(1)
-            continue
-
-        elements = []
-        for msg in msgs:
-            elements.append(json.loads(msg.data))
-            await msg.ack()
-
-        print(f"[ts-inserter] Parsed {len(elements)} elements", flush=True)
-        
-        if not elements:
-            continue
-
-        # Import embedding functions here to avoid slow startup
-        from shared.embeddings import embed_texts, build_text
-
-        # build searchable text from ALL tags for each element
-        texts = [build_text(e["tags"]) for e in elements]
-        non_empty = [(i, t) for i, t in enumerate(texts) if t]
-
-        # compute vectors only when ENABLE_VECTORS is on
-        vectors: list[list[float] | None] = [None] * len(elements)
-        if ENABLE_VECTORS and non_empty:
-            indices, batch_texts = zip(*non_empty)
-            batch_vecs = embed_texts(list(batch_texts))
-            for idx, vec in zip(indices, batch_vecs):
-                vectors[idx] = vec
-
-        docs = []
-        for elem, vec in zip(elements, vectors):
-            tags = elem["tags"]
-            admin_level = elem.get("admin_level", 0)
-            area_km2 = elem.get("area_km2", 0.0)
-            rank = compute_offline_rank(tags, admin_level, area_km2)
-
-            doc: dict = {
-                "id": elem["osm_id"],
-                "osm_id": elem["osm_id"],
-                "name": tags.get("name", ""),
-                "name_en": tags.get("name:en", ""),
-                "osm_type": elem.get("osm_type", ""),
-                "tags_text": build_text(tags),
-                "admin_level": admin_level,
-                "offline_rank": rank,
-                "popularity": 0.0,
-            }
-            loc = _centroid(elem.get("geom"))
-            if loc is not None:
-                doc["location"] = loc
-            if vec is not None:
-                doc["name_vector"] = vec
-            docs.append(doc)
-
-        def _import():
+    # Create worker pool for concurrent batch processing
+    async def worker(worker_id: int):
+        """Worker that fetches and processes batches concurrently."""
+        while True:
             try:
-                client.collections[COLLECTION].documents.import_(
-                    docs, {"action": "upsert"}
-                )
-            except Exception as exc:
-                print(f"[ts-inserter] import error: {exc}")
+                msgs = await asyncio.wait_for(sub.fetch(batch=BATCH_SIZE, timeout=5), timeout=10)
+                print(f"[ts-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
+            except asyncio.TimeoutError:
+                print(f"[ts-inserter] Worker {worker_id}: Fetch timeout", flush=True)
+                await asyncio.sleep(1)
+                continue
+            except Exception as e:
+                print(f"[ts-inserter] Worker {worker_id}: Fetch error: {e}", flush=True)
+                await asyncio.sleep(1)
+                continue
 
-        await loop.run_in_executor(None, _import)
-        print(f"[ts-inserter] Imported {len(docs)} docs", flush=True)
+            elements = []
+            for msg in msgs:
+                elements.append(json.loads(msg.data))
+                await msg.ack()
+
+            print(f"[ts-inserter] Worker {worker_id}: Parsed {len(elements)} elements", flush=True)
+            
+            if not elements:
+                continue
+
+            # Import embedding functions here to avoid slow startup
+            from shared.embeddings import embed_texts, build_text
+
+            # build searchable text from ALL tags for each element
+            texts = [build_text(e["tags"]) for e in elements]
+            non_empty = [(i, t) for i, t in enumerate(texts) if t]
+
+            # compute vectors only when ENABLE_VECTORS is on
+            vectors: list[list[float] | None] = [None] * len(elements)
+            if ENABLE_VECTORS and non_empty:
+                indices, batch_texts = zip(*non_empty)
+                batch_vecs = embed_texts(list(batch_texts))
+                for idx, vec in zip(indices, batch_vecs):
+                    vectors[idx] = vec
+
+            docs = []
+            for elem, vec in zip(elements, vectors):
+                tags = elem["tags"]
+                admin_level = elem.get("admin_level", 0)
+                area_km2 = elem.get("area_km2", 0.0)
+                rank = compute_offline_rank(tags, admin_level, area_km2)
+
+                doc: dict = {
+                    "id": elem["osm_id"],
+                    "osm_id": elem["osm_id"],
+                    "name": tags.get("name", ""),
+                    "name_en": tags.get("name:en", ""),
+                    "osm_type": elem.get("osm_type", ""),
+                    "tags_text": build_text(tags),
+                    "admin_level": admin_level,
+                    "offline_rank": rank,
+                    "popularity": 0.0,
+                }
+                loc = _centroid(elem.get("geom"))
+                if loc is not None:
+                    doc["location"] = loc
+                if vec is not None:
+                    doc["name_vector"] = vec
+                docs.append(doc)
+
+            def _import():
+                try:
+                    client.collections[COLLECTION].documents.import_(
+                        docs, {"action": "upsert"}
+                    )
+                except Exception as exc:
+                    print(f"[ts-inserter] Worker {worker_id}: import error: {exc}")
+
+            await loop.run_in_executor(None, _import)
+            print(f"[ts-inserter] Worker {worker_id}: Imported {len(docs)} docs", flush=True)
+
+    # Spawn multiple workers
+    workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
+    print(f"[ts-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
+    
+    # Wait for all workers (they run indefinitely)
+    await asyncio.gather(*workers)
 
     await nc.close()
 

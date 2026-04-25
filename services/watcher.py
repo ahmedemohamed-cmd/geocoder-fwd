@@ -16,7 +16,7 @@ from shared.config import DATA_DIR, NATS_SUBJECT
 from shared import nats_client
 
 SENTINEL = object()
-BATCH_PUBLISH = 100
+BATCH_PUBLISH = 100  # Set to 100 to match consumer BATCH_SIZE
 QUEUE_MAXSIZE = 100_000
 
 
@@ -156,6 +156,25 @@ class OSMHandler(osmium.SimpleHandler):
 # ---------------------------------------------------------------------------
 async def publish_file(filepath: str):
     nc, js = await nats_client.connect()
+    
+    # Ensure stream exists before publishing
+    try:
+        await js.stream_info(nats_client.NATS_STREAM)
+    except Exception:
+        print(f"[watcher] Stream {nats_client.NATS_STREAM} does not exist, creating it...")
+        from nats.js.api import StreamConfig, RetentionPolicy
+        await js.add_stream(
+            StreamConfig(
+                name=nats_client.NATS_STREAM,
+                subjects=[nats_client.NATS_SUBJECT],
+                retention=RetentionPolicy.LIMITS,
+                max_age=0,
+                max_bytes=-1,
+                storage="file",
+            )
+        )
+        print(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
+    
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
     handler = OSMHandler(q)
@@ -189,23 +208,28 @@ async def publish_file(filepath: str):
         except queue.Empty:
             continue
 
-        # Publish batch concurrently for better throughput
-        publish_tasks = []
-        for elem in batch:
-            try:
-                task = asyncio.create_task(js.publish(NATS_SUBJECT, json.dumps(elem).encode(), timeout=10))
-                publish_tasks.append(task)
-            except Exception as e:
-                print(f"[watcher] Error creating publish task: {e}", flush=True)
-                continue
-        
-        # Wait for all publishes in batch to complete
-        if publish_tasks:
-            results = await asyncio.gather(*publish_tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, Exception):
-                    print(f"[watcher] Error publishing element: {result}", flush=True)
-            published += len(publish_tasks)
+        # Publish batch using batch publish for efficiency
+        try:
+            # Convert batch to JSON messages
+            messages = [json.dumps(elem).encode() for elem in batch]
+            
+            # Publish all messages in the batch at once
+            for msg in messages:
+                try:
+                    ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
+                    if ack:
+                        published += 1
+                    else:
+                        print(f"[watcher] No ack received for element", flush=True)
+                    # Small delay to avoid overwhelming NATS
+                    await asyncio.sleep(0.02)  # 20ms delay between publishes
+                except Exception as e:
+                    print(f"[watcher] Error publishing element: {e}", flush=True)
+                    await asyncio.sleep(0.05)  # Back off on error
+                    continue
+        except Exception as e:
+            print(f"[watcher] Error in batch publishing: {e}", flush=True)
+            await asyncio.sleep(0.1)
         
         if published % 5000 < BATCH_PUBLISH:
             print(f"\r[watcher] Published {published} ...", end="", flush=True)
@@ -217,8 +241,12 @@ async def publish_file(filepath: str):
             if item is SENTINEL:
                 break
             try:
-                await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=10)
-                published += 1
+                ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
+                if ack:
+                    published += 1
+                else:
+                    print(f"[watcher] No ack received during flush", flush=True)
+                await asyncio.sleep(0.02)  # Rate limiting (20ms delay)
             except Exception as e:
                 print(f"[watcher] Error publishing element during flush: {e}", flush=True)
                 continue
@@ -238,34 +266,49 @@ class PBFHandler(FileSystemEventHandler):
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self.loop = loop
         self.processed: set[str] = set()
+        self.processing: set[str] = set()  # Track files currently being processed
 
     def on_created(self, event):
-        if event.src_path.endswith(".osm.pbf") and event.src_path not in self.processed:
+        if event.src_path.endswith(".osm.pbf") and event.src_path not in self.processed and event.src_path not in self.processing:
+            self.processing.add(event.src_path)
             self.processed.add(event.src_path)
-            asyncio.run_coroutine_threadsafe(publish_file(event.src_path), self.loop)
+            asyncio.run_coroutine_threadsafe(self._process_with_cleanup(event.src_path), self.loop)
+    
+    async def _process_with_cleanup(self, filepath: str):
+        try:
+            await publish_file(filepath)
+        finally:
+            self.processing.discard(filepath)
 
 
 async def run():
     os.makedirs(DATA_DIR, exist_ok=True)
 
+    # Use lock file to prevent reprocessing
+    lock_file = os.path.join(DATA_DIR, ".watcher.lock")
+    
     # process existing files first
-    for f in sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf"))):
-        await publish_file(f)
+    existing_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf")))
+    for f in existing_files:
+        # Create lock file specific to this PBF file
+        file_lock = f"{f}.processed"
+        if os.path.exists(file_lock):
+            print(f"[watcher] Skipping {os.path.basename(f)} (already processed)")
+            continue
+        
+        try:
+            await publish_file(f)
+            # Mark as processed
+            with open(file_lock, 'w') as lock:
+                lock.write(f"processed: {f}")
+            print(f"[watcher] Completed {os.path.basename(f)}")
+        except Exception as e:
+            print(f"[watcher] Error processing {os.path.basename(f)}: {e}")
+            continue
 
-    # then watch for new files
-    loop = asyncio.get_event_loop()
-    handler = PBFHandler(loop)
-    observer = Observer()
-    observer.schedule(handler, DATA_DIR, recursive=False)
-    observer.start()
-    print(f"[watcher] Watching {DATA_DIR} for new .osm.pbf files ...")
+    print(f"[watcher] Completed processing all existing files. Exiting.")
 
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+    # Exit after processing (remove restart policy from docker-compose if needed)
 
 
 if __name__ == "__main__":

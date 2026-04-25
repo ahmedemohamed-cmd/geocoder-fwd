@@ -20,7 +20,7 @@ import json
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 
-from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS
+from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
 from shared.nats_client import connect, subscribe
 from shared.ranking import compute_offline_rank
 
@@ -155,85 +155,98 @@ async def run():
     
     await ensure_index(es)
 
+    # Pre-load embedding model before starting workers to avoid concurrent download conflicts
+    if ENABLE_VECTORS:
+        print("[es-inserter] Pre-loading embedding model...", flush=True)
+        from shared.embeddings import get_model
+        get_model()  # Force model download/load
+        print("[es-inserter] Embedding model loaded", flush=True)
+
     nc, js = await connect()
     sub = await subscribe(js, "es-consumer")
     print("[es-inserter] Subscription created, listening for messages ...", flush=True)
 
-    iteration = 0
-    while True:
-        iteration += 1
-        if iteration % 10 == 0:
-            print(f"[es-inserter] Loop iteration {iteration}", flush=True)
-        try:
-            msgs = await asyncio.wait_for(sub.fetch(batch=100, timeout=5), timeout=10)
-            print(f"[es-inserter] Fetched {len(msgs)} messages", flush=True)
-        except asyncio.TimeoutError:
-            print(f"[es-inserter] Fetch timeout", flush=True)
-            await asyncio.sleep(1)
-            continue
-        except Exception as e:
-            print(f"[es-inserter] Fetch error: {e}", flush=True)
-            await asyncio.sleep(1)
-            continue
+    # Create worker pool for concurrent batch processing
+    async def worker(worker_id: int):
+        """Worker that fetches and processes batches concurrently."""
+        while True:
+            try:
+                msgs = await asyncio.wait_for(sub.fetch(batch=BATCH_SIZE, timeout=5), timeout=10)
+                print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
+            except asyncio.TimeoutError:
+                print(f"[es-inserter] Worker {worker_id}: Fetch timeout", flush=True)
+                await asyncio.sleep(1)
+                continue
+            except Exception as e:
+                print(f"[es-inserter] Worker {worker_id}: Fetch error: {e}", flush=True)
+                await asyncio.sleep(1)
+                continue
 
-        elements = []
-        for msg in msgs:
-            elements.append(json.loads(msg.data))
-            await msg.ack()
+            elements = []
+            for msg in msgs:
+                elements.append(json.loads(msg.data))
+                await msg.ack()
 
-        print(f"[es-inserter] Parsed {len(elements)} elements", flush=True)
-        
-        if not elements:
-            continue
+            print(f"[es-inserter] Worker {worker_id}: Parsed {len(elements)} elements", flush=True)
+            
+            if not elements:
+                continue
 
-        # Import embedding functions here to avoid slow startup
-        from shared.embeddings import embed_texts, build_text
+            # Import embedding functions here to avoid slow startup
+            from shared.embeddings import embed_texts, build_text
 
-        # build searchable text from ALL tags for each element
-        texts = [build_text(e["tags"]) for e in elements]
-        non_empty = [(i, t) for i, t in enumerate(texts) if t]
+            # build searchable text from ALL tags for each element
+            texts = [build_text(e["tags"]) for e in elements]
+            non_empty = [(i, t) for i, t in enumerate(texts) if t]
 
-        # compute vectors only when ENABLE_VECTORS is on
-        vectors: list[list[float] | None] = [None] * len(elements)
-        if ENABLE_VECTORS and non_empty:
-            indices, batch_texts = zip(*non_empty)
-            batch_vecs = embed_texts(list(batch_texts))
-            for idx, vec in zip(indices, batch_vecs):
-                vectors[idx] = vec
+            # compute vectors only when ENABLE_VECTORS is on
+            vectors: list[list[float] | None] = [None] * len(elements)
+            if ENABLE_VECTORS and non_empty:
+                indices, batch_texts = zip(*non_empty)
+                batch_vecs = embed_texts(list(batch_texts))
+                for idx, vec in zip(indices, batch_vecs):
+                    vectors[idx] = vec
 
-        # prepare bulk actions
-        actions = []
-        for elem, txt, vec in zip(elements, texts, vectors):
-            tags = elem["tags"]
-            admin_level = elem.get("admin_level", 0)
-            area_km2 = elem.get("area_km2", 0.0)
-            rank = compute_offline_rank(tags, admin_level, area_km2)
+            # prepare bulk actions
+            actions = []
+            for elem, txt, vec in zip(elements, texts, vectors):
+                tags = elem["tags"]
+                admin_level = elem.get("admin_level", 0)
+                area_km2 = elem.get("area_km2", 0.0)
+                rank = compute_offline_rank(tags, admin_level, area_km2)
 
-            doc = {
-                "_index": INDEX,
-                "_id": elem["osm_id"],
-                "osm_id": elem["osm_id"],
-                "osm_type": elem.get("osm_type", ""),
-                "name": tags.get("name", ""),
-                "name_en": tags.get("name:en", ""),
-                "tags_text": txt,
-                "tags": tags,
-                "admin_level": admin_level,
-                "area_km2": area_km2,
-                "offline_rank": rank,
-                "popularity": 0.0,
-            }
-            if elem.get("geom"):
-                doc["geom"] = elem["geom"]
-                c = _centroid(elem["geom"])
-                if c:
-                    doc["centroid"] = c
-            if vec is not None:
-                doc["name_vector"] = vec
-            actions.append(doc)
+                doc = {
+                    "_index": INDEX,
+                    "_id": elem["osm_id"],
+                    "osm_id": elem["osm_id"],
+                    "osm_type": elem.get("osm_type", ""),
+                    "name": tags.get("name", ""),
+                    "name_en": tags.get("name:en", ""),
+                    "tags_text": txt,
+                    "tags": tags,
+                    "admin_level": admin_level,
+                    "area_km2": area_km2,
+                    "offline_rank": rank,
+                    "popularity": 0.0,
+                }
+                if elem.get("geom"):
+                    doc["geom"] = elem["geom"]
+                    c = _centroid(elem["geom"])
+                    if c:
+                        doc["centroid"] = c
+                if vec is not None:
+                    doc["name_vector"] = vec
+                actions.append(doc)
 
-        await async_bulk(es, actions, raise_on_error=False)
-        print(f"[es-inserter] Indexed {len(actions)} docs", flush=True)
+            await async_bulk(es, actions, raise_on_error=False)
+            print(f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs", flush=True)
+
+    # Spawn multiple workers
+    workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
+    print(f"[es-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
+    
+    # Wait for all workers (they run indefinitely)
+    await asyncio.gather(*workers)
 
     await es.close()
     await nc.close()

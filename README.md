@@ -60,7 +60,7 @@ See [helm/geocoder/README.md](helm/geocoder/README.md) for detailed Helm chart d
 | `POSTGRES_DB` | `postgres` | PostGIS database |
 | `POSTGRES_USER` | `postgres` | PostGIS user |
 | `POSTGRES_PASSWORD` | `postgres` | PostGIS password |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer model |
+| `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Multilingual sentence transformer model (supports 50+ languages including Arabic) |
 | `ENABLE_VECTORS` | `false` | Enable vector embeddings |
 | `ENABLE_AI` | `false` | Enable AI-powered features |
 | `osm_url` | Egypt PBF | OSM data source URL |
@@ -116,8 +116,8 @@ If you need to download the embedding model manually (e.g., for offline environm
 # Install huggingface-cli if not already installed
 pip install huggingface-hub
 
-# Download the default model (all-MiniLM-L6-v2)
-huggingface-cli download sentence-transformers/all-MiniLM-L6-v2 --local-dir models/all-MiniLM-L6-v2
+# Download the default model (paraphrase-multilingual-MiniLM-L12-v2)
+huggingface-cli download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir models/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 ### Using Python
@@ -127,7 +127,7 @@ huggingface-cli download sentence-transformers/all-MiniLM-L6-v2 --local-dir mode
 pip install sentence-transformers
 
 # Download the model using Python
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2').save('models/all-MiniLM-L6-v2')"
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2').save('models/paraphrase-multilingual-MiniLM-L12-v2')"
 ```
 
 ### Using a Different Model
@@ -150,7 +150,7 @@ When using Docker Compose with a locally downloaded model, mount the models dire
 docker-compose -f docker-compose-ai.yaml up -d
 ```
 
-The `docker-compose-ai.yaml` already includes the volume mount for the models directory and sets `EMBEDDING_MODEL=/app/models/all-MiniLM-L6-v2`.
+The `docker-compose-ai.yaml` already includes the volume mount for the models directory and sets `EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2`.
 
 ## Development
 

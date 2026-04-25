@@ -39,22 +39,13 @@ def get_model():
             if cache_folder:
                 # Ensure cache directory exists
                 os.makedirs(cache_folder, exist_ok=True)
-                
-                # Construct the local path where the model would be cached
-                model_name = EMBEDDING_MODEL.replace('/', '_')
-                local_model_path = os.path.join(cache_folder, model_name)
-                
-                if os.path.exists(local_model_path):
-                    print(f"[embeddings] Loading cached model from: {local_model_path}")
-                    _model = SentenceTransformer(local_model_path, device=device)
-                else:
-                    print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
-                    _model = SentenceTransformer(
-                        EMBEDDING_MODEL,
-                        device=device,
-                        cache_folder=cache_folder
-                    )
-                    print(f"[embeddings] Model downloaded and cached successfully")
+                print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
+                _model = SentenceTransformer(
+                    EMBEDDING_MODEL,
+                    device=device,
+                    cache_folder=cache_folder
+                )
+                print(f"[embeddings] Model downloaded and cached successfully")
             else:
                 print(f"[embeddings] No cache directory specified, using default cache")
                 _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
