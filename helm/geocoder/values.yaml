@@ -132,9 +132,9 @@ postgis:
 # Embedding model configuration
 embeddings:
   # Model name (HuggingFace) or local path
-  model: "all-MiniLM-L6-v2"
+  model: "paraphrase-multilingual-MiniLM-L12-v2"
   # For AI mode, use local path
-  localModelPath: "/app/models/all-MiniLM-L6-v2"
+  localModelPath: "/app/models/paraphrase-multilingual-MiniLM-L12-v2"
   # Cache directory
   cacheDir: "/app/models"
 

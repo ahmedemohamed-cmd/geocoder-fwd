@@ -17,6 +17,8 @@ from shared.config import (
     POSTGRES_DB,
     POSTGRES_USER,
     POSTGRES_PASSWORD,
+    BATCH_SIZE,
+    MAX_CONCURRENT_BATCHES,
 )
 from shared.nats_client import connect, subscribe
 
@@ -84,39 +86,49 @@ async def run():
     sub = await subscribe(js, "postgis-consumer")
     print("[postgis-inserter] Listening for messages ...")
 
-    while True:
-        try:
-            msgs = await sub.fetch(batch=100, timeout=5)
-        except Exception:
-            await asyncio.sleep(1)
-            continue
-
-        rows: list[tuple[str, str, str]] = []
-        for msg in msgs:
-            elem = json.loads(msg.data)
-            await msg.ack()
-            geom = elem.get("geom")
-            if not geom:
+    # Create worker pool for concurrent batch processing
+    async def worker(worker_id: int):
+        """Worker that fetches and processes batches concurrently."""
+        while True:
+            try:
+                msgs = await sub.fetch(batch=BATCH_SIZE, timeout=5)
+            except Exception:
+                await asyncio.sleep(1)
                 continue
-            wkt = _geojson_to_wkt(geom)
-            if wkt:
-                rows.append((elem["osm_id"], elem.get("osm_type", ""), wkt))
 
-        if not rows:
-            continue
+            rows: list[tuple[str, str, str]] = []
+            for msg in msgs:
+                elem = json.loads(msg.data)
+                await msg.ack()
+                geom = elem.get("geom")
+                if not geom:
+                    continue
+                wkt = _geojson_to_wkt(geom)
+                if wkt:
+                    rows.append((elem["osm_id"], elem.get("osm_type", ""), wkt))
 
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                f"""
-                INSERT INTO {TABLE} (osm_id, osm_type, geom)
-                VALUES ($1, $2, ST_GeomFromText($3, 4326))
-                ON CONFLICT (osm_id) DO UPDATE SET
-                    osm_type = EXCLUDED.osm_type,
-                    geom     = EXCLUDED.geom
-                """,
-                rows,
-            )
-        print(f"[postgis-inserter] Inserted {len(rows)} geometries")
+            if not rows:
+                continue
+
+            async with pool.acquire() as conn:
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {TABLE} (osm_id, osm_type, geom)
+                    VALUES ($1, $2, ST_GeomFromText($3, 4326))
+                    ON CONFLICT (osm_id) DO UPDATE SET
+                        osm_type = EXCLUDED.osm_type,
+                        geom     = EXCLUDED.geom
+                    """,
+                    rows,
+                )
+            print(f"[postgis-inserter] Worker {worker_id}: Inserted {len(rows)} geometries")
+
+    # Spawn multiple workers
+    workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
+    print(f"[postgis-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
+    
+    # Wait for all workers (they run indefinitely)
+    await asyncio.gather(*workers)
 
     await pool.close()
     await nc.close()

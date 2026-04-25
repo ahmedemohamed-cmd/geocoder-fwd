@@ -55,10 +55,10 @@ services:
       - typesense-data:/data
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8108 && echo -e \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep -q \"200\"'"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 600s
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgis:
     image: postgis/postgis:16-3.4-alpine
@@ -95,13 +95,16 @@ services:
   es-inserter:
     build: .
     command: python -m services.es_inserter
+    volumes:
+      - ./models:/app/models
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - ENABLE_VECTORS=false
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+      - ENABLE_VECTORS=true
+      - TRANSFORMERS_CACHE=/app/models
     depends_on:
       nats:
         condition: service_started
@@ -112,6 +115,8 @@ services:
   ts-inserter:
     build: .
     command: python -m services.ts_inserter
+    volumes:
+      - ./models:/app/models
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -119,8 +124,9 @@ services:
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - ENABLE_VECTORS=false
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+      - ENABLE_VECTORS=true
+      - TRANSFORMERS_CACHE=/app/models
     depends_on:
       nats:
         condition: service_started
@@ -152,14 +158,17 @@ services:
     command: python -m services.geocoder
     ports:
       - "8000:8000"
+    volumes:
+      - ./models:/app/models
     environment:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - ENABLE_VECTORS=false
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+      - ENABLE_VECTORS=true
       - ENABLE_AI=false
+      - TRANSFORMERS_CACHE=/app/models
     depends_on:
       elasticsearch:
         condition: service_healthy

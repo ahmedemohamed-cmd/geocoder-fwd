@@ -29,32 +29,27 @@ def get_model():
         print(f"[embeddings] Using device: {device}")
 
         cache_folder = os.environ.get('TRANSFORMERS_CACHE')
-        
+
         # Check if EMBEDDING_MODEL is a local path that exists
         if os.path.exists(EMBEDDING_MODEL):
             print(f"[embeddings] Loading local model from: {EMBEDDING_MODEL}")
+            # Disable HF Hub access for local models by setting environment variable
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
             _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+            print(f"[embeddings] Local model loaded successfully")
         else:
             # EMBEDDING_MODEL is a Hugging Face model name or path that doesn't exist locally
             if cache_folder:
                 # Ensure cache directory exists
                 os.makedirs(cache_folder, exist_ok=True)
-                
-                # Construct the local path where the model would be cached
-                model_name = EMBEDDING_MODEL.replace('/', '_')
-                local_model_path = os.path.join(cache_folder, model_name)
-                
-                if os.path.exists(local_model_path):
-                    print(f"[embeddings] Loading cached model from: {local_model_path}")
-                    _model = SentenceTransformer(local_model_path, device=device)
-                else:
-                    print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
-                    _model = SentenceTransformer(
-                        EMBEDDING_MODEL,
-                        device=device,
-                        cache_folder=cache_folder
-                    )
-                    print(f"[embeddings] Model downloaded and cached successfully")
+                print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
+                _model = SentenceTransformer(
+                    EMBEDDING_MODEL,
+                    device=device,
+                    cache_folder=cache_folder
+                )
+                print(f"[embeddings] Model downloaded and cached successfully")
             else:
                 print(f"[embeddings] No cache directory specified, using default cache")
                 _model = SentenceTransformer(EMBEDDING_MODEL, device=device)

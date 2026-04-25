@@ -1,0 +1,17 @@
+# Cache directories
+.locks/
+models--*/
+xet/
+
+# Cache files
+CACHEDIR.TAG
+*.lock
+*.incomplete
+
+# Git metadata
+.git/
+
+# Note: If using git submodules for Hugging Face models, remove the specific
+# model directory from this ignore list. For automatic download, keep all
+# model directories ignored.
+
