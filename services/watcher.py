@@ -16,7 +16,7 @@ from shared.config import DATA_DIR, NATS_SUBJECT
 from shared import nats_client
 
 SENTINEL = object()
-BATCH_PUBLISH = 100  # Set to 100 to match consumer BATCH_SIZE
+BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
 QUEUE_MAXSIZE = 100_000
 
 
@@ -168,9 +168,11 @@ async def publish_file(filepath: str):
                 name=nats_client.NATS_STREAM,
                 subjects=[nats_client.NATS_SUBJECT],
                 retention=RetentionPolicy.LIMITS,
-                max_age=0,
-                max_bytes=-1,
+                max_age=86400,  # Keep messages for 24 hours (in seconds)
+                max_bytes=10737418240,  # 10GB max storage
                 storage="file",
+                max_msg_size=1048576,  # 1MB max message size
+                discard="old",  # Discard old messages when limits are reached
             )
         )
         print(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
@@ -215,18 +217,27 @@ async def publish_file(filepath: str):
             
             # Publish all messages in the batch at once
             for msg in messages:
-                try:
-                    ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
-                    if ack:
-                        published += 1
-                    else:
-                        print(f"[watcher] No ack received for element", flush=True)
-                    # Small delay to avoid overwhelming NATS
-                    await asyncio.sleep(0.02)  # 20ms delay between publishes
-                except Exception as e:
-                    print(f"[watcher] Error publishing element: {e}", flush=True)
-                    await asyncio.sleep(0.05)  # Back off on error
-                    continue
+                max_retries = 5
+                for attempt in range(max_retries):
+                    try:
+                        ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
+                        if ack:
+                            published += 1
+                            break  # Success, move to next message
+                        else:
+                            print(f"[watcher] No ack received for element (attempt {attempt + 1}/{max_retries})", flush=True)
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                            else:
+                                print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
+                        # Longer delay to avoid overwhelming NATS
+                        await asyncio.sleep(0.05)  # 50ms delay between publishes
+                    except Exception as e:
+                        print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                        else:
+                            print(f"[watcher] Failed to publish element after {max_retries} attempts: {e}", flush=True)
         except Exception as e:
             print(f"[watcher] Error in batch publishing: {e}", flush=True)
             await asyncio.sleep(0.1)
@@ -240,16 +251,26 @@ async def publish_file(filepath: str):
             item = q.get_nowait()
             if item is SENTINEL:
                 break
-            try:
-                ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
-                if ack:
-                    published += 1
-                else:
-                    print(f"[watcher] No ack received during flush", flush=True)
-                await asyncio.sleep(0.02)  # Rate limiting (20ms delay)
-            except Exception as e:
-                print(f"[watcher] Error publishing element during flush: {e}", flush=True)
-                continue
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
+                    if ack:
+                        published += 1
+                        break  # Success, move to next item
+                    else:
+                        print(f"[watcher] No ack received during flush (attempt {attempt + 1}/{max_retries})", flush=True)
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                        else:
+                            print(f"[watcher] Failed to publish element during flush after {max_retries} attempts", flush=True)
+                    await asyncio.sleep(0.05)  # Rate limiting (50ms delay)
+                except Exception as e:
+                    print(f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                    else:
+                        print(f"[watcher] Failed to publish element during flush after {max_retries} attempts: {e}", flush=True)
         except queue.Empty:
             break
 

@@ -40,9 +40,11 @@ async def connect():
                         name=NATS_STREAM,
                         subjects=[NATS_SUBJECT],
                         retention=RetentionPolicy.LIMITS,  # Keep messages until limits are reached
-                        max_age=0,  # Keep messages indefinitely (0 = unlimited)
-                        max_bytes=-1,  # No size limit
+                        max_age=86400,  # Keep messages for 24 hours (in seconds)
+                        max_bytes=10737418240,  # 10GB max storage
                         storage="file",  # Store data on disk
+                        max_msg_size=1048576,  # 1MB max message size
+                        discard="old",  # Discard old messages when limits are reached
                     )
                 )
                 return nc, js
