@@ -8,6 +8,7 @@ Secondary signals (minor boost):
   3. place type   – city > town > village > hamlet > neighbourhood > ...
   4. population   – log-scaled
   5. metadata     – wikidata / wikipedia presence
+  6. landuse      – residential > commercial > retail > industrial > ...
 
 The final ``offline_rank`` is the weighted sum, kept as a positive float
 so it can be used directly as a Typesense sort field and an ES boost.
@@ -34,6 +35,28 @@ _PLACE_SCORES: dict[str, float] = {
     "locality": 0.15,
     "isolated_dwelling": 0.10,
     "farm": 0.10,
+}
+
+# ── landuse importance (0..1) ─────────────────────────────────────────────
+_LANDUSE_SCORES: dict[str, float] = {
+    "residential": 0.70,
+    "commercial": 0.65,
+    "retail": 0.60,
+    "industrial": 0.50,
+    "education": 0.55,
+    "healthcare": 0.60,
+    "recreation_ground": 0.45,
+    "park": 0.50,
+    "garden": 0.40,
+    "cemetery": 0.35,
+    "forest": 0.30,
+    "farmland": 0.25,
+    "meadow": 0.25,
+    "grass": 0.20,
+    "construction": 0.30,
+    "military": 0.20,
+    "brownfield": 0.15,
+    "greenfield": 0.15,
 }
 
 # ── admin_level → score  (OSM admin_level: 2=country … 10=suburb) ─────────
@@ -77,13 +100,19 @@ def _metadata_score(tags: dict) -> float:
     return score
 
 
+def _landuse_score(tags: dict) -> float:
+    landuse = tags.get("landuse", "")
+    return _LANDUSE_SCORES.get(landuse, 0.0)
+
+
 # ── weights (admin_level and area are dominant) ───────────────────────────
 W_ADMIN = 5.0
 W_AREA = 4.0
 W_PLACE = 2.0
 W_POP = 1.5
 W_META = 0.5
-_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META
+W_LANDUSE = 1.0
+_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE
 
 
 def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
@@ -99,6 +128,7 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
         + W_PLACE * _place_score(tags)
         + W_POP * _population_score(tags)
         + W_META * _metadata_score(tags)
+        + W_LANDUSE * _landuse_score(tags)
     )
     # normalise to 0..10
     return round(raw / _W_TOTAL * 10.0, 4)
