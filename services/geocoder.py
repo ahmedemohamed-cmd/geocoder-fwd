@@ -5,6 +5,7 @@ Endpoints
 GET  /autocomplete  - prefix search via Typesense  (fast, typo-tolerant)
 GET  /geocode       - full search via Elasticsearch (text + vector + geo + ranking)
 POST /feedback      - popularity feedback loop      (boosts future ranking)
+GET  /reverse       - reverse geocoding via PostGIS + Elasticsearch (nearest line + enclosing polygons with metadata)
 
 Query-string flags shared by both search endpoints:
   vector=true   enable semantic / AI vector search  (requires ENABLE_VECTORS=true)
@@ -21,6 +22,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query
 from elasticsearch import AsyncElasticsearch
 import typesense
+import asyncpg
 
 from typesense.exceptions import ObjectNotFound
 
@@ -32,6 +34,11 @@ from shared.config import (
     EMBEDDING_DIM,
     ENABLE_VECTORS,
     ENABLE_AI,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_DB,
+    POSTGRES_USER,
+    POSTGRES_PASSWORD,
 )
 from shared.embeddings import embed_texts
 
@@ -103,12 +110,13 @@ TS_SCHEMA = {
 
 es: AsyncElasticsearch = None  # type: ignore[assignment]
 ts: typesense.Client = None  # type: ignore[assignment]
+pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, ts
-    
+    global es, ts, pg_pool
+
     # Retry logic for connecting to dependencies
     max_retries = 10
     retry_delay = 2
@@ -156,7 +164,30 @@ async def lifespan(app: FastAPI):
                 raise
     else:
         raise Exception("Failed to connect to Typesense after maximum retries")
-    
+
+    # Connect to PostGIS
+    for attempt in range(max_retries):
+        try:
+            pg_pool = await asyncpg.create_pool(
+                host=POSTGRES_HOST,
+                port=POSTGRES_PORT,
+                database=POSTGRES_DB,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                min_size=2,
+                max_size=10,
+            )
+            print(f"[geocoder] Successfully connected to PostGIS")
+            break
+        except Exception as e:
+            print(f"[geocoder] Failed to connect to PostGIS (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+            else:
+                raise
+    else:
+        raise Exception("Failed to connect to PostGIS after maximum retries")
+
     # ensure ES index exists
     try:
         if not await es.indices.exists(index=INDEX):
@@ -186,6 +217,7 @@ async def lifespan(app: FastAPI):
             print(f"[geocoder] Failed to create TS collection: {e2}")
     yield
     await es.close()
+    await pg_pool.close()
 
 
 app = FastAPI(title="Geocoding Service", lifespan=lifespan)
@@ -473,6 +505,91 @@ async def feedback(
     await loop.run_in_executor(None, _ts_update)
 
     return {"status": "ok", "osm_id": osm_id}
+
+
+# ── reverse geocoding (PostGIS + Elasticsearch) ───────────────────────────
+@app.get("/reverse")
+async def reverse(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+):
+    """Reverse geocoding using PostGIS + Elasticsearch.
+
+    Returns:
+    - nearest_line: The closest LineString geometry to the point (with ES data)
+    - enclosing_polygons: List of polygons/multipolygons/boundaries that contain the point (with ES data)
+    """
+    point_wkt = f"POINT({lon} {lat})"
+
+    async with pg_pool.acquire() as conn:
+        # Find nearest line (LineString)
+        nearest_line_query = """
+            SELECT osm_id, osm_type, ST_AsGeoJSON(geom) as geom
+            FROM osm_geometries
+            WHERE ST_GeometryType(geom) = 'ST_LineString'
+            ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
+            LIMIT 1
+        """
+        nearest_line = await conn.fetchrow(nearest_line_query, point_wkt)
+
+        # Find enclosing polygons/multipolygons/boundaries
+        enclosing_query = """
+            SELECT osm_id, osm_type, ST_AsGeoJSON(geom) as geom
+            FROM osm_geometries
+            WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+            AND ST_Contains(geom, ST_GeomFromText($1, 4326))
+        """
+        enclosing_polygons = await conn.fetch(enclosing_query, point_wkt)
+
+    # Collect all osm_ids to fetch from Elasticsearch
+    osm_ids = []
+    if nearest_line:
+        osm_ids.append(nearest_line["osm_id"])
+    osm_ids.extend(row["osm_id"] for row in enclosing_polygons)
+
+    # Fetch data from Elasticsearch for all found osm_ids
+    es_data = {}
+    if osm_ids:
+        try:
+            resp = await es.mget(index=INDEX, ids=osm_ids)
+            for doc in resp["docs"]:
+                if doc.get("found"):
+                    es_data[doc["_id"]] = doc["_source"]
+        except Exception as e:
+            print(f"[geocoder] Error fetching from Elasticsearch: {e}")
+
+    # Helper to merge PostGIS and ES data
+    def merge_result(pg_row, es_source):
+        result = {
+            "osm_id": pg_row["osm_id"],
+            "osm_type": pg_row["osm_type"],
+            "geom": pg_row["geom"],
+        }
+        if es_source:
+            result["name"] = es_source.get("name", "")
+            result["name_en"] = es_source.get("name_en", "")
+            result["tags"] = es_source.get("tags", {})
+            result["admin_level"] = es_source.get("admin_level", 0)
+            result["area_km2"] = es_source.get("area_km2", 0)
+            result["offline_rank"] = es_source.get("offline_rank", 0)
+            result["popularity"] = es_source.get("popularity", 0)
+        return result
+
+    result = {
+        "nearest_line": None,
+        "enclosing_polygons": [],
+    }
+
+    if nearest_line:
+        es_source = es_data.get(nearest_line["osm_id"])
+        result["nearest_line"] = merge_result(nearest_line, es_source)
+
+    result["enclosing_polygons"] = [
+        merge_result(row, es_data.get(row["osm_id"]))
+        for row in enclosing_polygons
+    ]
+
+    return result
 
 
 if __name__ == "__main__":
