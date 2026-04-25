@@ -144,3 +144,4 @@ GET http://localhost:8108/collections/osm_places
 X-TYPESENSE-API-KEY: typesense-secret-key
 
 ###
+http://localhost:8108/health
