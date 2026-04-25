@@ -217,7 +217,7 @@ async def publish_file(filepath: str):
             
             # Publish all messages in the batch at once
             for msg in messages:
-                max_retries = 5
+                max_retries = 300
                 for attempt in range(max_retries):
                     try:
                         ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
@@ -251,7 +251,7 @@ async def publish_file(filepath: str):
             item = q.get_nowait()
             if item is SENTINEL:
                 break
-            max_retries = 5
+            max_retries = 500
             for attempt in range(max_retries):
                 try:
                     ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
