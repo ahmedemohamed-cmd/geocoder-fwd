@@ -32,7 +32,7 @@ TYPESENSE_PORT = int(os.getenv("TYPESENSE_PORT", "8108"))
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "typesense-secret-key")
 
 # Embeddings
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "/app/models/paraphrase-multilingual-MiniLM-L12-v2")  # Local model path
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")  # Hugging Face model name
 EMBEDDING_DIM = 384
 
 # Feature flags

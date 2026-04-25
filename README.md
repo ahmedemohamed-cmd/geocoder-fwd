@@ -61,8 +61,10 @@ See [helm/geocoder/README.md](helm/geocoder/README.md) for detailed Helm chart d
 | `POSTGRES_USER` | `postgres` | PostGIS user |
 | `POSTGRES_PASSWORD` | `postgres` | PostGIS password |
 | `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Multilingual sentence transformer model (supports 50+ languages including Arabic) |
-| `ENABLE_VECTORS` | `false` | Enable vector embeddings |
-| `ENABLE_AI` | `false` | Enable AI-powered features |
+| `ENABLE_VECTORS` | `true` (AI mode) / `false` (standard) | Enable vector embeddings |
+| `ENABLE_AI` | `true` (AI mode) / `false` (standard) | Enable AI-powered features |
+| `BATCH_SIZE` | `50` (AI mode) / `100` (standard) | Messages per batch (reduced in AI mode for GPU efficiency) |
+| `MAX_CONCURRENT_BATCHES` | `2` (AI mode) / `4` (standard) | Concurrent batch processing workers |
 | `osm_url` | Egypt PBF | OSM data source URL |
 | `DATA_DIR` | `/app/data` | Directory for PBF files |
 
@@ -106,51 +108,24 @@ curl "http://localhost:8000/reverse?lat=30.0444&lon=31.2357"
 curl "http://localhost:8000/autocomplete?q=Tahr"
 ```
 
-## Manual Model Download
+## Model Information
 
-If you need to download the embedding model manually (e.g., for offline environments or to avoid download delays), you can download it to the `models/` directory:
+The system uses the `paraphrase-multilingual-MiniLM-L12-v2` sentence transformer model for vector embeddings. This model supports 50+ languages including Arabic and provides high-quality semantic search capabilities.
 
-### Using Hugging Face CLI
+### Automatic Model Download
 
-```bash
-# Install huggingface-cli if not already installed
-pip install huggingface-hub
-
-# Download the default model (paraphrase-multilingual-MiniLM-L12-v2)
-huggingface-cli download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir models/paraphrase-multilingual-MiniLM-L12-v2
-```
-
-### Using Python
-
-```bash
-# Install sentence-transformers
-pip install sentence-transformers
-
-# Download the model using Python
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2').save('models/paraphrase-multilingual-MiniLM-L12-v2')"
-```
+When running in AI mode, the embedding model is automatically downloaded from Hugging Face on first startup and cached in the `models/` directory. No manual download is required.
 
 ### Using a Different Model
 
-To use a different model, download it to the `models/` directory and update the `EMBEDDING_MODEL` environment variable to point to the local path:
+To use a different embedding model, set the `EMBEDDING_MODEL` environment variable to the Hugging Face model name:
 
 ```bash
-# Download a different model
-huggingface-cli download sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 --local-dir models/paraphrase-multilingual-MiniLM-L12-v2
-
-# Set the environment variable to use the local model
-export EMBEDDING_MODEL=models/paraphrase-multilingual-MiniLM-L12-v2
-```
-
-### Docker Compose with Local Model
-
-When using Docker Compose with a locally downloaded model, mount the models directory and set the model path:
-
-```bash
+export EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 docker-compose -f docker-compose-ai.yaml up -d
 ```
 
-The `docker-compose-ai.yaml` already includes the volume mount for the models directory and sets `EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2`.
+The model will be automatically downloaded and cached.
 
 ## Development
 
@@ -215,6 +190,22 @@ kubectl create job --from=cronjob/geocoder-downloader manual-$(date +%s)
 ├── helm/geocoder/        # Kubernetes Helm chart
 └── requirements.txt      # Python dependencies
 ```
+
+## Performance Configuration
+
+### AI Mode (GPU + Vectors)
+- **Batch Size**: 50 messages per batch (reduced for GPU efficiency)
+- **Concurrent Workers**: 2 workers per inserter
+- **Vector Generation**: GPU-accelerated using CUDA
+- **Expected Throughput**: ~100-300 docs/sec per inserter
+
+### Standard Mode (CPU-only)
+- **Batch Size**: 100 messages per batch
+- **Concurrent Workers**: 4 workers per inserter
+- **Vector Generation**: Disabled by default
+- **Expected Throughput**: ~500-1000 docs/sec per inserter
+
+For more detailed performance tuning information, see [PERFORMANCE_OPTIMIZATIONS.md](PERFORMANCE_OPTIMIZATIONS.md) and [PARALLEL_PROCESSING_GUIDE.md](PARALLEL_PROCESSING_GUIDE.md).
 
 ## License
 

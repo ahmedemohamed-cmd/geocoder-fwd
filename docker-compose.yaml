@@ -102,7 +102,7 @@ services:
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=true
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
@@ -124,7 +124,7 @@ services:
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
-      - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=true
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
@@ -165,7 +165,7 @@ services:
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
-      - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
+      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=true
       - ENABLE_AI=false
       - TRANSFORMERS_CACHE=/app/models
