@@ -79,7 +79,7 @@ services:
   # Python services
   watcher:
     build: .
-    command: python -m services.watcher
+    command: python -u -m services.watcher
     volumes:
       - ./data:/app/data
     environment:
@@ -98,7 +98,7 @@ services:
 
   es-inserter:
     build: .
-    command: python -m services.es_inserter
+    command: python -u -m services.es_inserter
     volumes:
       - ./models:/app/models
     environment:
@@ -118,7 +118,7 @@ services:
 
   ts-inserter:
     build: .
-    command: python -m services.ts_inserter
+    command: python -u -m services.ts_inserter
     volumes:
       - ./models:/app/models
     environment:
@@ -140,7 +140,7 @@ services:
 
   postgis-inserter:
     build: .
-    command: python -m services.postgis_inserter
+    command: python -u -m services.postgis_inserter
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -159,7 +159,7 @@ services:
 
   geocoder:
     build: .
-    command: python -m services.geocoder
+    command: python -u -m services.geocoder
     ports:
       - "8000:8000"
     volumes:
@@ -182,7 +182,7 @@ services:
 
   downloader:
     build: .
-    command: python -m services.downloader
+    command: python -u -m services.downloader
     volumes:
       - ./data:/app/data
     environment:
@@ -192,7 +192,7 @@ services:
 
   cleaner:
     build: .
-    command: python -m services.cleaner
+    command: python -u -m services.cleaner
     environment:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - TYPESENSE_HOST=typesense
