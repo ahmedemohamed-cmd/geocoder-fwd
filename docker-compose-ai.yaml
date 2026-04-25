@@ -105,7 +105,7 @@ services:
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
     volumes:
-      - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+      - ./models:/app/models
     deploy:
       resources:
         reservations:
@@ -135,7 +135,7 @@ services:
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
     volumes:
-      - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+      - ./models:/app/models
     deploy:
       resources:
         reservations:
@@ -185,7 +185,7 @@ services:
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
     volumes:
-      - /home/ezzat/go/src/github.com/ahmedemohamed-cmd/models:/app/models
+      - ./models:/app/models
     deploy:
       resources:
         reservations:

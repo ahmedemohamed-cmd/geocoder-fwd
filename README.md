@@ -118,13 +118,39 @@ When running in AI mode, the embedding model is automatically downloaded from Hu
 
 **How it works:**
 1. Start the services with `docker-compose -f docker-compose-ai.yaml up -d`
-2. The inserter services will automatically download the model on first startup
-3. The model is cached in `/app/models` inside the container
-4. Subsequent restarts use the cached model
+2. The inserter services check if the model exists locally
+3. If not found, they automatically download from Hugging Face
+4. The model is cached in `/app/models` inside the container
+5. Volume mount persists the model to `./models/` on the host
+6. Subsequent restarts use the cached model
 
 **Automatic download locations:**
 - **Inside container**: `/app/models/` (set via `TRANSFORMERS_CACHE` and `HF_HOME` environment variables)
 - **Host mount**: `./models/` (mounted from host to container for persistence)
+
+**Automatic download trigger:**
+The system downloads automatically when:
+- `EMBEDDING_MODEL` is set to a Hugging Face model name (e.g., `paraphrase-multilingual-MiniLM-L12-v2`)
+- The model directory doesn't exist locally
+- The service starts and needs to generate embeddings
+
+**Verification:**
+```bash
+# Check if models exist
+ls -la models/
+
+# Start services (will download if missing)
+docker-compose -f docker-compose-ai.yaml up -d
+
+# Check logs for download progress
+docker-compose -f docker-compose-ai.yaml logs -f es-inserter
+```
+
+**Important notes:**
+- The download happens on first service startup, not during docker build
+- Download time varies by model size (100-500MB) and network speed
+- The model is persisted across container restarts via volume mount
+- If you delete the `models/` directory, it will be re-downloaded on next startup
 
 ### Manual Model Download
 
