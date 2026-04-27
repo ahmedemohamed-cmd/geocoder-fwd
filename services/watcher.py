@@ -273,6 +273,13 @@ class OSMHandler(osmium.SimpleHandler):
             # Check if this is a multipolygon or boundary relation
             rel_type = tags.get("type", "")
             if rel_type in ("multipolygon", "boundary"):
+                # Check if relation has members before attempting geometry creation
+                if not r.members:
+                    if self.relation_count < 10:
+                        print(f"[watcher] Relation {r.id}: Skipped (no members)")
+                    self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                    return
+
                 # Use osmium's geometry factory to create multipolygon geometry
                 try:
                     geojson = self.geom_factory.create_multipolygon(r)
@@ -291,6 +298,14 @@ class OSMHandler(osmium.SimpleHandler):
                         if self.relation_count < 10:
                             print(f"[watcher] Relation {r.id}: Geometry factory returned None for type={rel_type}")
                         self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                except TypeError as e:
+                    # Handle pybind11 type casting error by skipping this relation
+                    if "Unable to cast Python instance" in str(e):
+                        if self.relation_count < 10:
+                            print(f"[watcher] Relation {r.id}: Skipping due to pybind11 type casting error")
+                        self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                    else:
+                        raise
                 except Exception as e:
                     print(f"[watcher] Relation {r.id}: Error creating multipolygon geometry: {e}")
                     self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1

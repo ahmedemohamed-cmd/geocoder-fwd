@@ -101,6 +101,31 @@ POST http://localhost:8000/feedback?osm_id=n271613766&boost=5.0
 ###
 
 # ============================================================================
+# Reverse Geocoding Endpoint (PostGIS + Elasticsearch)
+# Find nearest line and enclosing polygons for a given point
+# ============================================================================
+
+### Reverse geocoding - Cairo coordinates
+GET http://localhost:8000/reverse?lat=30.0444&lon=31.2357
+
+###
+
+### Reverse geocoding - Pyramids coordinates
+GET http://localhost:8000/reverse?lat=29.9792&lon=31.1342
+
+###
+
+### Reverse geocoding - Tahrir Square coordinates
+GET http://localhost:8000/reverse?lat=30.0444&lon=31.2357
+
+###
+
+### Reverse geocoding - Alexandria coordinates
+GET http://localhost:8000/reverse?lat=31.2001&lon=29.9187
+
+###
+
+# ============================================================================
 # Elasticsearch Direct Access (for debugging)
 # ============================================================================
 

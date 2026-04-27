@@ -173,10 +173,17 @@ services:
       - ENABLE_VECTORS=false
       - ENABLE_AI=false
       - TRANSFORMERS_CACHE=/app/models
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     depends_on:
       elasticsearch:
         condition: service_healthy
       typesense:
+        condition: service_healthy
+      postgis:
         condition: service_healthy
     restart: unless-stopped
 

@@ -188,6 +188,11 @@ services:
       - ENABLE_AI=true
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
       - ./models:/app/models
     deploy:
@@ -201,6 +206,8 @@ services:
       elasticsearch:
         condition: service_healthy
       typesense:
+        condition: service_healthy
+      postgis:
         condition: service_healthy
     restart: unless-stopped
 
