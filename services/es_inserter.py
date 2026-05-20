@@ -21,7 +21,7 @@ from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 
 from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
-from shared.nats_client import connect, subscribe
+from shared.nats_client import connect, subscribe, is_transient_error
 from shared.ranking import compute_offline_rank
 
 INDEX = "osm_places"
@@ -170,16 +170,40 @@ async def run():
     async def worker(worker_id: int):
         """Worker that fetches and processes batches concurrently."""
         while True:
-            try:
-                msgs = await asyncio.wait_for(sub.fetch(batch=BATCH_SIZE, timeout=5), timeout=10)
-                print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
-            except asyncio.TimeoutError:
-                print(f"[es-inserter] Worker {worker_id}: Fetch timeout", flush=True)
-                await asyncio.sleep(1)
-                continue
-            except Exception as e:
-                print(f"[es-inserter] Worker {worker_id}: Fetch error: {e}", flush=True)
-                await asyncio.sleep(1)
+            max_fetch_retries = 5
+            for fetch_attempt in range(max_fetch_retries):
+                try:
+                    msgs = await asyncio.wait_for(sub.fetch(batch=BATCH_SIZE, timeout=5), timeout=10)
+                    print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
+                    break
+                except asyncio.TimeoutError:
+                    print(f"[es-inserter] Worker {worker_id}: Fetch timeout", flush=True)
+                    await asyncio.sleep(1)
+                    if fetch_attempt < max_fetch_retries - 1:
+                        continue
+                    else:
+                        # Timeout on final attempt, just continue to next iteration
+                        break
+                except Exception as e:
+                    is_transient = is_transient_error(e)
+                    print(f"[es-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient})", flush=True)
+                    
+                    if is_transient and fetch_attempt < max_fetch_retries - 1:
+                        # Exponential backoff for transient errors
+                        delay = min(1 * (2 ** fetch_attempt), 10)  # Cap at 10 seconds
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Non-transient error or final attempt failed
+                        await asyncio.sleep(1)
+                        if fetch_attempt < max_fetch_retries - 1:
+                            continue
+                        else:
+                            # Break outer loop on final attempt
+                            break
+            
+            # If we didn't get messages, continue to next iteration
+            if 'msgs' not in locals() or not msgs:
                 continue
 
             elements = []

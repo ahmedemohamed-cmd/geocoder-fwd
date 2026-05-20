@@ -20,7 +20,7 @@ from shared.config import (
     BATCH_SIZE,
     MAX_CONCURRENT_BATCHES,
 )
-from shared.nats_client import connect, subscribe
+from shared.nats_client import connect, subscribe, is_transient_error
 
 TABLE = "osm_geometries"
 
@@ -110,10 +110,31 @@ async def run():
     async def worker(worker_id: int):
         """Worker that fetches and processes batches concurrently."""
         while True:
-            try:
-                msgs = await sub.fetch(batch=BATCH_SIZE, timeout=5)
-            except Exception:
-                await asyncio.sleep(1)
+            max_fetch_retries = 5
+            for fetch_attempt in range(max_fetch_retries):
+                try:
+                    msgs = await sub.fetch(batch=BATCH_SIZE, timeout=5)
+                    break
+                except Exception as e:
+                    is_transient = is_transient_error(e)
+                    print(f"[postgis-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient})", flush=True)
+                    
+                    if is_transient and fetch_attempt < max_fetch_retries - 1:
+                        # Exponential backoff for transient errors
+                        delay = min(1 * (2 ** fetch_attempt), 10)  # Cap at 10 seconds
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Non-transient error or final attempt failed
+                        await asyncio.sleep(1)
+                        if fetch_attempt < max_fetch_retries - 1:
+                            continue
+                        else:
+                            # Break outer loop on final attempt
+                            break
+            
+            # If we didn't get messages, continue to next iteration
+            if 'msgs' not in locals() or not msgs:
                 continue
 
             rows: list[tuple[str, str, str]] = []

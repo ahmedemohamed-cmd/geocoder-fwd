@@ -20,12 +20,14 @@ import asyncio
 from contextlib import asynccontextmanager
 import uuid
 from datetime import datetime
+import json
 
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, Field
 from elasticsearch import AsyncElasticsearch
 import typesense
 import asyncpg
+import nats
 
 from typesense.exceptions import ObjectNotFound
 
@@ -42,6 +44,8 @@ from shared.config import (
     POSTGRES_DB,
     POSTGRES_USER,
     POSTGRES_PASSWORD,
+    NATS_URL,
+    NATS_SUBJECT,
 )
 from shared.embeddings import embed_texts
 
@@ -114,11 +118,13 @@ TS_SCHEMA = {
 es: AsyncElasticsearch = None  # type: ignore[assignment]
 ts: typesense.Client = None  # type: ignore[assignment]
 pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
+nc = None  # type: ignore[assignment]
+js = None  # type: ignore[assignment]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, ts, pg_pool
+    global es, ts, pg_pool, nc, js
 
     # Retry logic for connecting to dependencies
     max_retries = 10
@@ -191,6 +197,22 @@ async def lifespan(app: FastAPI):
     else:
         raise Exception("Failed to connect to PostGIS after maximum retries")
 
+    # Connect to NATS
+    for attempt in range(max_retries):
+        try:
+            nc = await nats.connect(NATS_URL)
+            js = nc.jetstream()
+            print(f"[geocoder] Successfully connected to NATS")
+            break
+        except Exception as e:
+            print(f"[geocoder] Failed to connect to NATS (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+            else:
+                raise
+    else:
+        raise Exception("Failed to connect to NATS after maximum retries")
+
     # ensure ES index exists
     try:
         if not await es.indices.exists(index=INDEX):
@@ -221,6 +243,7 @@ async def lifespan(app: FastAPI):
     yield
     await es.close()
     await pg_pool.close()
+    await nc.close()
 
 
 app = FastAPI(title="Geocoding Service", lifespan=lifespan)
@@ -547,77 +570,44 @@ class PlaceResponse(BaseModel):
 async def add_place(place: PlaceCreate):
     """Add a new place to the geocoding database.
     
-    Stores the place in PostGIS and indexes it in Elasticsearch and Typesense
-    for searchability. Returns the created place with its generated ID.
+    Publishes the place to NATS stream for processing by the inserters.
+    Returns the created place with its generated ID immediately.
     """
     # Generate a unique ID for the custom place
     custom_id = f"custom_{uuid.uuid4().hex[:16]}"
     
-    # Create geometry from lat/lon
+    # Create geometry from lat/lon (GeoJSON format: [lon, lat])
     geom_point = {"type": "Point", "coordinates": [place.lon, place.lat]}
     
-    # Prepare tags for indexing
+    # Prepare tags for publishing
     tags = place.tags or {}
-    tags_text = " ".join(f"{k}:{v}" for k, v in tags.items())
+    # Add name to tags for consistency with OSM data
+    tags["name"] = place.name
+    if place.name_en:
+        tags["name:en"] = place.name_en
     
     # Get current timestamp
     created_at = datetime.utcnow().isoformat()
     
     try:
-        # Store in PostGIS
-        async with pg_pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO osm_geometries (osm_id, osm_type, geom)
-                VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326))
-                ON CONFLICT (osm_id) DO UPDATE SET
-                    osm_type = $2, geom = ST_SetSRID(ST_MakePoint($3, $4), 4326)
-                """,
-                custom_id, place.osm_type, place.lon, place.lat
-            )
-        
-        # Index in Elasticsearch
-        es_doc = {
+        # Create message in the same format as watcher publishes
+        message = {
             "osm_id": custom_id,
             "osm_type": place.osm_type,
-            "name": place.name,
-            "name_en": place.name_en or place.name,
             "tags": tags,
-            "tags_text": tags_text,
             "geom": geom_point,
-            "centroid": {"lat": place.lat, "lon": place.lon},
             "admin_level": place.admin_level,
-            "area_km2": 0.0,
-            "offline_rank": 0.0,
-            "popularity": 0.0,
+            "area_km2": 0.0,  # Points have no area
         }
         
-        # Add embedding vector if vectors are enabled
-        if ENABLE_VECTORS:
-            try:
-                name_for_embedding = place.name_en or place.name
-                embedding = await embed_texts([name_for_embedding])
-                if embedding and len(embedding) > 0:
-                    es_doc["name_vector"] = embedding[0].tolist()
-            except Exception as e:
-                print(f"[geocoder] Error generating embedding for place: {e}")
+        # Publish to NATS stream
+        msg_json = json.dumps(message).encode()
+        ack = await js.publish(NATS_SUBJECT, msg_json, timeout=10)
         
-        await es.index(index=INDEX, id=custom_id, body=es_doc)
+        if not ack:
+            raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
         
-        # Index in Typesense
-        ts_doc = {
-            "osm_id": custom_id,
-            "name": place.name,
-            "name_en": place.name_en or place.name,
-            "osm_type": place.osm_type,
-            "tags_text": tags_text,
-            "admin_level": place.admin_level,
-            "offline_rank": 0.0,
-            "popularity": 0.0,
-            "location": [place.lat, place.lon],
-        }
-        
-        ts.collections[COLLECTION].documents.create(ts_doc)
+        print(f"[geocoder] Published place {custom_id} to NATS stream")
         
         return PlaceResponse(
             osm_id=custom_id,
