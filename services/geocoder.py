@@ -18,8 +18,11 @@ Online ranking formula: offline_rank * text_similarity (+ optional vector KNN + 
 
 import asyncio
 from contextlib import asynccontextmanager
+import uuid
+from datetime import datetime
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
+from pydantic import BaseModel, Field
 from elasticsearch import AsyncElasticsearch
 import typesense
 import asyncpg
@@ -512,6 +515,126 @@ async def feedback(
     await loop.run_in_executor(None, _ts_update)
 
     return {"status": "ok", "osm_id": osm_id}
+
+
+# ── Pydantic models for place management ───────────────────────────────────────
+class PlaceCreate(BaseModel):
+    """Model for creating a new place."""
+    name: str = Field(..., min_length=1, max_length=255)
+    name_en: str | None = Field(None, max_length=255)
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    tags: dict[str, str] | None = Field(default_factory=dict)
+    osm_type: str = Field(default="node", description="OSM type: node, way, or relation")
+    admin_level: int = Field(default=0, ge=0, le=10)
+
+
+class PlaceResponse(BaseModel):
+    """Model for place response."""
+    osm_id: str
+    osm_type: str
+    name: str
+    name_en: str | None
+    tags: dict[str, str]
+    lat: float
+    lon: float
+    admin_level: int
+    created_at: str
+
+
+# ── add place endpoint ─────────────────────────────────────────────────────────
+@app.post("/places", response_model=PlaceResponse)
+async def add_place(place: PlaceCreate):
+    """Add a new place to the geocoding database.
+    
+    Stores the place in PostGIS and indexes it in Elasticsearch and Typesense
+    for searchability. Returns the created place with its generated ID.
+    """
+    # Generate a unique ID for the custom place
+    custom_id = f"custom_{uuid.uuid4().hex[:16]}"
+    
+    # Create geometry from lat/lon
+    geom_point = {"type": "Point", "coordinates": [place.lon, place.lat]}
+    
+    # Prepare tags for indexing
+    tags = place.tags or {}
+    tags_text = " ".join(f"{k}:{v}" for k, v in tags.items())
+    
+    # Get current timestamp
+    created_at = datetime.utcnow().isoformat()
+    
+    try:
+        # Store in PostGIS
+        async with pg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO osm_geometries (osm_id, osm_type, geom)
+                VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326))
+                ON CONFLICT (osm_id) DO UPDATE SET
+                    osm_type = $2, geom = ST_SetSRID(ST_MakePoint($3, $4), 4326)
+                """,
+                custom_id, place.osm_type, place.lon, place.lat
+            )
+        
+        # Index in Elasticsearch
+        es_doc = {
+            "osm_id": custom_id,
+            "osm_type": place.osm_type,
+            "name": place.name,
+            "name_en": place.name_en or place.name,
+            "tags": tags,
+            "tags_text": tags_text,
+            "geom": geom_point,
+            "centroid": {"lat": place.lat, "lon": place.lon},
+            "admin_level": place.admin_level,
+            "area_km2": 0.0,
+            "offline_rank": 0.0,
+            "popularity": 0.0,
+        }
+        
+        # Add embedding vector if vectors are enabled
+        if ENABLE_VECTORS:
+            try:
+                name_for_embedding = place.name_en or place.name
+                embedding = await embed_texts([name_for_embedding])
+                if embedding and len(embedding) > 0:
+                    es_doc["name_vector"] = embedding[0].tolist()
+            except Exception as e:
+                print(f"[geocoder] Error generating embedding for place: {e}")
+        
+        await es.index(index=INDEX, id=custom_id, body=es_doc)
+        
+        # Index in Typesense
+        ts_doc = {
+            "osm_id": custom_id,
+            "name": place.name,
+            "name_en": place.name_en or place.name,
+            "osm_type": place.osm_type,
+            "tags_text": tags_text,
+            "admin_level": place.admin_level,
+            "offline_rank": 0.0,
+            "popularity": 0.0,
+            "location": [place.lat, place.lon],
+        }
+        
+        ts.collections[COLLECTION].documents.create(ts_doc)
+        
+        return PlaceResponse(
+            osm_id=custom_id,
+            osm_type=place.osm_type,
+            name=place.name,
+            name_en=place.name_en,
+            tags=tags,
+            lat=place.lat,
+            lon=place.lon,
+            admin_level=place.admin_level,
+            created_at=created_at
+        )
+        
+    except Exception as e:
+        print(f"[geocoder] Error adding place: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add place: {str(e)}")
+
 
 
 # ── reverse geocoding (PostGIS + Elasticsearch) ───────────────────────────

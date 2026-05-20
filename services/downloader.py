@@ -2,7 +2,11 @@
 
 import os
 import requests
+import urllib3
 from shared.config import OSM_URL, DATA_DIR
+
+# Suppress SSL warnings for development environments
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def download():
@@ -20,7 +24,7 @@ def download():
         return
 
     print(f"[downloader] Downloading {filename} ...")
-    resp = requests.get(OSM_URL, stream=True, timeout=30)
+    resp = requests.get(OSM_URL, stream=True, timeout=30, verify=False)
     resp.raise_for_status()
 
     total = int(resp.headers.get("content-length", 0))

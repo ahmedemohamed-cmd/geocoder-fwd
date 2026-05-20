@@ -56,6 +56,7 @@ spec:
           env:
             {{- include "geocoder.esEnv" . | nindent 12 }}
             {{- include "geocoder.tsEnv" . | nindent 12 }}
+            {{- include "geocoder.postgisEnv" . | nindent 12 }}
             {{- include "geocoder.embeddingEnv" . | nindent 12 }}
             - name: ENABLE_AI
               value: {{ ternary "true" "false" .Values.global.aiEnabled | quote }}
@@ -75,13 +76,13 @@ spec:
               {{- include "geocoder.gpuResources" . | nindent 14 }}
           readinessProbe:
             httpGet:
-              path: /
+              path: /features
               port: http
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /
+              path: /features
               port: http
             initialDelaySeconds: 30
             periodSeconds: 30

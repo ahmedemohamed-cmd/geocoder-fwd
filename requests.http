@@ -101,6 +101,83 @@ POST http://localhost:8000/feedback?osm_id=n271613766&boost=5.0
 ###
 
 # ============================================================================
+# Add Place Endpoint
+# Add new custom places to the geocoding database
+# ============================================================================
+
+### Add a new restaurant in Cairo
+POST http://localhost:8000/places
+Content-Type: application/json
+
+{
+  "name": "Test Restaurant Cairo",
+  "name_en": "Test Restaurant Cairo",
+  "lat": 30.0444,
+  "lon": 31.2357,
+  "tags": {
+    "amenity": "restaurant",
+    "cuisine": "egyptian"
+  },
+  "osm_type": "node",
+  "admin_level": 8
+}
+
+###
+
+### Add a library in Alexandria
+POST http://localhost:8000/places
+Content-Type: application/json
+
+{
+  "name": "Alexandria Library",
+  "name_en": "Alexandria Library",
+  "lat": 31.2088,
+  "lon": 29.9154,
+  "tags": {
+    "amenity": "library",
+    "historic": "yes"
+  },
+  "osm_type": "node",
+  "admin_level": 8
+}
+
+###
+
+### Add a cafe with minimal required fields
+POST http://localhost:8000/places
+Content-Type: application/json
+
+{
+  "name": "Downtown Cafe",
+  "lat": 30.0500,
+  "lon": 31.2400,
+  "tags": {
+    "amenity": "cafe"
+  }
+}
+
+###
+
+### Add a landmark with English name translation
+POST http://localhost:8000/places
+Content-Type: application/json
+
+{
+  "name": "متحف مصر",
+  "name_en": "Egyptian Museum",
+  "lat": 30.0479,
+  "lon": 31.2355,
+  "tags": {
+    "tourism": "museum",
+    "historic": "yes"
+  },
+  "osm_type": "node",
+  "admin_level": 8
+}
+
+###
+
+# ============================================================================
 # Elasticsearch Direct Access (for debugging)
 # ============================================================================
 
