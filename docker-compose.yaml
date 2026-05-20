@@ -169,6 +169,11 @@ services:
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_API_KEY=typesense-secret-key
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=false
       - ENABLE_AI=false
@@ -177,6 +182,8 @@ services:
       elasticsearch:
         condition: service_healthy
       typesense:
+        condition: service_healthy
+      postgis:
         condition: service_healthy
     restart: unless-stopped
 

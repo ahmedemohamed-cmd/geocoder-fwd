@@ -51,7 +51,7 @@ GET http://localhost:8000/autocomplete?q=kahira&lat=30.0444&lon=31.2357&limit=5
 # ============================================================================
 
 ### Basic geocode search
-GET http://localhost:8000/geocode?q=cairo
+GET http://localhost:8000/geocode?q=valeo
 
 ###
 

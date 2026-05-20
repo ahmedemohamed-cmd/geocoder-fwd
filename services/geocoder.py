@@ -333,8 +333,15 @@ async def geocode(
     loop = asyncio.get_event_loop()
 
     # ---- function_score query ----
-    # Online rank = offline_rank * text_similarity
+    # Online rank = text_similarity + offline_rank_boost + geo_decay + popularity
     functions: list[dict] = []
+
+    # baseline score to ensure text matches always get some score
+    functions.append(
+        {
+            "weight": 1.0,
+        }
+    )
 
     # offline_rank boost (dominant signal – based on admin_level + area)
     functions.append(
@@ -425,7 +432,7 @@ async def geocode(
                 "query": text_query,
                 "functions": functions,
                 "score_mode": "sum",
-                "boost_mode": "multiply",
+                "boost_mode": "sum",
             }
         },
     }

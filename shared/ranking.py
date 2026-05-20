@@ -98,6 +98,7 @@ _VENUE_SCORES: dict[str, float] = {
     "courthouse": 0.70,
     "community_centre": 0.60,
     "place_of_worship": 0.65,
+    "money_transfer": 0.50,
     # shop venues
     "supermarket": 0.75,
     "department_store": 0.70,
@@ -207,6 +208,50 @@ def _venue_score(tags: dict) -> float:
     return score
 
 
+def _building_score(tags: dict) -> float:
+    """Score based on building type."""
+    building = tags.get("building", "")
+    if not building:
+        return 0.0
+    
+    # Commercial buildings get higher score
+    commercial_buildings = {
+        "commercial": 0.65,
+        "office": 0.60,
+        "retail": 0.60,
+        "supermarket": 0.70,
+        "department_store": 0.65,
+        "hotel": 0.70,
+        "hospital": 0.80,
+        "school": 0.65,
+        "university": 0.75,
+    }
+    return commercial_buildings.get(building, 0.3)  # default low score for any building
+
+
+def _brand_score(tags: dict) -> float:
+    """Score boost for known brands."""
+    brand = tags.get("brand", "").lower()
+    if not brand:
+        return 0.0
+    
+    # Major international brands get a boost
+    major_brands = {
+        "microsoft": 0.4,
+        "apple": 0.4,
+        "google": 0.4,
+        "amazon": 0.4,
+        "samsung": 0.35,
+        "mcdonalds": 0.35,
+        "starbucks": 0.35,
+        "coca-cola": 0.35,
+        "pepsi": 0.35,
+        "nike": 0.35,
+        "adidas": 0.35,
+    }
+    return major_brands.get(brand, 0.1)  # small boost for any brand
+
+
 # ── weights (admin_level and area are dominant) ───────────────────────────
 W_ADMIN = 5.0
 W_AREA = 4.0
@@ -215,7 +260,9 @@ W_POP = 1.5
 W_META = 0.5
 W_LANDUSE = 1.0
 W_VENUE = 0.7
-_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE + W_VENUE
+W_BUILDING = 0.5
+W_BRAND = 0.3
+_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE + W_VENUE + W_BUILDING + W_BRAND
 
 
 def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
@@ -233,6 +280,8 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
         + W_META * _metadata_score(tags)
         + W_LANDUSE * _landuse_score(tags)
         + W_VENUE * _venue_score(tags)
+        + W_BUILDING * _building_score(tags)
+        + W_BRAND * _brand_score(tags)
     )
     # normalise to 0..10
     return round(raw / _W_TOTAL * 10.0, 4)
