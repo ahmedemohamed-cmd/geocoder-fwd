@@ -22,6 +22,96 @@ SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
 QUEUE_MAXSIZE = 100_000
 
+# Target 60 MB — leaves 4 MB headroom under the 64 MB NATS server ceiling.
+# Simplification is only applied to messages that exceed this threshold, so
+# normal elements (nodes, ways, small relations) are never touched.
+_NATS_TARGET_BYTES = 60 * 1024 * 1024
+
+
+# ---------------------------------------------------------------------------
+# Geometry simplification helpers (no external dependencies)
+# Used only for very large relation geometries that approach the NATS limit.
+# ---------------------------------------------------------------------------
+
+def _round_coords(obj, decimals: int):
+    """Recursively round every float in a GeoJSON coordinates tree."""
+    if isinstance(obj, float):
+        return round(obj, decimals)
+    if isinstance(obj, int):
+        return obj
+    return [_round_coords(x, decimals) for x in obj]
+
+
+def _thin_ring(ring: list, stride: int) -> list:
+    """Keep every *stride*-th point in a coordinate ring.
+
+    Guarantees a valid closed ring (≥ 4 points, first == last).
+    Returns the original ring unchanged if thinning would make it degenerate.
+    """
+    if len(ring) < 4:
+        return ring
+    thinned = ring[::stride]
+    if thinned[0] != thinned[-1]:
+        thinned.append(thinned[0])
+    return thinned if len(thinned) >= 4 else ring
+
+
+def _thin_geom(coords, gtype: str, stride: int):
+    """Apply stride-based point thinning to a GeoJSON coordinates array."""
+    if gtype == "Polygon":
+        return [_thin_ring(ring, stride) for ring in coords]
+    if gtype == "MultiPolygon":
+        return [[_thin_ring(ring, stride) for ring in poly] for poly in coords]
+    if gtype == "LineString":
+        thinned = coords[::stride]
+        return thinned if len(thinned) >= 2 else coords
+    return coords
+
+
+def _simplify_geom(geom: dict, osm_id: str) -> dict | None:
+    """Reduce a geometry's JSON footprint to fit within _NATS_TARGET_BYTES.
+
+    Strategy (applied in order, stopping as soon as the target is met):
+      1. Round coordinates to 5 dp  (~1.1 m precision)
+      2. Round to 4 dp              (~11 m precision)
+      3. Round to 3 dp              (~111 m precision)
+      4. Thin points: stride 2, 4, 8, 16  (still at 3 dp)
+
+    Returns the simplified geometry, or None if the target cannot be met
+    (caller will then skip the element and log a warning).
+    """
+    TARGET = _NATS_TARGET_BYTES - 512   # 512 B headroom for the rest of the message
+    gtype = geom.get("type", "")
+    coords = geom.get("coordinates")
+    if not coords:
+        return None
+
+    for decimals in (5, 4, 3):
+        coords = _round_coords(coords, decimals)
+        candidate = {"type": gtype, "coordinates": coords}
+        if len(json.dumps(candidate).encode()) <= TARGET:
+            return candidate
+
+    for stride in (2, 4, 8, 16):
+        coords = _thin_geom(coords, gtype, stride)
+        candidate = {"type": gtype, "coordinates": coords}
+        sz = len(json.dumps(candidate).encode())
+        if sz <= TARGET:
+            print(
+                f"[watcher] {osm_id}: geometry simplified to {sz / 1_048_576:.1f} MB "
+                f"(3 dp, stride {stride})",
+                flush=True,
+            )
+            return candidate
+
+    final_sz = len(json.dumps({"type": gtype, "coordinates": coords}).encode())
+    print(
+        f"[watcher] {osm_id}: geometry still {final_sz / 1_048_576:.1f} MB after "
+        f"maximum simplification — element will be skipped",
+        flush=True,
+    )
+    return None
+
 
 class ProgressTracker:
     """Simple progress tracker that logs updates at regular intervals."""
@@ -596,12 +686,22 @@ async def publish_file(filepath: str):
 
             # Publish batch using batch publish for efficiency
             try:
-                # Serialize messages — no size cap since the NATS server is
-                # configured with max_payload: 64 MB (nats.conf).
-                messages: list[bytes] = [json.dumps(elem).encode() for elem in batch]
+                # Serialize + optional geometry simplification.
+                # For the vast majority of elements this is just json.dumps.
+                # Only large relation geometries that approach the 64 MB server
+                # ceiling trigger _simplify_geom.
+                messages: list[tuple[bytes, str]] = []   # (payload, osm_id)
+                for elem in batch:
+                    raw = json.dumps(elem).encode()
+                    if len(raw) > _NATS_TARGET_BYTES and elem.get("geom"):
+                        simplified = _simplify_geom(elem["geom"], elem.get("osm_id", "?"))
+                        if simplified is None:
+                            continue   # too large even after max reduction — skip
+                        raw = json.dumps({**elem, "geom": simplified}).encode()
+                    messages.append((raw, elem.get("osm_id", "?")))
 
                 # Publish all messages in the batch
-                for msg in messages:
+                for msg, osm_id in messages:
                     max_retries = 300
                     for attempt in range(max_retries):
                         try:
@@ -624,18 +724,32 @@ async def publish_file(filepath: str):
                                     print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
                         except Exception as e:
                             err_str = str(e).lower()
-                            # Payload-too-large errors are permanent — no retry will help.
-                            # Matches both the legacy server string and the JetStream
-                            # BadRequestError (err_code=10054).
+                            # Payload-too-large: shouldn't reach here after the
+                            # pre-flight check, but handle defensively — try one
+                            # more simplification pass then skip if still too big.
                             if (
                                 "maximum payload" in err_str
                                 or "payload exceeded" in err_str
                                 or "message size exceeds" in err_str
                                 or "10054" in err_str
                             ):
+                                # Attempt emergency simplification
+                                try:
+                                    elem_dict = json.loads(msg)
+                                    if elem_dict.get("geom"):
+                                        simplified = _simplify_geom(
+                                            elem_dict["geom"], osm_id
+                                        )
+                                        if simplified is not None:
+                                            msg = json.dumps(
+                                                {**elem_dict, "geom": simplified}
+                                            ).encode()
+                                            continue   # retry with smaller payload
+                                except Exception:
+                                    pass
                                 print(
-                                    f"[watcher] Permanent publish failure (payload too large) "
-                                    f"for element {len(msg):,} bytes — skipping",
+                                    f"[watcher] {osm_id}: payload too large "
+                                    f"({len(msg):,} bytes) — skipping",
                                     flush=True,
                                 )
                                 break
