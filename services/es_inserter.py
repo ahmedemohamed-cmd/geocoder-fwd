@@ -12,6 +12,16 @@ Stored per element:
   - area_km2          (float – polygon area)
   - offline_rank      (float – pre-computed importance)
   - popularity        (float – feedback-driven, starts at 0)
+  Address fields (all optional):
+  - addr_housenumber  (keyword – exact house/building number)
+  - addr_street       (text + keyword – street name)
+  - addr_city         (text + keyword – city/town/village)
+  - addr_postcode     (keyword – postal code)
+  - addr_country      (keyword – ISO country code)
+  - addr_suburb       (text – suburb or neighbourhood)
+  - addr_state        (text – state / governorate)
+  - full_address      (text – normalised human-readable address string)
+  - has_address       (boolean – quick filter for elements with addr: data)
 """
 
 import asyncio
@@ -21,8 +31,10 @@ from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 
 from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
-from shared.nats_client import connect, subscribe, is_transient_error
+from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
 from shared.ranking import compute_offline_rank
+from shared.centroid import centroid_latlon
+from shared.address import extract_address_components, build_full_address, has_address
 
 INDEX = "osm_places"
 
@@ -61,46 +73,27 @@ MAPPING = {
                 "index": True,
                 "similarity": "cosine",
             },
+            # ── address fields ────────────────────────────────────────────
+            "addr_housenumber": {"type": "keyword"},
+            "addr_street": {
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {"keyword": {"type": "keyword"}},
+            },
+            "addr_city": {
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {"keyword": {"type": "keyword"}},
+            },
+            "addr_postcode": {"type": "keyword"},
+            "addr_country":  {"type": "keyword"},
+            "addr_suburb":   {"type": "text"},
+            "addr_state":    {"type": "text"},
+            "full_address":  {"type": "text", "analyzer": "standard"},
+            "has_address":   {"type": "boolean"},
         }
     },
 }
-
-
-def _centroid(geom: dict) -> dict | None:
-    """Return {lat, lon} centroid from a GeoJSON geometry, or None."""
-    if not geom:
-        return None
-    gtype = geom["type"]
-    coords = geom["coordinates"]
-    if gtype == "Point":
-        return {"lat": coords[1], "lon": coords[0]}
-    if gtype == "LineString":
-        if not coords:
-            return None
-        avg_lat = sum(c[1] for c in coords) / len(coords)
-        avg_lon = sum(c[0] for c in coords) / len(coords)
-        return {"lat": avg_lat, "lon": avg_lon}
-    if gtype == "Polygon":
-        if not coords or not coords[0]:
-            return None
-        pts = coords[0]  # exterior ring
-        avg_lat = sum(c[1] for c in pts) / len(pts)
-        avg_lon = sum(c[0] for c in pts) / len(pts)
-        return {"lat": avg_lat, "lon": avg_lon}
-    if gtype == "MultiPolygon":
-        if not coords:
-            return None
-        # Collect all points from all polygons
-        all_pts = []
-        for polygon in coords:
-            if polygon and polygon[0]:
-                all_pts.extend(polygon[0])
-        if not all_pts:
-            return None
-        avg_lat = sum(c[1] for c in all_pts) / len(all_pts)
-        avg_lon = sum(c[0] for c in all_pts) / len(all_pts)
-        return {"lat": avg_lat, "lon": avg_lon}
-    return None
 
 
 async def ensure_index(es: AsyncElasticsearch):
@@ -150,7 +143,8 @@ async def run():
                 await asyncio.sleep(retry_delay)
             else:
                 raise
-    else:
+    
+    if es is None:
         raise Exception("Failed to connect to Elasticsearch after maximum retries")
     
     await ensure_index(es)
@@ -166,54 +160,62 @@ async def run():
     sub = await subscribe(js, "es-consumer")
     print("[es-inserter] Subscription created, listening for messages ...", flush=True)
 
+    # Use mutable containers for connection objects so workers can update them
+    conn_state = {"nc": nc, "js": js, "sub": sub}
+
     # Create worker pool for concurrent batch processing
     async def worker(worker_id: int):
         """Worker that fetches and processes batches concurrently."""
         while True:
+            msgs = None
             max_fetch_retries = 5
             for fetch_attempt in range(max_fetch_retries):
                 try:
-                    msgs = await asyncio.wait_for(sub.fetch(batch=BATCH_SIZE, timeout=5), timeout=10)
+                    msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
                     break
                 except asyncio.TimeoutError:
                     print(f"[es-inserter] Worker {worker_id}: Fetch timeout", flush=True)
                     await asyncio.sleep(1)
-                    if fetch_attempt < max_fetch_retries - 1:
-                        continue
-                    else:
-                        # Timeout on final attempt, just continue to next iteration
-                        break
+                    continue
                 except Exception as e:
+                    is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[es-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient})", flush=True)
+                    print(f"[es-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, connection_error: {is_conn_err})", flush=True)
                     
-                    if is_transient and fetch_attempt < max_fetch_retries - 1:
+                    if is_conn_err:
+                        # Connection is broken, need to reconnect
+                        print(f"[es-inserter] Worker {worker_id}: Connection error detected, reconnecting...", flush=True)
+                        try:
+                            conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
+                            conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
+                            print(f"[es-inserter] Worker {worker_id}: Reconnected and resubscribed", flush=True)
+                            break  # Retry fetch with new connection
+                        except Exception as reconnect_err:
+                            print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
+                            await asyncio.sleep(5)
+                            continue
+                    elif is_transient and fetch_attempt < max_fetch_retries - 1:
                         # Exponential backoff for transient errors
                         delay = min(1 * (2 ** fetch_attempt), 10)  # Cap at 10 seconds
                         await asyncio.sleep(delay)
-                        continue
                     else:
-                        # Non-transient error or final attempt failed
                         await asyncio.sleep(1)
-                        if fetch_attempt < max_fetch_retries - 1:
-                            continue
-                        else:
-                            # Break outer loop on final attempt
-                            break
             
-            # If we didn't get messages, continue to next iteration
-            if 'msgs' not in locals() or not msgs:
+            if not msgs:
                 continue
 
+            # Parse messages (don't ack yet)
             elements = []
             for msg in msgs:
                 elements.append(json.loads(msg.data))
-                await msg.ack()
 
             print(f"[es-inserter] Worker {worker_id}: Parsed {len(elements)} elements", flush=True)
             
             if not elements:
+                # Ack empty/unparseable messages
+                for msg in msgs:
+                    await msg.ack()
                 continue
 
             # Import embedding functions here to avoid slow startup
@@ -239,6 +241,10 @@ async def run():
                 area_km2 = elem.get("area_km2", 0.0)
                 rank = compute_offline_rank(tags, admin_level, area_km2)
 
+                # address fields
+                addr = extract_address_components(tags)
+                full_addr = build_full_address(tags)
+
                 doc = {
                     "_index": INDEX,
                     "_id": elem["osm_id"],
@@ -252,10 +258,20 @@ async def run():
                     "area_km2": area_km2,
                     "offline_rank": rank,
                     "popularity": 0.0,
+                    # address
+                    "has_address": bool(full_addr),
+                    "full_address": full_addr,
+                    "addr_housenumber": addr.get("housenumber", ""),
+                    "addr_street":      addr.get("street", ""),
+                    "addr_city":        addr.get("city", ""),
+                    "addr_postcode":    addr.get("postcode", ""),
+                    "addr_country":     addr.get("country", ""),
+                    "addr_suburb":      addr.get("suburb", ""),
+                    "addr_state":       addr.get("state", ""),
                 }
                 if elem.get("geom"):
                     doc["geom"] = elem["geom"]
-                    c = _centroid(elem["geom"])
+                    c = centroid_latlon(elem["geom"])
                     if c:
                         doc["centroid"] = c
                 if vec is not None:
@@ -265,6 +281,10 @@ async def run():
             await async_bulk(es, actions, raise_on_error=False)
             print(f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs", flush=True)
 
+            # Ack messages only after successful indexing
+            for msg in msgs:
+                await msg.ack()
+
     # Spawn multiple workers
     workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
     print(f"[es-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
@@ -273,7 +293,7 @@ async def run():
     await asyncio.gather(*workers)
 
     await es.close()
-    await nc.close()
+    await conn_state["nc"].close()
 
 
 if __name__ == "__main__":

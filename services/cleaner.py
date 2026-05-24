@@ -2,7 +2,6 @@
 
 Deletes:
   - Elasticsearch index  (osm_places)
-  - Typesense collection (osm_places)
   - PostGIS table        (osm_geometries)
   - NATS JetStream stream (OSM)
 """
@@ -11,14 +10,9 @@ import asyncio
 
 import asyncpg
 from elasticsearch import AsyncElasticsearch
-import typesense
-from typesense.exceptions import ObjectNotFound
 
 from shared.config import (
     ELASTICSEARCH_URL,
-    TYPESENSE_HOST,
-    TYPESENSE_PORT,
-    TYPESENSE_API_KEY,
     POSTGRES_HOST,
     POSTGRES_PORT,
     POSTGRES_DB,
@@ -28,9 +22,9 @@ from shared.config import (
     NATS_STREAM,
 )
 
-ES_INDEX = "osm_places"
-TS_COLLECTION = "osm_places"
-PG_TABLE = "osm_geometries"
+ES_INDEX        = "osm_places"
+PG_TABLE        = "osm_geometries"
+PG_ADDR_TABLE   = "osm_addresses"
 
 
 async def clean_elasticsearch():
@@ -47,29 +41,6 @@ async def clean_elasticsearch():
         await es.close()
 
 
-def clean_typesense():
-    client = typesense.Client(
-        {
-            "nodes": [
-                {
-                    "host": TYPESENSE_HOST,
-                    "port": str(TYPESENSE_PORT),
-                    "protocol": "http",
-                }
-            ],
-            "api_key": TYPESENSE_API_KEY,
-            "connection_timeout_seconds": 10,
-        }
-    )
-    try:
-        client.collections[TS_COLLECTION].delete()
-        print(f"[cleaner] Deleted TS collection '{TS_COLLECTION}'")
-    except ObjectNotFound:
-        print(f"[cleaner] TS collection '{TS_COLLECTION}' does not exist, skipping")
-    except Exception as exc:
-        print(f"[cleaner] TS error: {exc}")
-
-
 async def clean_postgis():
     try:
         pool = await asyncpg.create_pool(
@@ -83,8 +54,9 @@ async def clean_postgis():
         )
         async with pool.acquire() as conn:
             await conn.execute(f"DROP TABLE IF EXISTS {PG_TABLE} CASCADE")
+            await conn.execute(f"DROP TABLE IF EXISTS {PG_ADDR_TABLE} CASCADE")
         await pool.close()
-        print(f"[cleaner] Dropped PostGIS table '{PG_TABLE}'")
+        print(f"[cleaner] Dropped PostGIS tables '{PG_TABLE}', '{PG_ADDR_TABLE}'")
     except Exception as exc:
         print(f"[cleaner] PostGIS error: {exc}")
 
@@ -108,7 +80,6 @@ async def clean_nats():
 async def clean():
     print("[cleaner] Wiping all indexed data ...")
     await clean_elasticsearch()
-    clean_typesense()
     await clean_postgis()
     await clean_nats()
     print("[cleaner] Done.")

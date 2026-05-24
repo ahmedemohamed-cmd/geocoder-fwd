@@ -10,6 +10,7 @@ Secondary signals (minor boost):
   5. metadata     – wikidata / wikipedia presence
   6. landuse      – residential > commercial > retail > industrial > ...
   7. venue type   – amenity/shop/leisure/tourism (restaurant, cinema, hotel, ...)
+  8. address      – completeness of addr:* tags (housenumber+street+city = max)
 
 The final ``offline_rank`` is the weighted sum, kept as a positive float
 so it can be used directly as a Typesense sort field and an ES boost.
@@ -252,17 +253,45 @@ def _brand_score(tags: dict) -> float:
     return major_brands.get(brand, 0.1)  # small boost for any brand
 
 
+def _address_completeness_score(tags: dict) -> float:
+    """Reward elements with populated addr:* fields.
+
+    A fully-specified address (housenumber + street + city) scores 1.0.
+    Each missing component lowers the score proportionally.
+
+    Weight breakdown:
+      housenumber  0.40  – uniquely identifies a building on a street
+      street       0.35  – essential for routing / disambiguation
+      city         0.15  – scope-level disambiguation
+      postcode     0.10  – fine-grained filtering
+    """
+    score = 0.0
+    if tags.get("addr:housenumber"):
+        score += 0.40
+    if tags.get("addr:street"):
+        score += 0.35
+    if any(tags.get(k) for k in ("addr:city", "addr:town", "addr:village")):
+        score += 0.15
+    if tags.get("addr:postcode"):
+        score += 0.10
+    return min(1.0, score)
+
+
 # ── weights (admin_level and area are dominant) ───────────────────────────
-W_ADMIN = 5.0
-W_AREA = 4.0
-W_PLACE = 2.0
-W_POP = 1.5
-W_META = 0.5
-W_LANDUSE = 1.0
-W_VENUE = 0.7
+W_ADMIN    = 5.0
+W_AREA     = 4.0
+W_PLACE    = 2.0
+W_POP      = 1.5
+W_META     = 0.5
+W_LANDUSE  = 1.0
+W_VENUE    = 0.7
 W_BUILDING = 0.5
-W_BRAND = 0.3
-_W_TOTAL = W_ADMIN + W_PLACE + W_POP + W_AREA + W_META + W_LANDUSE + W_VENUE + W_BUILDING + W_BRAND
+W_BRAND    = 0.3
+W_ADDRESS  = 1.5   # address completeness (gives addressable buildings a meaningful boost)
+_W_TOTAL = (
+    W_ADMIN + W_AREA + W_PLACE + W_POP + W_META
+    + W_LANDUSE + W_VENUE + W_BUILDING + W_BRAND + W_ADDRESS
+)
 
 
 def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
@@ -273,15 +302,16 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
     admin_level and area_km2 are the dominant signals.
     """
     raw = (
-        W_ADMIN * _admin_score(admin_level)
-        + W_AREA * _area_score(area_km2)
-        + W_PLACE * _place_score(tags)
-        + W_POP * _population_score(tags)
-        + W_META * _metadata_score(tags)
-        + W_LANDUSE * _landuse_score(tags)
-        + W_VENUE * _venue_score(tags)
+        W_ADMIN    * _admin_score(admin_level)
+        + W_AREA   * _area_score(area_km2)
+        + W_PLACE  * _place_score(tags)
+        + W_POP    * _population_score(tags)
+        + W_META   * _metadata_score(tags)
+        + W_LANDUSE  * _landuse_score(tags)
+        + W_VENUE    * _venue_score(tags)
         + W_BUILDING * _building_score(tags)
-        + W_BRAND * _brand_score(tags)
+        + W_BRAND    * _brand_score(tags)
+        + W_ADDRESS  * _address_completeness_score(tags)
     )
     # normalise to 0..10
     return round(raw / _W_TOTAL * 10.0, 4)
