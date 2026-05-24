@@ -624,9 +624,15 @@ async def publish_file(filepath: str):
                                     print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
                         except Exception as e:
                             err_str = str(e).lower()
-                            # "maximum payload exceeded" is a permanent error —
-                            # retrying will never help.  Skip immediately.
-                            if "maximum payload" in err_str or "payload exceeded" in err_str:
+                            # Payload-too-large errors are permanent — no retry will help.
+                            # Matches both the legacy server string and the JetStream
+                            # BadRequestError (err_code=10054).
+                            if (
+                                "maximum payload" in err_str
+                                or "payload exceeded" in err_str
+                                or "message size exceeds" in err_str
+                                or "10054" in err_str
+                            ):
                                 print(
                                     f"[watcher] Permanent publish failure (payload too large) "
                                     f"for element {len(msg):,} bytes — skipping",

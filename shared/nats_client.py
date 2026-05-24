@@ -52,31 +52,42 @@ async def connect():
     if nc is None:
         raise Exception("Failed to connect to NATS after maximum retries")
     
-    # Retry stream creation with backoff
+    # Desired stream config — applied whether the stream is new or already exists.
+    # Calling update_stream on an existing stream is idempotent: unchanged fields
+    # are left alone, so re-deploying with a new max_msg_size takes effect
+    # immediately without wiping stored messages.
+    _STREAM_CFG = StreamConfig(
+        name=NATS_STREAM,
+        subjects=[NATS_SUBJECT],
+        retention=RetentionPolicy.LIMITS,
+        max_age=86400,           # 24 h
+        max_bytes=10737418240,   # 10 GB
+        storage="file",
+        max_msg_size=-1,         # unlimited — server ceiling is 64 MB (nats.conf)
+        discard="old",
+    )
+
     max_retries = 5
     for attempt in range(max_retries):
         try:
             await js.find_stream_name_by_subject(NATS_SUBJECT)
+            # Stream exists — always update to pick up any config changes
+            # (e.g. max_msg_size bumped from 1 MB to unlimited after a redeploy).
+            try:
+                await js.update_stream(_STREAM_CFG)
+                print("[nats_client] Stream config updated", flush=True)
+            except Exception as upd_err:
+                print(f"[nats_client] Stream update skipped: {upd_err}", flush=True)
             return nc, js
         except Exception as e:
             is_transient = is_transient_error(e)
             if is_transient and attempt < max_retries - 1:
                 await asyncio.sleep(1 * (attempt + 1))
                 continue
-            
+
             try:
-                await js.add_stream(
-                    StreamConfig(
-                        name=NATS_STREAM,
-                        subjects=[NATS_SUBJECT],
-                        retention=RetentionPolicy.LIMITS,  # Keep messages until limits are reached
-                        max_age=86400,  # Keep messages for 24 hours (in seconds)
-                        max_bytes=10737418240,  # 10GB max storage
-                        storage="file",  # Store data on disk
-                        max_msg_size=-1,  # unlimited
-                        discard="old",  # Discard old messages when limits are reached
-                    )
-                )
+                await js.add_stream(_STREAM_CFG)
+                print("[nats_client] Stream created", flush=True)
                 return nc, js
             except Exception as e2:
                 is_transient2 = is_transient_error(e2)
@@ -85,7 +96,7 @@ async def connect():
                     continue
                 elif attempt >= max_retries - 1:
                     raise
-    
+
     return nc, js
 
 
