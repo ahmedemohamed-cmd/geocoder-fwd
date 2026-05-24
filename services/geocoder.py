@@ -420,7 +420,9 @@ async def geocode(
         }
     )
 
-    # text query – single multi_match + phrase/exact boosts
+    # text query – multi_match across name/name_en using best_fields so that
+    # matching the query in EITHER field yields the same score (no double-counting
+    # for places that happen to have the query language in both fields).
     should_clauses: list[dict] = [
         # fuzzy token matching across all searchable fields
         {
@@ -431,13 +433,25 @@ async def geocode(
                 "fuzziness": "AUTO",
             }
         },
-        # phrase boost: "New York" must appear as a contiguous phrase
-        {"match_phrase": {"name":    {"query": q, "boost": 10}}},
-        {"match_phrase": {"name_en": {"query": q, "boost": 10}}},
-        # all-tokens-required boost: rewards names where every query word appears
-        # (uses the standard analyzer so matching is case-insensitive, unlike term on keyword)
-        {"match": {"name":    {"query": q, "operator": "and", "boost": 15}}},
-        {"match": {"name_en": {"query": q, "operator": "and", "boost": 15}}},
+        # phrase boost: "New York" as a contiguous phrase (best of name or name_en)
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en"],
+                "type": "phrase",
+                "boost": 10,
+            }
+        },
+        # all-tokens-required boost: every query word appears (best of name or name_en)
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en"],
+                "type": "best_fields",
+                "operator": "and",
+                "boost": 15,
+            }
+        },
     ]
 
     # When the query looks like a structured address, also search address fields
