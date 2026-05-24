@@ -464,7 +464,7 @@ async def publish_file(filepath: str):
                     max_age=86400,  # Keep messages for 24 hours (in seconds)
                     max_bytes=10737418240,  # 10GB max storage
                     storage="file",
-                    max_msg_size=1048576,  # 1MB max message size
+                    max_msg_size=-1,  # unlimited
                     discard="old",  # Discard old messages when limits are reached
                 )
             )
@@ -483,7 +483,7 @@ async def publish_file(filepath: str):
                         max_age=86400,
                         max_bytes=10737418240,
                         storage="file",
-                        max_msg_size=1048576,
+                        max_msg_size=-1,  # unlimited
                         discard="old",
                     )
                 )
@@ -596,8 +596,9 @@ async def publish_file(filepath: str):
 
             # Publish batch using batch publish for efficiency
             try:
-                # Convert batch to JSON messages
-                messages = [json.dumps(elem).encode() for elem in batch]
+                # Serialize messages — no size cap since the NATS server is
+                # configured with max_payload: 64 MB (nats.conf).
+                messages: list[bytes] = [json.dumps(elem).encode() for elem in batch]
 
                 # Publish all messages in the batch
                 for msg in messages:
@@ -622,6 +623,16 @@ async def publish_file(filepath: str):
                                 else:
                                     print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
                         except Exception as e:
+                            err_str = str(e).lower()
+                            # "maximum payload exceeded" is a permanent error —
+                            # retrying will never help.  Skip immediately.
+                            if "maximum payload" in err_str or "payload exceeded" in err_str:
+                                print(
+                                    f"[watcher] Permanent publish failure (payload too large) "
+                                    f"for element {len(msg):,} bytes — skipping",
+                                    flush=True,
+                                )
+                                break
                             consecutive_failures += 1
                             print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
                             if consecutive_failures >= max_consecutive_failures:

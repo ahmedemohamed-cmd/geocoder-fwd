@@ -73,7 +73,7 @@ async def connect():
                         max_age=86400,  # Keep messages for 24 hours (in seconds)
                         max_bytes=10737418240,  # 10GB max storage
                         storage="file",  # Store data on disk
-                        max_msg_size=1048576,  # 1MB max message size
+                        max_msg_size=-1,  # unlimited
                         discard="old",  # Discard old messages when limits are reached
                     )
                 )
