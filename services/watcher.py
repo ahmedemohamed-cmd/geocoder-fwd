@@ -117,20 +117,151 @@ def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
 
 
 # ---------------------------------------------------------------------------
+# First-pass handler: collect way IDs that are members of boundary/multipolygon
+# relations so we can cache their coordinates during the second pass.
+# ---------------------------------------------------------------------------
+class RelationMemberCollector(osmium.SimpleHandler):
+    """Lightweight first pass over the PBF file.
+
+    Only implements relation() — nodes and ways are skipped automatically,
+    making this pass very fast (just reads relation blocks).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.way_ids: set[int] = set()
+        self.relation_count = 0
+
+    def relation(self, r):
+        tags = dict(r.tags) if r.tags else {}
+        rel_type = tags.get("type", "")
+        if rel_type in ("multipolygon", "boundary"):
+            for member in r.members:
+                if member.type == "w":
+                    self.way_ids.add(member.ref)
+            self.relation_count += 1
+
+
+# ---------------------------------------------------------------------------
+# Geometry helpers for assembling multipolygon relations from cached way coords
+# ---------------------------------------------------------------------------
+def _assemble_rings(
+    way_coords_list: list[list[tuple[float, float]]],
+) -> list[list[tuple[float, float]]]:
+    """Join way coordinate sequences end-to-end into closed rings.
+
+    OSM multipolygon relations often split a single ring across multiple way
+    members. This function chains them (forward or reversed) until the ring
+    closes, then moves on to the next ring.
+    """
+    if not way_coords_list:
+        return []
+
+    rings: list[list[tuple[float, float]]] = []
+    remaining = [list(wc) for wc in way_coords_list]
+
+    while remaining:
+        ring = remaining.pop(0)
+
+        changed = True
+        while changed and ring[0] != ring[-1]:
+            changed = False
+            for i, way in enumerate(remaining):
+                if way[0] == ring[-1]:
+                    ring.extend(way[1:])
+                    remaining.pop(i)
+                    changed = True
+                    break
+                if way[-1] == ring[-1]:
+                    ring.extend(list(reversed(way))[1:])
+                    remaining.pop(i)
+                    changed = True
+                    break
+                if way[-1] == ring[0]:
+                    ring = way[:-1] + ring
+                    remaining.pop(i)
+                    changed = True
+                    break
+                if way[0] == ring[0]:
+                    ring = list(reversed(way))[:-1] + ring
+                    remaining.pop(i)
+                    changed = True
+                    break
+
+        # Close ring if not already closed
+        if ring[0] != ring[-1]:
+            ring.append(ring[0])
+
+        if len(ring) >= 4:
+            rings.append(ring)
+
+    return rings
+
+
+def _assemble_multipolygon(
+    members, way_coords: dict[int, list[tuple[float, float]]]
+) -> tuple[dict | None, float]:
+    """Build a GeoJSON geometry + area from relation members and cached way coords."""
+    outer_ways: list[list[tuple[float, float]]] = []
+    inner_ways: list[list[tuple[float, float]]] = []
+
+    for member in members:
+        if member.type == "w" and member.ref in way_coords:
+            coords = way_coords[member.ref]
+            if member.role == "inner":
+                inner_ways.append(coords)
+            else:                       # "outer" or "" (default to outer)
+                outer_ways.append(coords)
+
+    if not outer_ways:
+        return None, 0.0
+
+    outer_rings = _assemble_rings(outer_ways)
+    inner_rings = _assemble_rings(inner_ways)
+
+    if not outer_rings:
+        return None, 0.0
+
+    area = 0.0
+    polygons: list[list[list[tuple[float, float]]]] = []
+    for outer in outer_rings:
+        polygons.append([outer])
+        area += _polygon_area_km2(outer)
+
+    # Assign inner rings (holes) to first polygon.  Virtually all OSM boundary
+    # relations have a single outer ring, so this simplified assignment works.
+    for inner in inner_rings:
+        if polygons:
+            polygons[0].append(inner)
+
+    if len(polygons) == 1:
+        geom: dict = {"type": "Polygon", "coordinates": polygons[0]}
+    else:
+        geom = {"type": "MultiPolygon", "coordinates": polygons}
+
+    return geom, area
+
+
+# ---------------------------------------------------------------------------
 # OSM PBF handler – pushes parsed elements into a thread-safe queue
 # ---------------------------------------------------------------------------
 class OSMHandler(osmium.SimpleHandler):
-    def __init__(self, q: queue.Queue, redis_client, progress_tracker=None):
+    def __init__(self, q: queue.Queue, redis_client, progress_tracker=None,
+                 relation_way_ids: set[int] | None = None):
         super().__init__()
         self.q = q
         self.count = 0
         self.node_count = 0
         self.way_count = 0
         self.relation_count = 0
-        self.geom_factory = osmium.geom.GeoJSONFactory()
         self.redis = redis_client
         self.redis_prefix = "osm:nodes:"
         self.progress_tracker = progress_tracker
+        # Set of way IDs that are members of multipolygon/boundary relations.
+        # Populated by the first-pass RelationMemberCollector.
+        self.relation_way_ids = relation_way_ids or set()
+        # Cached way coordinates keyed by way ID (for relation assembly).
+        self.way_coords: dict[int, list[tuple[float, float]]] = {}
 
     def _cache_node_location(self, node_id: int, lon: float, lat: float):
         """Cache node location in Redis."""
@@ -194,45 +325,42 @@ class OSMHandler(osmium.SimpleHandler):
         try:
             if self.way_count == 0:
                 print(f"[watcher] First way encountered: {w.id}")
+
+            # --- Extract coordinates first (needed for relation-member caching) ---
+            coords: list[tuple[float, float]] = []
+            for n in w.nodes:
+                try:
+                    if n.location.valid():
+                        coords.append((n.lon, n.lat))
+                except osmium.InvalidLocationError:
+                    continue  # node not in location index, skip it
+
+            # Cache coordinates for ways that are members of relations.
+            # Must happen *before* the tag filter because relation-member ways
+            # often carry no tags of their own (the tags live on the relation).
+            if self.relation_way_ids and w.id in self.relation_way_ids and len(coords) >= 2:
+                self.way_coords[w.id] = coords
+
+            # --- Tag filtering (for ways published on their own) ---
             tags = dict(w.tags) if w.tags else {}
 
-            # Skip ways without tags (they have no semantic meaning)
             if not tags:
                 self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
                 return
 
-            # Skip ways without identifiable tags
             if not _has_identifiable_tags(tags):
                 self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
                 return
-            
-            coords = []
-            
-            # Use osmium's built-in node resolution
-            try:
-                for n in w.nodes:
-                    if n.location.valid():
-                        coords.append((n.lon, n.lat))
-                    else:
-                        # Node location not available - this way can't be fully resolved
-                        if self.way_count < 10:
-                            print(f"[watcher] Way {w.id}: Node {n.ref} has no location")
-            except osmium.InvalidLocationError:
-                # Node not in memory index - skip this way
+
+            if len(coords) < 2:
                 if self.way_count < 10:
-                    print(f"[watcher] Way {w.id}: Skipped (nodes not in memory index)")
+                    print(f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})")
                 self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
                 return
         except Exception as e:
             print(f"[watcher] Error processing way {w.id}: {e}")
             return
-        
-        if len(coords) < 2:
-            if self.way_count < 10:  # Only print first 10 skips to avoid spam
-                print(f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})")
-            self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
-            return
-        
+
         closed = len(coords) >= 4 and coords[0] == coords[-1]
         geom = (
             {"type": "Polygon", "coordinates": [coords]}
@@ -262,61 +390,56 @@ class OSMHandler(osmium.SimpleHandler):
             print(f"[watcher] First relation encountered: {r.id}")
         tags = dict(r.tags) if r.tags else {}
 
-        # Extract geometry for multipolygons and boundaries
-        geom = None
-        area = 0.0
-        try:
-            # Check if this is a multipolygon or boundary relation
-            rel_type = tags.get("type", "")
-            if rel_type in ("multipolygon", "boundary"):
-                # Use osmium's geometry factory to create multipolygon geometry
-                try:
-                    geojson = self.geom_factory.create_multipolygon(r)
-                    if geojson:
-                        geom = json.loads(geojson)
-                        # Calculate area for each polygon in the multipolygon
-                        if geom.get("type") == "MultiPolygon":
-                            for polygon in geom.get("coordinates", []):
-                                if polygon and polygon[0]:
-                                    coords = [(c[0], c[1]) for c in polygon[0]]
-                                    area += _polygon_area_km2(coords)
-                        elif geom.get("type") == "Polygon" and geom.get("coordinates"):
-                            coords = [(c[0], c[1]) for c in geom["coordinates"][0]]
-                            area = _polygon_area_km2(coords)
-                    else:
-                        if self.relation_count < 10:
-                            print(f"[watcher] Relation {r.id}: Geometry factory returned None for type={rel_type}")
-                        self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
-                except Exception as e:
-                    print(f"[watcher] Relation {r.id}: Error creating multipolygon geometry: {e}")
-                    self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
-            else:
-                # Not a multipolygon or boundary relation
-                if self.relation_count < 10:
-                    print(f"[watcher] Relation {r.id}: Skipped (type={rel_type}, not multipolygon/boundary)")
-                self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
-        except Exception as e:
-            print(f"[watcher] Relation {r.id}: Error processing relation: {e}")
+        rel_type = tags.get("type", "")
+        if rel_type not in ("multipolygon", "boundary"):
+            if self.relation_count < 10:
+                print(f"[watcher] Relation {r.id}: Skipped (type={rel_type})")
             self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+            return
 
-        # Only add to queue if we have geometry
-        if geom:
-            self.q.put(
-                {
-                    "osm_id": f"r{r.id}",
-                    "osm_type": "relation",
-                    "tags": tags,
-                    "geom": geom,
-                    "admin_level": int(tags.get("admin_level", 0) or 0),
-                    "area_km2": area,
-                }
-            )
-            self.count += 1
-            self.relation_count += 1
-            if self.relation_count <= 5:
-                print(f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})")
-            if self.progress_tracker is not None:
-                self.progress_tracker.update(1)
+        # Assemble geometry from cached way coordinates (populated during way pass)
+        try:
+            geom, area = _assemble_multipolygon(r.members, self.way_coords)
+        except Exception as e:
+            print(f"[watcher] Relation {r.id}: Error assembling geometry: {e}")
+            geom, area = None, 0.0
+
+        # Fallback: if full polygon assembly failed, compute a centroid from
+        # whatever member-way coordinates we do have.  This ensures important
+        # boundary relations (countries, governorates) are still indexed even
+        # when some member ways are incomplete at the extract boundary.
+        if geom is None:
+            all_coords: list[tuple[float, float]] = []
+            for member in r.members:
+                if member.type == "w" and member.ref in self.way_coords:
+                    all_coords.extend(self.way_coords[member.ref])
+            if all_coords:
+                avg_lon = sum(c[0] for c in all_coords) / len(all_coords)
+                avg_lat = sum(c[1] for c in all_coords) / len(all_coords)
+                geom = {"type": "Point", "coordinates": [avg_lon, avg_lat]}
+                area = 0.0
+            else:
+                if self.relation_count < 10:
+                    print(f"[watcher] Relation {r.id}: No way coords available, skipping")
+                self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                return
+
+        self.q.put(
+            {
+                "osm_id": f"r{r.id}",
+                "osm_type": "relation",
+                "tags": tags,
+                "geom": geom,
+                "admin_level": int(tags.get("admin_level", 0) or 0),
+                "area_km2": area,
+            }
+        )
+        self.count += 1
+        self.relation_count += 1
+        if self.relation_count <= 5:
+            print(f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})")
+        if self.progress_tracker is not None:
+            self.progress_tracker.update(1)
 
 
 # ---------------------------------------------------------------------------
@@ -393,23 +516,37 @@ async def publish_file(filepath: str):
         print(f"[watcher] Warning: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}: {e}")
         print(f"[watcher] Continuing without Redis caching")
 
-    # Create progress tracker for parsing (unknown total)
+    # ------------------------------------------------------------------
+    # PASS 1 — lightweight scan of relations to collect member way IDs
+    # ------------------------------------------------------------------
+    print(f"[watcher] Pass 1: scanning relations in {os.path.basename(filepath)} ...")
+    collector = RelationMemberCollector()
+    collector.apply_file(filepath)
+    relation_way_ids = collector.way_ids
+    print(f"[watcher] Pass 1 complete: {collector.relation_count} boundary/multipolygon "
+          f"relations reference {len(relation_way_ids)} unique ways")
+
+    # ------------------------------------------------------------------
+    # PASS 2 — full parse (nodes + ways + relations) with location index
+    # ------------------------------------------------------------------
     parse_progress = ProgressTracker(f"Parsing {os.path.basename(filepath)}")
 
-    handler = OSMHandler(q, redis_client, progress_tracker=parse_progress)
+    handler = OSMHandler(q, redis_client, progress_tracker=parse_progress,
+                         relation_way_ids=relation_way_ids)
 
     def _parse():
-        # Use locations=True with idx="flex_mem" for node resolution
-        # Note: For very large files, not all ways may be resolvable if they exceed memory capacity
         try:
-            print(f"[watcher] Starting to parse {filepath}...")
+            print(f"[watcher] Pass 2: parsing {filepath} ...")
             handler.apply_file(filepath, locations=True, idx="flex_mem")
-            print(f"[watcher] Finished parsing {filepath}")
+            print(f"[watcher] Pass 2 complete for {filepath}")
         except Exception as e:
             print(f"[watcher] Error during parsing: {e}")
             import traceback
             traceback.print_exc()
         finally:
+            # Free the (potentially large) way-coord cache now that all
+            # relations have been processed.
+            handler.way_coords.clear()
             parse_progress.close()
             q.put(SENTINEL)
 

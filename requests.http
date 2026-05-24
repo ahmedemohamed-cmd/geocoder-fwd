@@ -37,7 +37,7 @@ GET {{baseUrl}}/features
 # ============================================================================
 
 ### Basic city search
-GET {{baseUrl}}/geocode?q=cairo
+GET {{baseUrl}}/geocode?q=Cairo
 
 ###
 

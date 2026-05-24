@@ -375,16 +375,19 @@ async def geocode(
         }
     )
 
-    # offline_rank boost (tiebreaker, not dominant — text relevance gates via multiply)
+    # offline_rank boost — linear (no log compression) so high-importance
+    # places (cities, countries) clearly outrank minor POIs.
+    # Range 0-10 × weight 2 → contribution 0-20; multiplied by text score
+    # via boost_mode=multiply so irrelevant results are still suppressed.
     functions.append(
         {
             "field_value_factor": {
                 "field": "offline_rank",
-                "modifier": "log1p",
+                "modifier": "none",
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 3,
+            "weight": 2,
         }
     )
 
@@ -431,9 +434,10 @@ async def geocode(
         # phrase boost: "New York" must appear as a contiguous phrase
         {"match_phrase": {"name":    {"query": q, "boost": 10}}},
         {"match_phrase": {"name_en": {"query": q, "boost": 10}}},
-        # exact keyword match: strongest signal when query is an exact name
-        {"term": {"name.keyword":    {"value": q, "boost": 15}}},
-        {"term": {"name_en.keyword": {"value": q, "boost": 15}}},
+        # all-tokens-required boost: rewards names where every query word appears
+        # (uses the standard analyzer so matching is case-insensitive, unlike term on keyword)
+        {"match": {"name":    {"query": q, "operator": "and", "boost": 15}}},
+        {"match": {"name_en": {"query": q, "operator": "and", "boost": 15}}},
     ]
 
     # When the query looks like a structured address, also search address fields
