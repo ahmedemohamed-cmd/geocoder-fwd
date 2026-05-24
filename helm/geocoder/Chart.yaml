@@ -1,8 +1,8 @@
 apiVersion: v2
 name: geocoder
 description: |
-  A Helm chart for the OSM geocoding stack: NATS, Elasticsearch, Typesense,
-  PostGIS, and the Python application services (es-inserter, ts-inserter,
+  A Helm chart for the OSM geocoding stack: NATS, Elasticsearch, Redis,
+  PostGIS, and the Python application services (es-inserter,
   postgis-inserter, geocoder). The downloader and watcher run as monthly
   CronJobs to refresh OSM data. Supports both CPU-only and GPU/AI modes.
 type: application
@@ -12,7 +12,7 @@ keywords:
   - geocoder
   - osm
   - elasticsearch
-  - typesense
+  - redis
   - postgis
   - nats
   - embeddings

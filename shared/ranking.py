@@ -2,21 +2,28 @@
 
 Primary signals (dominant):
   1. admin_level  – lower level = more important boundary (country=2 .. suburb=10)
-  2. area (km^2)  – log-scaled polygon area
+  2. area (km²)   – log-scaled polygon area
 
 Secondary signals (minor boost):
   3. place type   – city > town > village > hamlet > neighbourhood > ...
   4. population   – log-scaled
-  5. metadata     – wikidata / wikipedia presence
-  6. landuse      – residential > commercial > retail > industrial > ...
-  7. venue type   – amenity/shop/leisure/tourism (restaurant, cinema, hotel, ...)
-  8. address      – completeness of addr:* tags (housenumber+street+city = max)
+  5. highway      – motorway > primary > residential > footway > ...
+  6. natural      – water / peak / coastline / wetland / ...
+  7. metadata     – wikidata / wikipedia presence
+  8. landuse      – residential > commercial > retail > industrial > ...
+  9. POI type     – max of venue (amenity/shop/leisure/tourism/aeroway) and building
+ 10. brand        – known brand presence
 
 The final ``offline_rank`` is the weighted sum, kept as a positive float
 so it can be used directly as a Typesense sort field and an ES boost.
+
+Signals that don't apply to a given element (e.g. area for point features,
+admin_level for non-boundary elements) are excluded from the normalisation
+denominator so that points and venues are not systematically penalised.
 """
 
 import math
+import re
 
 # ── place-type importance (0..1) ──────────────────────────────────────────
 _PLACE_SCORES: dict[str, float] = {
@@ -25,11 +32,11 @@ _PLACE_SCORES: dict[str, float] = {
     "state": 0.85,
     "region": 0.80,
     "province": 0.80,
-    "city": 0.75,
-    "town": 0.60,
+    "city": 0.90,
+    "town": 0.75,
     "village": 0.45,
-    "hamlet": 0.30,
     "suburb": 0.35,
+    "hamlet": 0.30,
     "neighbourhood": 0.25,
     "quarter": 0.25,
     "borough": 0.35,
@@ -100,6 +107,13 @@ _VENUE_SCORES: dict[str, float] = {
     "community_centre": 0.60,
     "place_of_worship": 0.65,
     "money_transfer": 0.50,
+    "fuel": 0.60,
+    "bus_station": 0.65,
+    "taxi": 0.50,
+    "embassy": 0.70,
+    # aeroway venues
+    "aerodrome": 0.90,
+    "terminal": 0.75,
     # shop venues
     "supermarket": 0.75,
     "department_store": 0.70,
@@ -118,6 +132,8 @@ _VENUE_SCORES: dict[str, float] = {
     "hardware": 0.55,
     "sports": 0.55,
     "toys": 0.50,
+    "car": 0.55,
+    "car_repair": 0.50,
     # leisure venues
     "sports_centre": 0.70,
     "stadium": 0.80,
@@ -126,6 +142,7 @@ _VENUE_SCORES: dict[str, float] = {
     "golf_course": 0.60,
     "ice_rink": 0.55,
     "bowling_alley": 0.50,
+    "park": 0.55,
     # tourism venues
     "hotel": 0.75,
     "hostel": 0.60,
@@ -139,14 +156,64 @@ _VENUE_SCORES: dict[str, float] = {
     "aquarium": 0.65,
     "viewpoint": 0.50,
     "picnic_site": 0.45,
+    "information": 0.40,
 }
+
+# ── highway importance (0..1) ─────────────────────────────────────────────
+_HIGHWAY_SCORES: dict[str, float] = {
+    "motorway": 0.90,
+    "trunk": 0.80,
+    "primary": 0.70,
+    "secondary": 0.60,
+    "tertiary": 0.50,
+    "motorway_link": 0.45,
+    "trunk_link": 0.40,
+    "primary_link": 0.35,
+    "unclassified": 0.30,
+    "residential": 0.35,
+    "living_street": 0.25,
+    "service": 0.15,
+    "pedestrian": 0.20,
+    "track": 0.10,
+    "footway": 0.10,
+    "cycleway": 0.10,
+    "path": 0.05,
+}
+
+# ── natural feature importance (0..1) ─────────────────────────────────────
+_NATURAL_SCORES: dict[str, float] = {
+    "coastline": 0.80,
+    "water": 0.70,
+    "peak": 0.70,
+    "volcano": 0.75,
+    "glacier": 0.65,
+    "bay": 0.65,
+    "beach": 0.60,
+    "cliff": 0.50,
+    "cave_entrance": 0.50,
+    "wetland": 0.45,
+    "wood": 0.30,
+    "scrub": 0.15,
+    "grassland": 0.20,
+    "heath": 0.15,
+    "sand": 0.15,
+}
+
+_WATERWAY_SCORES: dict[str, float] = {
+    "river": 0.75,
+    "canal": 0.60,
+    "stream": 0.40,
+    "drain": 0.20,
+    "ditch": 0.10,
+}
+
 
 # ── admin_level → score  (OSM admin_level: 2=country … 10=suburb) ─────────
 def _admin_score(admin_level: int) -> float:
     if admin_level <= 0:
         return 0.0
-    # 2 → 1.0, 4 → 0.75, 6 → 0.50, 8 → 0.25, 10 → 0.10
-    return max(0.0, 1.0 - (admin_level - 2) * 0.12)
+    # 2 → 1.0, 4 → 0.80, 6 → 0.60, 8 → 0.40, 10 → 0.20
+    return min(1.0, max(0.0, 1.0 - (admin_level - 2) * 0.10))
 
 
 def _place_score(tags: dict) -> float:
@@ -169,7 +236,7 @@ def _population_score(tags: dict) -> float:
 def _area_score(area_km2: float) -> float:
     if area_km2 <= 0:
         return 0.0
-    # log10(10000 km^2)=4 → 1.0;  log10(0.01)=-2 → 0
+    # log10(10000 km²)=4 → 1.0;  log10(0.01)=-2 → 0
     return min(1.0, max(0.0, (math.log10(area_km2) + 2) / 6.0))
 
 
@@ -188,35 +255,26 @@ def _landuse_score(tags: dict) -> float:
 
 
 def _venue_score(tags: dict) -> float:
-    """Score based on venue tags (amenity, shop, leisure, tourism)."""
+    """Score based on venue tags (amenity, shop, leisure, tourism, aeroway)."""
     score = 0.0
-    # Check amenity tag
-    amenity = tags.get("amenity", "")
-    if amenity:
-        score = max(score, _VENUE_SCORES.get(amenity, 0.0))
-    # Check shop tag
-    shop = tags.get("shop", "")
-    if shop:
-        score = max(score, _VENUE_SCORES.get(shop, 0.0))
-    # Check leisure tag
-    leisure = tags.get("leisure", "")
-    if leisure:
-        score = max(score, _VENUE_SCORES.get(leisure, 0.0))
-    # Check tourism tag
-    tourism = tags.get("tourism", "")
-    if tourism:
-        score = max(score, _VENUE_SCORES.get(tourism, 0.0))
+    for key in ("amenity", "shop", "leisure", "tourism", "aeroway"):
+        val = tags.get(key, "")
+        if val:
+            score = max(score, _VENUE_SCORES.get(val, 0.0))
     return score
 
 
 def _building_score(tags: dict) -> float:
-    """Score based on building type."""
+    """Score based on building type.
+
+    Returns 0.0 for generic/unknown buildings (e.g. ``building=yes``)
+    to avoid adding noise from the millions of unclassified buildings.
+    """
     building = tags.get("building", "")
     if not building:
         return 0.0
-    
-    # Commercial buildings get higher score
-    commercial_buildings = {
+
+    _BUILDING_SCORES: dict[str, float] = {
         "commercial": 0.65,
         "office": 0.60,
         "retail": 0.60,
@@ -227,16 +285,44 @@ def _building_score(tags: dict) -> float:
         "school": 0.65,
         "university": 0.75,
     }
-    return commercial_buildings.get(building, 0.3)  # default low score for any building
+    return _BUILDING_SCORES.get(building, 0.0)
+
+
+def _highway_score(tags: dict) -> float:
+    """Score based on highway type."""
+    highway = tags.get("highway", "")
+    return _HIGHWAY_SCORES.get(highway, 0.0)
+
+
+def _natural_score(tags: dict) -> float:
+    """Score based on natural feature or waterway type."""
+    score = 0.0
+    natural = tags.get("natural", "")
+    if natural:
+        score = max(score, _NATURAL_SCORES.get(natural, 0.0))
+    waterway = tags.get("waterway", "")
+    if waterway:
+        score = max(score, _WATERWAY_SCORES.get(waterway, 0.0))
+    return score
+
+
+# Regex to strip non-alphanumeric characters for brand matching
+_BRAND_CLEAN_RE = re.compile(r"[^a-z0-9]")
 
 
 def _brand_score(tags: dict) -> float:
-    """Score boost for known brands."""
-    brand = tags.get("brand", "").lower()
+    """Score boost for known brands.
+
+    Brand names are normalised (lowered, punctuation stripped) before
+    lookup so that e.g. ``McDonald's`` matches the key ``mcdonalds``.
+    """
+    brand = tags.get("brand", "")
     if not brand:
         return 0.0
-    
-    # Major international brands get a boost
+    brand_clean = _BRAND_CLEAN_RE.sub("", brand.lower())
+    if not brand_clean:
+        return 0.0
+
     major_brands = {
         "microsoft": 0.4,
         "apple": 0.4,
@@ -245,53 +331,30 @@ def _brand_score(tags: dict) -> float:
         "samsung": 0.35,
         "mcdonalds": 0.35,
         "starbucks": 0.35,
-        "coca-cola": 0.35,
+        "cocacola": 0.35,
         "pepsi": 0.35,
         "nike": 0.35,
         "adidas": 0.35,
     }
-    return major_brands.get(brand, 0.1)  # small boost for any brand
+    return major_brands.get(brand_clean, 0.0)
 
 
-def _address_completeness_score(tags: dict) -> float:
-    """Reward elements with populated addr:* fields.
+# ── weights ───────────────────────────────────────────────────────────────
+# admin_level and area are the dominant signals for boundaries/polygons.
+# W_POI merges venue + building via max() to avoid double-counting.
+W_ADMIN = 5.0
+W_AREA = 4.0
+W_PLACE = 2.5
+W_POP = 1.5
+W_HIGHWAY = 1.5
+W_NATURAL = 1.0
+W_META = 0.5
+W_LANDUSE = 1.0
+W_POI = 1.0
+W_BRAND = 0.3
 
-    A fully-specified address (housenumber + street + city) scores 1.0.
-    Each missing component lowers the score proportionally.
-
-    Weight breakdown:
-      housenumber  0.40  – uniquely identifies a building on a street
-      street       0.35  – essential for routing / disambiguation
-      city         0.15  – scope-level disambiguation
-      postcode     0.10  – fine-grained filtering
-    """
-    score = 0.0
-    if tags.get("addr:housenumber"):
-        score += 0.40
-    if tags.get("addr:street"):
-        score += 0.35
-    if any(tags.get(k) for k in ("addr:city", "addr:town", "addr:village")):
-        score += 0.15
-    if tags.get("addr:postcode"):
-        score += 0.10
-    return min(1.0, score)
-
-
-# ── weights (admin_level and area are dominant) ───────────────────────────
-W_ADMIN    = 5.0
-W_AREA     = 4.0
-W_PLACE    = 2.0
-W_POP      = 1.5
-W_META     = 0.5
-W_LANDUSE  = 1.0
-W_VENUE    = 0.7
-W_BUILDING = 0.5
-W_BRAND    = 0.3
-W_ADDRESS  = 1.5   # address completeness (gives addressable buildings a meaningful boost)
-_W_TOTAL = (
-    W_ADMIN + W_AREA + W_PLACE + W_POP + W_META
-    + W_LANDUSE + W_VENUE + W_BUILDING + W_BRAND + W_ADDRESS
-)
+# Base weight total for signals that always participate in normalisation
+_W_BASE = W_PLACE + W_POP + W_META + W_LANDUSE + W_POI + W_BRAND
 
 
 def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
@@ -299,19 +362,48 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
 
     Typical range: 0 (random POI) .. ~10 (major city / country).
     The result is scaled to 0..10 for readability.
-    admin_level and area_km2 are the dominant signals.
+
+    Signals that don't apply to an element (e.g. area for point features,
+    admin_level for non-boundary elements) are excluded from the
+    normalisation denominator so that points and venues are not
+    systematically penalised.
     """
-    raw = (
-        W_ADMIN    * _admin_score(admin_level)
-        + W_AREA   * _area_score(area_km2)
-        + W_PLACE  * _place_score(tags)
-        + W_POP    * _population_score(tags)
-        + W_META   * _metadata_score(tags)
-        + W_LANDUSE  * _landuse_score(tags)
-        + W_VENUE    * _venue_score(tags)
-        + W_BUILDING * _building_score(tags)
-        + W_BRAND    * _brand_score(tags)
-        + W_ADDRESS  * _address_completeness_score(tags)
-    )
-    # normalise to 0..10
-    return round(raw / _W_TOTAL * 10.0, 4)
+    raw = 0.0
+    w_total = _W_BASE
+
+    # Admin level (only counted when the element is an admin boundary)
+    if admin_level > 0:
+        raw += W_ADMIN * _admin_score(admin_level)
+        w_total += W_ADMIN
+
+    # Area (only counted for polygons with measurable area)
+    if area_km2 > 0:
+        raw += W_AREA * _area_score(area_km2)
+        w_total += W_AREA
+
+    # Always-applicable signals
+    raw += W_PLACE * _place_score(tags)
+    raw += W_POP * _population_score(tags)
+    raw += W_META * _metadata_score(tags)
+    raw += W_LANDUSE * _landuse_score(tags)
+    raw += W_BRAND * _brand_score(tags)
+
+    # POI signal: max of venue and building (avoids double-counting)
+    raw += W_POI * max(_venue_score(tags), _building_score(tags))
+
+    # Highway (only counted when tag is present)
+    hw = _highway_score(tags)
+    if hw > 0:
+        raw += W_HIGHWAY * hw
+        w_total += W_HIGHWAY
+
+    # Natural feature (only counted when tag is present)
+    nat = _natural_score(tags)
+    if nat > 0:
+        raw += W_NATURAL * nat
+        w_total += W_NATURAL
+
+    # Normalise to 0..10
+    if w_total <= 0:
+        return 0.0
+    return round(raw / w_total * 10.0, 4)

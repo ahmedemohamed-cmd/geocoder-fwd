@@ -27,6 +27,7 @@ spec:
           command: ["python", "-u", "-m", "services.watcher"]
           env:
             {{- include "geocoder.commonEnv" . | nindent 12 }}
+            {{- include "geocoder.redisEnv" . | nindent 12 }}
             - name: DATA_DIR
               value: "/app/data"
             - name: PYTHONUNBUFFERED
@@ -76,6 +77,7 @@ spec:
               command: ["python", "-u", "-m", "services.watcher"]
               env:
                 {{- include "geocoder.commonEnv" . | nindent 16 }}
+                {{- include "geocoder.redisEnv" . | nindent 16 }}
                 - name: DATA_DIR
                   value: "/app/data"
                 - name: PYTHONUNBUFFERED

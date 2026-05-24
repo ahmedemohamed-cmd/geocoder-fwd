@@ -1,6 +1,6 @@
 # OSM Geocoding Service
 
-A scalable OpenStreetMap geocoding stack with full-text search, typo-tolerant search, and geometry storage. Supports both CPU-only and AI-accelerated (GPU) modes with vector embeddings.
+A scalable OpenStreetMap geocoding stack with full-text search and geometry storage. Supports both CPU-only and AI-accelerated (GPU) modes with vector embeddings.
 
 ## Architecture
 
@@ -10,7 +10,6 @@ The system processes OSM data through a NATS-based pipeline:
 2. **Watcher** — Parses PBF using osmium and publishes elements to NATS JetStream
 3. **Inserters** — Consume from NATS and index into:
    - **Elasticsearch** — Full-text + vector search
-   - **Typesense** — Typo-tolerant search
    - **PostGIS** — Geometry storage (points, lines, polygons, multipolygons)
 4. **Geocoder** — FastAPI search service (port 8000)
 
@@ -52,9 +51,8 @@ See [helm/geocoder/README.md](helm/geocoder/README.md) for detailed Helm chart d
 |----------|---------|-------------|
 | `NATS_URL` | `nats://nats:4222` | NATS server address |
 | `ELASTICSEARCH_URL` | `http://elasticsearch:9200` | Elasticsearch endpoint |
-| `TYPESENSE_HOST` | `typesense` | Typesense host |
-| `TYPESENSE_PORT` | `8108` | Typesense port |
-| `TYPESENSE_API_KEY` | `typesense-secret-key` | Typesense API key |
+| `REDIS_HOST` | `redis` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
 | `POSTGRES_HOST` | `postgis` | PostGIS host |
 | `POSTGRES_PORT` | `5432` | PostGIS port |
 | `POSTGRES_DB` | `postgres` | PostGIS database |
@@ -101,11 +99,6 @@ curl "http://localhost:8000/search?q=Cairo"
 **Reverse geocode:**
 ```bash
 curl "http://localhost:8000/reverse?lat=30.0444&lon=31.2357"
-```
-
-**Autocomplete:**
-```bash
-curl "http://localhost:8000/autocomplete?q=Tahr"
 ```
 
 ## Model Information
@@ -406,7 +399,6 @@ kubectl create job --from=cronjob/geocoder-downloader manual-$(date +%s)
 ├── services/              # Python microservices
 │   ├── watcher.py        # PBF parser
 │   ├── es_inserter.py    # Elasticsearch indexer
-│   ├── ts_inserter.py    # Typesense indexer
 │   ├── postgis_inserter.py # PostGIS indexer
 │   ├── geocoder.py       # FastAPI search service
 │   ├── downloader.py     # OSM data downloader

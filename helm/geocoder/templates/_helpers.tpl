@@ -69,18 +69,13 @@ Elasticsearch environment variables
 {{- end }}
 
 {{/*
-Typesense environment variables
+Redis environment variables
 */}}
-{{- define "geocoder.tsEnv" -}}
-- name: TYPESENSE_HOST
-  value: "{{ include "geocoder.fullname" . }}-typesense"
-- name: TYPESENSE_PORT
-  value: {{ .Values.typesense.service.port | quote }}
-- name: TYPESENSE_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "geocoder.fullname" . }}-typesense
-      key: api-key
+{{- define "geocoder.redisEnv" -}}
+- name: REDIS_HOST
+  value: "{{ include "geocoder.fullname" . }}-redis"
+- name: REDIS_PORT
+  value: {{ .Values.redis.service.port | quote }}
 {{- end }}
 
 {{/*

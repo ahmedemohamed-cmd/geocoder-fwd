@@ -16,7 +16,7 @@ Query-string flags shared by search endpoints:
   ai=true       enable AI-assisted search (requires ENABLE_AI=true)
   ai=false      disable AI features
 
-Online ranking formula: offline_rank * text_similarity (+ optional vector KNN + geo decay)
+Online ranking formula: text_similarity × (offline_rank + geo_decay + popularity) via boost_mode=multiply
 
 Address search
 --------------
@@ -350,8 +350,12 @@ async def geocode(
 ):
     """Full geocoding search.
 
-    Online ranking = offline_rank * text_similarity (+ optional vector KNN + geo decay).
-    Text similarity searches across name, name_en, and tags_text (all tags).
+    Online ranking = text_similarity × function_score(offline_rank, geo, popularity).
+    Uses boost_mode=multiply so text relevance gates ranking — a high-importance
+    element with a weak text match cannot outscore a lower-rank exact match.
+
+    Text similarity searches across name, name_en, and tags_text (all tags)
+    with phrase and exact-match boosting for multi-word queries.
     vector=true adds KNN cosine similarity re-ranking (requires ENABLE_VECTORS).
     ai=true enables AI-assisted query expansion (requires ENABLE_AI).
     """
@@ -361,26 +365,26 @@ async def geocode(
     loop = asyncio.get_running_loop()
 
     # ---- function_score query ----
-    # Online rank = text_similarity + offline_rank_boost + geo_decay + popularity
+    # final_score = text_score × (baseline + offline_rank_boost + geo_decay + popularity)
     functions: list[dict] = []
 
-    # baseline score to ensure text matches always get some score
+    # baseline: ensures function_score is at least 1.0 (preserves text score)
     functions.append(
         {
             "weight": 1.0,
         }
     )
 
-    # offline_rank boost (dominant signal – based on admin_level + area)
+    # offline_rank boost (tiebreaker, not dominant — text relevance gates via multiply)
     functions.append(
         {
             "field_value_factor": {
                 "field": "offline_rank",
                 "modifier": "log1p",
-                "factor": 2,
+                "factor": 1,
                 "missing": 0,
             },
-            "weight": 15,
+            "weight": 3,
         }
     )
 
@@ -392,6 +396,7 @@ async def geocode(
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
                         "scale": "10km",
+                        "offset": "1km",
                         "decay": 0.5,
                     }
                 },
@@ -399,7 +404,7 @@ async def geocode(
             }
         )
 
-    # popularity boost (feedback-driven)
+    # popularity boost (feedback-driven, capped at 1000 via /feedback endpoint)
     functions.append(
         {
             "field_value_factor": {
@@ -412,19 +417,23 @@ async def geocode(
         }
     )
 
-    # text query – searches name, name_en AND tags_text (all tags)
+    # text query – single multi_match + phrase/exact boosts
     should_clauses: list[dict] = [
+        # fuzzy token matching across all searchable fields
         {
             "multi_match": {
                 "query": q,
-                "fields": ["name^3", "name_en^3", "tags_text"],
+                "fields": ["name^5", "name_en^5", "tags_text"],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
         },
-        {"match": {"name":     {"query": q, "boost": 2}}},
-        {"match": {"name_en":  {"query": q, "boost": 2}}},
-        {"match": {"tags_text": {"query": q, "boost": 1}}},
+        # phrase boost: "New York" must appear as a contiguous phrase
+        {"match_phrase": {"name":    {"query": q, "boost": 10}}},
+        {"match_phrase": {"name_en": {"query": q, "boost": 10}}},
+        # exact keyword match: strongest signal when query is an exact name
+        {"term": {"name.keyword":    {"value": q, "boost": 15}}},
+        {"term": {"name_en.keyword": {"value": q, "boost": 15}}},
     ]
 
     # When the query looks like a structured address, also search address fields
@@ -460,7 +469,7 @@ async def geocode(
                 "query": text_query,
                 "functions": functions,
                 "score_mode": "sum",
-                "boost_mode": "sum",
+                "boost_mode": "multiply",
             }
         },
     }
@@ -472,7 +481,7 @@ async def geocode(
             "field": "name_vector",
             "query_vector": vec,
             "k": limit * 2,
-            "num_candidates": 100,
+            "num_candidates": 300,
         }
 
     resp = await es.search(index=INDEX, **body)
@@ -535,12 +544,19 @@ async def geocode(
 
 
 # ── feedback loop ─────────────────────────────────────────────────────────
+_POPULARITY_CAP = 1000.0
+
+
 @app.post("/feedback")
 async def feedback(
     osm_id: str = Query(...),
-    boost: float = Query(1.0),
+    boost: float = Query(1.0, ge=0.1, le=10.0),
 ):
-    """Increment popularity for an element in Elasticsearch."""
+    """Increment popularity for an element in Elasticsearch.
+
+    The boost value is clamped to [0.1, 10.0] and popularity is capped
+    at 1000 to prevent unbounded growth or abuse.
+    """
 
     try:
         await es.update(
@@ -548,8 +564,8 @@ async def feedback(
             id=osm_id,
             body={
                 "script": {
-                    "source": "ctx._source.popularity += params.boost",
-                    "params": {"boost": boost},
+                    "source": "ctx._source.popularity = Math.min(ctx._source.popularity + params.boost, params.max_pop)",
+                    "params": {"boost": boost, "max_pop": _POPULARITY_CAP},
                 }
             },
         )

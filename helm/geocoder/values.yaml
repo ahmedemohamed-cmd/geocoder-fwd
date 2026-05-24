@@ -30,7 +30,7 @@ nats:
   enabled: true
   image:
     repository: nats
-    tag: latest
+    tag: "2.10"
   service:
     clientPort: 4222
     monitorPort: 8222
@@ -47,15 +47,14 @@ nats:
       cpu: 1000m
       memory: 2Gi
 
-# etcd configuration
-etcd:
+# Redis configuration (used by watcher for node location caching)
+redis:
   enabled: true
   image:
-    repository: quay.io/coreos/etcd
-    tag: v3.5.17
+    repository: redis
+    tag: "7-alpine"
   service:
-    clientPort: 2379
-    peerPort: 2380
+    port: 6379
   persistence:
     enabled: true
     size: 5Gi
@@ -87,26 +86,6 @@ elasticsearch:
     limits:
       cpu: 2000m
       memory: 4Gi
-
-# Typesense configuration
-typesense:
-  enabled: true
-  image:
-    repository: typesense/typesense
-    tag: "27.1"
-  service:
-    port: 8108
-  apiKey: typesense-secret-key
-  persistence:
-    enabled: true
-    size: 10Gi
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
 
 # PostGIS configuration
 postgis:
@@ -201,18 +180,6 @@ watcher:
 
 # Elasticsearch inserter service
 esInserter:
-  enabled: true
-  replicas: 3
-  resources:
-    requests:
-      cpu: 100m
-      memory: 512Mi
-    limits:
-      cpu: 2000m
-      memory: 4Gi
-
-# Typesense inserter service
-tsInserter:
   enabled: true
   replicas: 3
   resources:

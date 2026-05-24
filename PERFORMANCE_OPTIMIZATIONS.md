@@ -50,26 +50,7 @@ async def process_batch_concurrently(elements, batch_size=100):
 
 **Expected Impact**: 2-4x additional performance improvement
 
-### 7. Typesense Optimizations
-
-#### Increase Typesense Memory
-```yaml
-# In docker-compose.yaml
-typesense:
-  environment:
-    - TYPESENSE_MEMORY_LIMIT=4G  # Increase from default
-```
-
-#### Optimize Indexing
-```python
-# In ts_inserter.py, add bulk import parameters
-client.collections[COLLECTION].documents.import_(
-    docs,
-    {"action": "upsert", "dirty_values": "coerce"}
-)
-```
-
-### 8. Elasticsearch Optimizations
+### 7. Elasticsearch Optimizations
 
 #### Increase Refresh Interval
 ```python
@@ -94,7 +75,7 @@ await es.indices.put_settings(
 }
 ```
 
-### 9. PostGIS Optimizations
+### 8. PostGIS Optimizations
 
 #### Increase Work Mem
 ```yaml
@@ -111,7 +92,7 @@ postgis:
 await conn.executemany(query, rows, timeout=30)
 ```
 
-### 10. NATS Optimizations
+### 9. NATS Optimizations
 
 #### Increase Stream Max Messages
 ```python
@@ -128,7 +109,7 @@ StreamConfig(
 )
 ```
 
-### 11. Consumer Configuration
+### 10. Consumer Configuration
 
 #### Increase Consumer Max Waiting
 ```python
@@ -165,7 +146,6 @@ ENABLE_VECTORS=false  # Standard mode (default: false)
 # Database Connections
 POSTGRES_MAX_CONNECTIONS=20
 ELASTICSEARCH_MAX_CONNECTIONS=20
-TYPESENSE_CONNECTION_TIMEOUT=30
 ```
 
 ## Monitoring Performance

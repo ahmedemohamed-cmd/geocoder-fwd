@@ -9,14 +9,12 @@ For project overview and Docker Compose deployment, see the [main README](../../
 
 **Infrastructure (StatefulSets with persistent storage):**
 - `nats` — JetStream message queue (pipeline backbone)
-- `etcd` — key/value store
+- `redis` — key/value cache (node location lookups)
 - `elasticsearch` — full-text + vector index
-- `typesense` — typo-tolerant search
 - `postgis` — geometry storage
 
 **Application services (Deployments):**
 - `es-inserter` — consumes NATS and indexes into Elasticsearch
-- `ts-inserter` — consumes NATS and indexes into Typesense
 - `postgis-inserter` — consumes NATS and stores geometry in PostGIS
 - `geocoder` — FastAPI search service (port 8000)
 

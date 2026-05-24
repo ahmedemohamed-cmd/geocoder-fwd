@@ -26,14 +26,9 @@ POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 # Elasticsearch
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
 
-# Typesense
-TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
-TYPESENSE_PORT = int(os.getenv("TYPESENSE_PORT", "8108"))
-TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "typesense-secret-key")
-
-# etcd
-ETCD_HOST = os.getenv("ETCD_HOST", "localhost")
-ETCD_PORT = int(os.getenv("ETCD_PORT", "2379"))
+# Redis (used by watcher for node location caching)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
 # Embeddings
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")  # Hugging Face model name

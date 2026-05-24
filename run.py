@@ -8,10 +8,9 @@ Services:
     downloader        Download OSM PBF files from .env URLs
     watcher           Parse PBF files and publish to NATS
     es-inserter       NATS -> Elasticsearch
-    ts-inserter       NATS -> Typesense
     postgis-inserter  NATS -> PostGIS
-    geocoder          FastAPI geocoding HTTP server
-    cleaner           Wipe all indexed data (ES, TS, PostGIS, NATS)
+    geocoder          FastAPI geocoding HTTP server (includes /insert endpoint)
+    cleaner           Wipe all indexed data (ES, PostGIS, NATS)
 """
 
 import asyncio
@@ -37,11 +36,6 @@ def main():
 
     elif service == "es-inserter":
         from services.es_inserter import run
-
-        asyncio.run(run())
-
-    elif service == "ts-inserter":
-        from services.ts_inserter import run
 
         asyncio.run(run())
 

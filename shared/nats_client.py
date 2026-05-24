@@ -12,6 +12,15 @@ def is_transient_error(err: Exception) -> bool:
     )
 
 
+def is_connection_error(err: Exception) -> bool:
+    """Check if an error indicates the NATS connection is broken and needs reconnection."""
+    error_str = str(err).lower()
+    return any(
+        keyword in error_str 
+        for keyword in ["serviceunavailable", "connection", "disconnect", "closed", "broken"]
+    )
+
+
 async def connect():
     """Connect to NATS and return (nc, js) with the OSM stream ensured."""
     import asyncio
@@ -80,45 +89,68 @@ async def connect():
     return nc, js
 
 
+async def reconnect(nc, js):
+    """Reconnect to NATS and return new (nc, js). Close old connection if it exists."""
+    import asyncio
+    
+    print("[nats_client] Attempting to reconnect to NATS...", flush=True)
+    
+    # Close old connection if it exists
+    if nc and not nc.is_closed:
+        try:
+            await nc.close()
+            print("[nats_client] Closed old NATS connection", flush=True)
+        except Exception as e:
+            print(f"[nats_client] Error closing old connection: {e}", flush=True)
+    
+    # Create new connection
+    return await connect()
+
+
 async def subscribe(js, consumer_name):
     """Create a durable pull subscription for a consumer with retry logic for transient errors."""
     import asyncio
+    from nats.js.api import ConsumerConfig
     
     max_retries = 5
     for attempt in range(max_retries):
         try:
             # Try to get existing consumer info first
             await js.consumer_info(NATS_STREAM, consumer_name)
-            # Consumer exists, use it
+            # Consumer exists, create subscription to it
+            print(f"[nats_client] Using existing consumer: {consumer_name}", flush=True)
             return await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
         except Exception as e:
             is_transient = is_transient_error(e)
+            print(f"[nats_client] Consumer {consumer_name} not found (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
             
             # Consumer doesn't exist, create it with proper config
             try:
-                from nats.js.api import ConsumerConfig
+                print(f"[nats_client] Creating new consumer: {consumer_name}", flush=True)
                 return await js.pull_subscribe(
                     NATS_SUBJECT, 
                     durable=consumer_name, 
                     stream=NATS_STREAM,
                     config=ConsumerConfig(
                         max_waiting=10,
-                        max_deliver=1,
-                        ack_wait=30,
+                        max_deliver=5,
+                        ack_wait=120,
                     )
                 )
             except Exception as e2:
                 is_transient2 = is_transient_error(e2)
+                print(f"[nats_client] Failed to create consumer with config (attempt {attempt + 1}/{max_retries}): {e2}", flush=True)
                 
                 # Fallback to simple subscription
                 try:
+                    print(f"[nats_client] Trying simple subscription for: {consumer_name}", flush=True)
                     return await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
                 except Exception as e3:
                     is_transient3 = is_transient_error(e3)
                     
                     if (is_transient or is_transient2 or is_transient3) and attempt < max_retries - 1:
                         print(f"[nats_client] Retrying subscription creation (attempt {attempt + 1}/{max_retries})", flush=True)
-                        await asyncio.sleep(1 * (attempt + 1))
+                        await asyncio.sleep(2 * (attempt + 1))  # Increased backoff
                         continue
                     else:
                         print(f"[nats_client] Failed to create subscription after {max_retries} attempts: {e3}", flush=True)

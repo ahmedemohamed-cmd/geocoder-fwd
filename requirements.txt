@@ -4,11 +4,9 @@ watchdog
 osmium
 nats-py
 elasticsearch[async]>=8.0,<9.0
-typesense
+redis
 asyncpg
 sentence-transformers
 fastapi
 uvicorn[standard]
-etcd3
-protobuf==3.20.3
 pydantic

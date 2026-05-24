@@ -11,11 +11,11 @@ import threading
 import time
 
 import osmium
-import etcd3
+import redis
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from shared.config import DATA_DIR, NATS_SUBJECT, ETCD_HOST, ETCD_PORT
+from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT
 from shared import nats_client
 
 SENTINEL = object()
@@ -120,7 +120,7 @@ def _polygon_area_km2(coords: list[tuple[float, float]]) -> float:
 # OSM PBF handler – pushes parsed elements into a thread-safe queue
 # ---------------------------------------------------------------------------
 class OSMHandler(osmium.SimpleHandler):
-    def __init__(self, q: queue.Queue, etcd_client, progress_tracker=None):
+    def __init__(self, q: queue.Queue, redis_client, progress_tracker=None):
         super().__init__()
         self.q = q
         self.count = 0
@@ -128,29 +128,29 @@ class OSMHandler(osmium.SimpleHandler):
         self.way_count = 0
         self.relation_count = 0
         self.geom_factory = osmium.geom.GeoJSONFactory()
-        self.etcd = etcd_client
-        self.etcd_prefix = "/osm/nodes/"
+        self.redis = redis_client
+        self.redis_prefix = "osm:nodes:"
         self.progress_tracker = progress_tracker
 
     def _cache_node_location(self, node_id: int, lon: float, lat: float):
-        """Cache node location in etcd."""
+        """Cache node location in Redis."""
         try:
-            key = f"{self.etcd_prefix}{node_id}"
+            key = f"{self.redis_prefix}{node_id}"
             value = json.dumps({"lon": lon, "lat": lat})
-            self.etcd.put(key, value)
+            self.redis.set(key, value)
         except Exception as e:
-            print(f"[watcher] Error caching node {node_id} in etcd: {e}")
+            print(f"[watcher] Error caching node {node_id} in Redis: {e}")
 
     def _get_node_location(self, node_id: int) -> tuple[float, float] | None:
-        """Get node location from etcd."""
+        """Get node location from Redis."""
         try:
-            key = f"{self.etcd_prefix}{node_id}"
-            value, _ = self.etcd.get(key)
+            key = f"{self.redis_prefix}{node_id}"
+            value = self.redis.get(key)
             if value:
-                data = json.loads(value.decode())
+                data = json.loads(value)
                 return data["lon"], data["lat"]
         except Exception as e:
-            print(f"[watcher] Error getting node {node_id} from etcd: {e}")
+            print(f"[watcher] Error getting node {node_id} from Redis: {e}")
         return None
 
     def node(self, n):
@@ -161,10 +161,6 @@ class OSMHandler(osmium.SimpleHandler):
 
         if not n.location.valid():
             return
-
-        # DON'T cache all nodes in etcd - this is too slow for large files
-        # Instead, we'll use lazy caching in the way processor:
-        # when a way can't be resolved from memory, we'll cache just the nodes we need
 
         # Only publish nodes with tags to the queue
         if not n.tags:
@@ -388,14 +384,19 @@ async def publish_file(filepath: str):
     
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
-    # Initialize etcd client
-    etcd_client = etcd3.client(host=ETCD_HOST, port=ETCD_PORT)
-    print(f"[watcher] Connected to etcd at {ETCD_HOST}:{ETCD_PORT}")
+    # Initialize Redis client
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    try:
+        redis_client.ping()
+        print(f"[watcher] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+    except Exception as e:
+        print(f"[watcher] Warning: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}: {e}")
+        print(f"[watcher] Continuing without Redis caching")
 
     # Create progress tracker for parsing (unknown total)
     parse_progress = ProgressTracker(f"Parsing {os.path.basename(filepath)}")
 
-    handler = OSMHandler(q, etcd_client, progress_tracker=parse_progress)
+    handler = OSMHandler(q, redis_client, progress_tracker=parse_progress)
 
     def _parse():
         # Use locations=True with idx="flex_mem" for node resolution
@@ -461,7 +462,7 @@ async def publish_file(filepath: str):
                 # Convert batch to JSON messages
                 messages = [json.dumps(elem).encode() for elem in batch]
 
-                # Publish all messages in the batch at once
+                # Publish all messages in the batch
                 for msg in messages:
                     max_retries = 300
                     for attempt in range(max_retries):
@@ -483,8 +484,6 @@ async def publish_file(filepath: str):
                                     await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                                 else:
                                     print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
-                            # Longer delay to avoid overwhelming NATS
-                            await asyncio.sleep(0.05)  # 50ms delay between publishes
                         except Exception as e:
                             consecutive_failures += 1
                             print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
@@ -531,7 +530,6 @@ async def publish_file(filepath: str):
                             await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                         else:
                             print(f"[watcher] Failed to publish element during flush after {max_retries} attempts", flush=True)
-                    await asyncio.sleep(0.05)  # Rate limiting (50ms delay)
                 except Exception as e:
                     consecutive_failures += 1
                     print(f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
@@ -564,13 +562,24 @@ async def publish_file(filepath: str):
         print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_relations} relations (no geometry)")
     print(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
     
-    # Clear etcd cache after processing to free up space
+    # Clear Redis cache after processing to free up space
     try:
-        print(f"[watcher] Clearing etcd cache...")
-        etcd_client.delete_prefix(handler.etcd_prefix)
-        print(f"[watcher] Etcd cache cleared")
+        print(f"[watcher] Clearing Redis cache...")
+        cursor = 0
+        deleted = 0
+        while True:
+            cursor, keys = redis_client.scan(cursor, match=f"{handler.redis_prefix}*", count=1000)
+            if keys:
+                redis_client.delete(*keys)
+                deleted += len(keys)
+            if cursor == 0:
+                break
+        if deleted > 0:
+            print(f"[watcher] Redis cache cleared ({deleted} keys)")
+        else:
+            print(f"[watcher] Redis cache was empty")
     except Exception as e:
-        print(f"[watcher] Error clearing etcd cache: {e}")
+        print(f"[watcher] Error clearing Redis cache: {e}")
     
     await nc.close()
 
