@@ -28,6 +28,7 @@ import asyncio
 import json
 
 import asyncpg
+import nats.errors
 
 from shared.config import (
     POSTGRES_HOST,
@@ -173,6 +174,10 @@ async def run():
             for fetch_attempt in range(max_fetch_retries):
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
+                    break
+                except nats.errors.TimeoutError:
+                    # Stream is empty — normal idle state, no messages to process.
+                    msgs = []
                     break
                 except Exception as e:
                     is_conn_err = is_connection_error(e)

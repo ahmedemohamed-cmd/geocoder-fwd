@@ -27,6 +27,7 @@ Stored per element:
 import asyncio
 import json
 
+import nats.errors
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
 
@@ -174,10 +175,10 @@ async def run():
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
                     break
-                except asyncio.TimeoutError:
-                    print(f"[es-inserter] Worker {worker_id}: Fetch timeout", flush=True)
-                    await asyncio.sleep(1)
-                    continue
+                except nats.errors.TimeoutError:
+                    # Stream is empty — normal idle state, no messages to process.
+                    msgs = []
+                    break
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
