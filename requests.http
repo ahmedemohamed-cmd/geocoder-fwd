@@ -1,165 +1,299 @@
 ### Geocoding Service API Examples
 ### Base URL: http://localhost:8000
+###
+### Endpoints
+###   GET  /features          – which optional features are enabled
+###   GET  /geocode           – full-text + vector + geo search
+###   GET  /address           – structured address search
+###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / street / boundaries)
+###   POST /feedback          – popularity feedback loop
+###   POST /places            – add a custom place
+###   POST /insert            – insert raw OSM element via NATS
+###
+### Debugging helpers at the bottom:
+###   Elasticsearch direct queries
+###   PostGIS direct queries (REST is not available, see SQL section comments)
+
+@baseUrl = http://localhost:8000
 
 # ============================================================================
 # Feature Flags
 # ============================================================================
 
 ### Check which features are enabled (vectors, AI)
-GET http://localhost:8000/features
+GET {{baseUrl}}/features
 
 ###
 
 # ============================================================================
-# Autocomplete Endpoint (Typesense)
-# Fast prefix/typo-tolerant search with geo-biasing
+# /geocode  –  Full-text + vector + geo-decay search (Elasticsearch)
+#
+# Params:
+#   q      (required) – free-text query
+#   lat/lon            – bias results toward this location
+#   limit              – max results (1–50, default 10)
+#   vector=true|false  – enable/disable semantic vector re-ranking
+#   ai=true|false      – enable/disable AI-assisted expansion
 # ============================================================================
 
-### Basic autocomplete - short prefix search
-GET http://localhost:8000/autocomplete?q=cai
+### Basic city search
+GET {{baseUrl}}/geocode?q=cairo
 
 ###
 
-### Autocomplete with location bias (Cairo coordinates)
-GET http://localhost:8000/autocomplete?q=cairo&lat=30.0444&lon=31.2357&limit=5
+### Search with geo-distance bias (near the Pyramids)
+GET {{baseUrl}}/geocode?q=pyramids&lat=29.9792&lon=31.1342&limit=5
 
 ###
 
-### Autocomplete without vector search (faster, text-only)
-GET http://localhost:8000/autocomplete?q=cairo&limit=5&vector=false
+### Tahrir Square with Cairo location bias
+GET {{baseUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10
 
 ###
 
-### Autocomplete with custom limit
-GET http://localhost:8000/autocomplete?q=tahrir&lat=30.0444&lon=31.2357&limit=20
+### Text-only search, no vector re-ranking (faster)
+GET {{baseUrl}}/geocode?q=alexandria&limit=10&vector=false
 
 ###
 
-### Autocomplete for different query types
-GET http://localhost:8000/autocomplete?q=pyramids&lat=29.9792&lon=31.1342&limit=10
+### Fuzzy / typo-tolerant search
+GET {{baseUrl}}/geocode?q=kahira&lat=30.0444&lon=31.2357&limit=5
 
 ###
 
-### Autocomplete with typo tolerance
-GET http://localhost:8000/autocomplete?q=kahira&lat=30.0444&lon=31.2357&limit=5
+### Search for a venue type near Cairo
+GET {{baseUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=15
 
 ###
 
-# ============================================================================
-# Geocode Endpoint (Elasticsearch)
-# Full-text search with vector similarity, geo decay, and ranking
-# ============================================================================
-
-### Basic geocode search
-GET http://localhost:8000/geocode?q=cairo
+### Address-like query auto-detected and blended into /geocode
+### (housenumber + street clauses added automatically)
+GET {{baseUrl}}/geocode?q=10 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
 
 ###
 
-### Geocode with geo-distance decay (near Pyramids)
-GET http://localhost:8000/geocode?q=pyramids&lat=29.9792&lon=31.1342&limit=5
-
-###
-
-### Geocode with location bias (Cairo area)
-GET http://localhost:8000/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10
-
-###
-
-### Geocode without vector search (faster, text-only)
-GET http://localhost:8000/geocode?q=alexandria&limit=10&vector=false
-
-###
-
-### Geocode with custom result limit
-GET http://localhost:8000/geocode?q=nile&limit=20
-
-###
-
-### Geocode for specific place types
-GET http://localhost:8000/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=15
-
-###
-
-### Geocode with fuzzy matching (typo tolerance)
-GET http://localhost:8000/geocode?q=kahira&lat=30.0444&lon=31.2357&limit=5
+### Arabic name search
+GET {{baseUrl}}/geocode?q=القاهرة&limit=10
 
 ###
 
 # ============================================================================
-# Feedback Endpoint
-# Popularity feedback loop to boost future rankings
+# /address  –  Structured address search (Elasticsearch)
+#
+# Params:
+#   q        (required) – free-form or structured address string
+#   lat/lon              – proximity boost (500 m scale, weight=4)
+#   limit                – max results (1–50, default 10)
+#   postcode             – hard filter: restrict to this postal code
+#   city                 – hard filter: restrict to this city
+#   country              – hard filter: restrict to ISO country code (e.g. EG)
+#
+# Only elements with at least one addr:* tag are returned.
+# The response includes a `parsed` field showing how the query was interpreted.
 # ============================================================================
 
-### Boost popularity for a place (default boost: 1.0)
-POST http://localhost:8000/feedback?osm_id=n271613766&boost=1.0
+### Full address: housenumber + street + city (auto-parsed)
+GET {{baseUrl}}/address?q=10 Tahrir Street, Cairo
 
 ###
 
-### Boost popularity with custom boost value
-POST http://localhost:8000/feedback?osm_id=n271613766&boost=5.0
+### Street and city, no house number
+GET {{baseUrl}}/address?q=Tahrir Street, Cairo&limit=10
+
+###
+
+### Street only with explicit city filter param
+GET {{baseUrl}}/address?q=Corniche El Nil&city=Cairo&limit=10
+
+###
+
+### Street with country restriction
+GET {{baseUrl}}/address?q=Nile Street&country=EG&limit=10
+
+###
+
+### Postcode lookup – find all addresses in a postal district
+GET {{baseUrl}}/address?q=11511
+
+###
+
+### Postcode as hard filter combined with street query
+GET {{baseUrl}}/address?q=Tahrir Street&postcode=11511
+
+###
+
+### With proximity bias (near Tahrir Square)
+GET {{baseUrl}}/address?q=Tahrir Street&lat=30.0444&lon=31.2357&limit=10
+
+###
+
+### Building number + street + city with proximity and country filter
+GET {{baseUrl}}/address?q=15 Kasr El Aini Street, Cairo&lat=30.0380&lon=31.2336&country=EG&limit=5
+
+###
+
+### Arabic address – street in Arabic script
+GET {{baseUrl}}/address?q=شارع التحرير, القاهرة
+
+###
+
+### Arabic full address with housenumber
+GET {{baseUrl}}/address?q=10 شارع التحرير, القاهرة&lat=30.0444&lon=31.2357
+
+###
+
+### Suburb / neighbourhood search via address endpoint
+GET {{baseUrl}}/address?q=Zamalek, Cairo&lat=30.0614&lon=31.2208&limit=10
+
+###
+
+### Alexandria address with proximity
+GET {{baseUrl}}/address?q=Corniche Road, Alexandria&lat=31.2088&lon=29.9183&limit=10
+
+###
+
+### Minimal – single street name, result capped to 5
+GET {{baseUrl}}/address?q=El Galaa Street&limit=5
 
 ###
 
 # ============================================================================
-# Add Place Endpoint
-# Add new custom places to the geocoding database
+# /reverse  –  Reverse geocoding (PostGIS + Elasticsearch)
+#
+# Params:
+#   lat  (required) – latitude
+#   lon  (required) – longitude
+#
+# Returns:
+#   nearest_address    – closest building/address point from osm_addresses table
+#                        fields: housenumber, street, city, postcode, country,
+#                                full_address, geom, distance_m
+#   nearest_line       – closest LineString (road/path) with ES metadata
+#                        fields: osm_id, osm_type, name, name_en, tags,
+#                                admin_level, area_km2, offline_rank, geom
+#   enclosing_polygons – all polygons/multipolygons containing the point
+#                        (admin boundaries, landuse areas, etc.) sorted by
+#                        admin_level descending (most specific first)
+#                        same fields as nearest_line
 # ============================================================================
 
-### Add a new restaurant in Cairo
-POST http://localhost:8000/places
-Content-Type: application/json
-
-{
-  "name": "Test Restaurant Cairo",
-  "name_en": "Test Restaurant Cairo",
-  "lat": 30.0444,
-  "lon": 31.2357,
-  "tags": {
-    "amenity": "restaurant",
-    "cuisine": "egyptian"
-  },
-  "osm_type": "node",
-  "admin_level": 8
-}
+### Reverse geocode Tahrir Square, Cairo
+GET {{baseUrl}}/reverse?lat=30.0444&lon=31.2357
 
 ###
 
-### Add a library in Alexandria
-POST http://localhost:8000/places
-Content-Type: application/json
-
-{
-  "name": "Alexandria Library",
-  "name_en": "Alexandria Library",
-  "lat": 31.2088,
-  "lon": 29.9154,
-  "tags": {
-    "amenity": "library",
-    "historic": "yes"
-  },
-  "osm_type": "node",
-  "admin_level": 8
-}
+### Reverse geocode near the Giza Pyramids
+GET {{baseUrl}}/reverse?lat=29.9792&lon=31.1342
 
 ###
 
-### Add a cafe with minimal required fields
-POST http://localhost:8000/places
+### Reverse geocode in downtown Alexandria
+GET {{baseUrl}}/reverse?lat=31.2088&lon=29.9183
+
+###
+
+### Reverse geocode in Zamalek (Cairo island district)
+GET {{baseUrl}}/reverse?lat=30.0614&lon=31.2208
+
+###
+
+### Reverse geocode near the Nile in Cairo
+GET {{baseUrl}}/reverse?lat=30.0500&lon=31.2336
+
+###
+
+### Reverse geocode in Heliopolis (northeast Cairo)
+GET {{baseUrl}}/reverse?lat=30.0928&lon=31.3201
+
+###
+
+### Reverse geocode in Aswan (southern Egypt)
+GET {{baseUrl}}/reverse?lat=24.0889&lon=32.8998
+
+###
+
+# ============================================================================
+# /feedback  –  Popularity feedback loop
+# Increments the popularity field in Elasticsearch for a given osm_id.
+# Higher popularity → higher ranking in future /geocode results.
+# ============================================================================
+
+### Default boost (+1.0)
+POST {{baseUrl}}/feedback?osm_id=n271613766&boost=1.0
+
+###
+
+### Stronger boost for a highly-clicked result
+POST {{baseUrl}}/feedback?osm_id=n271613766&boost=5.0
+
+###
+
+# ============================================================================
+# /places  –  Add a custom place
+# Publishes to NATS stream; picked up by es-inserter and postgis-inserter.
+# New address fields: addr_housenumber, addr_street, addr_city,
+#                     addr_postcode, addr_country, addr_suburb, addr_state
+# ============================================================================
+
+### Minimal – name + coordinates
+POST {{baseUrl}}/places
 Content-Type: application/json
 
 {
   "name": "Downtown Cafe",
   "lat": 30.0500,
   "lon": 31.2400,
-  "tags": {
-    "amenity": "cafe"
-  }
+  "tags": { "amenity": "cafe" }
 }
 
 ###
 
-### Add a landmark with English name translation
-POST http://localhost:8000/places
+### Restaurant with address fields
+POST {{baseUrl}}/places
+Content-Type: application/json
+
+{
+  "name": "Nile View Restaurant",
+  "name_en": "Nile View Restaurant",
+  "lat": 30.0444,
+  "lon": 31.2357,
+  "osm_type": "node",
+  "admin_level": 8,
+  "tags": {
+    "amenity": "restaurant",
+    "cuisine": "egyptian"
+  },
+  "addr_housenumber": "5",
+  "addr_street": "Corniche El Nil",
+  "addr_city": "Cairo",
+  "addr_postcode": "11511",
+  "addr_country": "EG"
+}
+
+###
+
+### Building with full address (will appear in /address and /reverse results)
+POST {{baseUrl}}/places
+Content-Type: application/json
+
+{
+  "name": "Office Tower",
+  "lat": 30.0380,
+  "lon": 31.2336,
+  "osm_type": "node",
+  "tags": { "building": "commercial" },
+  "addr_housenumber": "22",
+  "addr_street": "Kasr El Aini Street",
+  "addr_suburb": "Garden City",
+  "addr_city": "Cairo",
+  "addr_postcode": "11516",
+  "addr_country": "EG"
+}
+
+###
+
+### Museum with English name and tags
+POST {{baseUrl}}/places
 Content-Type: application/json
 
 {
@@ -167,58 +301,187 @@ Content-Type: application/json
   "name_en": "Egyptian Museum",
   "lat": 30.0479,
   "lon": 31.2355,
+  "osm_type": "node",
+  "admin_level": 8,
   "tags": {
     "tourism": "museum",
     "historic": "yes"
   },
-  "osm_type": "node",
-  "admin_level": 8
+  "addr_street": "El Tahrir Square",
+  "addr_city": "Cairo",
+  "addr_country": "EG"
 }
 
 ###
 
 # ============================================================================
-# Elasticsearch Direct Access (for debugging)
+# /insert  –  Raw OSM element insertion (matches watcher.py message format)
+# Useful for injecting test data or replaying elements.
 # ============================================================================
 
-### Count documents in Elasticsearch index
+### Node with address tags (will be indexed as an address point)
+POST {{baseUrl}}/insert
+Content-Type: application/json
+
+{
+  "osm_id": "n999001",
+  "osm_type": "node",
+  "tags": {
+    "name": "Sample Building",
+    "building": "yes",
+    "addr:housenumber": "42",
+    "addr:street": "Tahrir Street",
+    "addr:city": "Cairo",
+    "addr:postcode": "11511",
+    "addr:country": "EG"
+  },
+  "geom": {
+    "type": "Point",
+    "coordinates": [31.2357, 30.0444]
+  },
+  "admin_level": 0,
+  "area_km2": 0.0
+}
+
+###
+
+### Way (road/LineString) – becomes nearest_line candidate in /reverse
+POST {{baseUrl}}/insert
+Content-Type: application/json
+
+{
+  "osm_id": "w888001",
+  "osm_type": "way",
+  "tags": {
+    "name": "Tahrir Street",
+    "name:en": "Tahrir Street",
+    "highway": "primary",
+    "addr:street": "Tahrir Street"
+  },
+  "geom": {
+    "type": "LineString",
+    "coordinates": [
+      [31.2340, 30.0440],
+      [31.2355, 30.0444],
+      [31.2370, 30.0448]
+    ]
+  },
+  "admin_level": 0,
+  "area_km2": 0.0
+}
+
+###
+
+### Administrative boundary polygon – becomes enclosing_polygon in /reverse
+POST {{baseUrl}}/insert
+Content-Type: application/json
+
+{
+  "osm_id": "r777001",
+  "osm_type": "relation",
+  "tags": {
+    "name": "Cairo Governorate",
+    "name:en": "Cairo Governorate",
+    "boundary": "administrative",
+    "admin_level": "4"
+  },
+  "geom": {
+    "type": "Polygon",
+    "coordinates": [[
+      [31.1, 29.9],
+      [31.5, 29.9],
+      [31.5, 30.2],
+      [31.1, 30.2],
+      [31.1, 29.9]
+    ]]
+  },
+  "admin_level": 4,
+  "area_km2": 3085.0
+}
+
+###
+
+# ============================================================================
+# Elasticsearch Debug  –  direct index access
+# ============================================================================
+
+### Document count
 GET http://localhost:9200/osm_places/_count
 
 ###
 
-### Get mapping for Elasticsearch index
+### Index mapping (shows all fields including addr_*)
 GET http://localhost:9200/osm_places/_mapping
 
 ###
 
-### Search Elasticsearch directly (raw query)
+### Count documents that have address data
+POST http://localhost:9200/osm_places/_count
+Content-Type: application/json
+
+{
+  "query": { "term": { "has_address": true } }
+}
+
+###
+
+### Sample 5 address-bearing documents
+POST http://localhost:9200/osm_places/_search
+Content-Type: application/json
+
+{
+  "query": { "term": { "has_address": true } },
+  "size": 5,
+  "_source": ["osm_id", "name", "full_address", "addr_street", "addr_city", "addr_postcode", "centroid"]
+}
+
+###
+
+### Direct address field search on Elasticsearch
 POST http://localhost:9200/osm_places/_search
 Content-Type: application/json
 
 {
   "query": {
-    "match": {
-      "name": "cairo"
+    "bool": {
+      "must": [
+        { "term":  { "addr_housenumber": "10" } },
+        { "match": { "addr_street": "Tahrir Street" } }
+      ],
+      "filter": [
+        { "term": { "has_address": true } }
+      ]
     }
+  },
+  "size": 5,
+  "_source": ["osm_id", "name", "full_address", "addr_housenumber", "addr_street", "addr_city", "centroid"]
+}
+
+###
+
+### Full-text address search
+POST http://localhost:9200/osm_places/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match": { "full_address": "Tahrir Street Cairo" }
+  },
+  "size": 10,
+  "_source": ["osm_id", "name", "full_address", "centroid"]
+}
+
+###
+
+### Geocode directly (raw function_score query)
+POST http://localhost:9200/osm_places/_search
+Content-Type: application/json
+
+{
+  "query": {
+    "match": { "name": "cairo" }
   },
   "size": 5
 }
 
 ###
-
-# ============================================================================
-# Typesense Direct Access (for debugging)
-# ============================================================================
-
-### Search Typesense collection directly
-GET http://localhost:8108/collections/osm_places/documents/search?q=cairo&query_by=name,name_en,tags_text&per_page=5
-X-TYPESENSE-API-KEY: typesense-secret-key
-
-###
-
-### Get Typesense collection schema
-GET http://localhost:8108/collections/osm_places
-X-TYPESENSE-API-KEY: typesense-secret-key
-
-###
-http://localhost:8108/health
