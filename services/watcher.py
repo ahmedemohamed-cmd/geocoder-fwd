@@ -22,10 +22,11 @@ SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
 QUEUE_MAXSIZE = 100_000
 
-# Target 60 MB — leaves 4 MB headroom under the 64 MB NATS server ceiling.
+# JetStream has a hard 32 MB RAFT-entry limit (err_code 10077) that cannot be
+# overridden by max_payload or max_msg_size.  Target 30 MB to leave headroom.
 # Simplification is only applied to messages that exceed this threshold, so
 # normal elements (nodes, ways, small relations) are never touched.
-_NATS_TARGET_BYTES = 60 * 1024 * 1024
+_NATS_TARGET_BYTES = 30 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -731,7 +732,10 @@ async def publish_file(filepath: str):
                                 "maximum payload" in err_str
                                 or "payload exceeded" in err_str
                                 or "message size exceeds" in err_str
+                                or "to large" in err_str    # NATS typo in 10077
+                                or "too large" in err_str
                                 or "10054" in err_str
+                                or "10077" in err_str
                             ):
                                 # Attempt emergency simplification
                                 try:
