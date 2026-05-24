@@ -725,9 +725,7 @@ async def publish_file(filepath: str):
                                     print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
                         except Exception as e:
                             err_str = str(e).lower()
-                            # Payload-too-large: shouldn't reach here after the
-                            # pre-flight check, but handle defensively — try one
-                            # more simplification pass then skip if still too big.
+                            # Payload-too-large is permanent — skip immediately.
                             if (
                                 "maximum payload" in err_str
                                 or "payload exceeded" in err_str
@@ -737,20 +735,6 @@ async def publish_file(filepath: str):
                                 or "10054" in err_str
                                 or "10077" in err_str
                             ):
-                                # Attempt emergency simplification
-                                try:
-                                    elem_dict = json.loads(msg)
-                                    if elem_dict.get("geom"):
-                                        simplified = _simplify_geom(
-                                            elem_dict["geom"], osm_id
-                                        )
-                                        if simplified is not None:
-                                            msg = json.dumps(
-                                                {**elem_dict, "geom": simplified}
-                                            ).encode()
-                                            continue   # retry with smaller payload
-                                except Exception:
-                                    pass
                                 print(
                                     f"[watcher] {osm_id}: payload too large "
                                     f"({len(msg):,} bytes) — skipping",
@@ -803,6 +787,19 @@ async def publish_file(filepath: str):
                         else:
                             print(f"[watcher] Failed to publish element during flush after {max_retries} attempts", flush=True)
                 except Exception as e:
+                    err_str = str(e).lower()
+                    # Payload-too-large is permanent — skip immediately.
+                    if (
+                        "maximum payload" in err_str
+                        or "payload exceeded" in err_str
+                        or "message size exceeds" in err_str
+                        or "to large" in err_str
+                        or "too large" in err_str
+                        or "10054" in err_str
+                        or "10077" in err_str
+                    ):
+                        print(f"[watcher] Flush: payload too large — skipping", flush=True)
+                        break
                     consecutive_failures += 1
                     print(f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
                     if consecutive_failures >= max_consecutive_failures:

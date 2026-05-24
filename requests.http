@@ -14,7 +14,7 @@
 ###   Elasticsearch direct queries
 ###   PostGIS direct queries (REST is not available, see SQL section comments)
 
-@baseUrl = http://localhost:8000
+@baseUrl = http://84.8.122.218:8000
 
 # ============================================================================
 # Feature Flags
