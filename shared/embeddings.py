@@ -1,5 +1,9 @@
+import logging
 import os
+
 from shared.config import EMBEDDING_MODEL, EMBEDDING_DIM, ENABLE_VECTORS
+
+logger = logging.getLogger(__name__)
 
 _model = None
 
@@ -19,40 +23,54 @@ _SKIP_PREFIXES = (
 
 
 def get_model():
+    """Lazy-load and return the SentenceTransformer model (singleton).
+
+    Uses GPU if available, falls back to CPU.  Loads from local path if
+    EMBEDDING_MODEL points to a directory, otherwise downloads from HF Hub.
+    """
     global _model
-    if _model is None:
+    if _model is not None:
+        return _model
+
+    try:
         from sentence_transformers import SentenceTransformer
         import torch
+    except ImportError as e:
+        raise RuntimeError(
+            "sentence-transformers and torch are required when ENABLE_VECTORS=true. "
+            f"Install them with: pip install sentence-transformers torch\n{e}"
+        ) from e
 
-        # Detect and use GPU if available
+    try:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[embeddings] Using device: {device}")
+    except Exception:
+        device = "cpu"
+    logger.info("Using device: %s", device)
 
-        cache_folder = os.environ.get('TRANSFORMERS_CACHE')
+    cache_folder = os.environ.get('TRANSFORMERS_CACHE')
 
-        # Check if EMBEDDING_MODEL is a local path that exists
+    try:
         if os.path.exists(EMBEDDING_MODEL):
-            print(f"[embeddings] Loading local model from: {EMBEDDING_MODEL}")
-            # Disable HF Hub access for local models by setting environment variable
+            logger.info("Loading local model from: %s", EMBEDDING_MODEL)
             os.environ['HF_HUB_OFFLINE'] = '1'
             os.environ['TRANSFORMERS_OFFLINE'] = '1'
             _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
-            print(f"[embeddings] Local model loaded successfully")
+            logger.info("Local model loaded successfully")
+        elif cache_folder:
+            os.makedirs(cache_folder, exist_ok=True)
+            logger.info("Downloading model to: %s", cache_folder)
+            _model = SentenceTransformer(
+                EMBEDDING_MODEL,
+                device=device,
+                cache_folder=cache_folder
+            )
+            logger.info("Model downloaded and cached successfully")
         else:
-            # EMBEDDING_MODEL is a Hugging Face model name or path that doesn't exist locally
-            if cache_folder:
-                # Ensure cache directory exists
-                os.makedirs(cache_folder, exist_ok=True)
-                print(f"[embeddings] Model not found locally, downloading to: {cache_folder}")
-                _model = SentenceTransformer(
-                    EMBEDDING_MODEL,
-                    device=device,
-                    cache_folder=cache_folder
-                )
-                print(f"[embeddings] Model downloaded and cached successfully")
-            else:
-                print(f"[embeddings] No cache directory specified, using default cache")
-                _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+            logger.info("Loading model with default cache")
+            _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load embedding model '{EMBEDDING_MODEL}': {e}") from e
+
     return _model
 
 
@@ -95,16 +113,23 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     """
     if not ENABLE_VECTORS:
         return [[0.0] * EMBEDDING_DIM for _ in texts]
-    
+
     model = get_model()
-    
+
     # Use larger batch size on GPU for better throughput
-    import torch
-    batch_size = 128 if torch.cuda.is_available() else 32
-    
-    return model.encode(
-        texts, 
-        batch_size=batch_size,
-        show_progress_bar=False,
-        convert_to_numpy=True
-    ).tolist()
+    try:
+        import torch
+        batch_size = 128 if torch.cuda.is_available() else 32
+    except Exception:
+        batch_size = 32
+
+    try:
+        return model.encode(
+            texts,
+            batch_size=batch_size,
+            show_progress_bar=False,
+            convert_to_numpy=True
+        ).tolist()
+    except Exception as e:
+        logger.error("Embedding failed: %s", e)
+        return [[0.0] * EMBEDDING_DIM for _ in texts]

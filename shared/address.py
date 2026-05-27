@@ -91,10 +91,18 @@ _AR_CITY_KEYWORDS_RAW = [
 ]
 
 
+_RE_ALEF_VARIANTS = re.compile(r"[إأآا]")
+_RE_WHITESPACE = re.compile(r"\s+")
+_RE_EN_ABBREVS = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _EN_ABBREVS) + r")\b",
+    re.IGNORECASE,
+)
+
+
 def _normalize_ar(s: str) -> str:
     """Light Arabic normalization for keyword matching (no abbreviation expansion)."""
     s = s.replace("\u0640", "")
-    s = re.sub(r"[إأآا]", "ا", s)
+    s = _RE_ALEF_VARIANTS.sub("ا", s)
     s = s.replace("ى", "ي")
     s = s.replace("ة", "ه")
     return s
@@ -190,7 +198,7 @@ def normalize_address_text(s: str) -> str:
 
     # Normalize Arabic characters: remove tatweel, normalize alef/yaa
     s = s.replace("\u0640", "")              # tatweel
-    s = re.sub(r"[إأآا]", "ا", s)            # normalize alef variants → bare alef
+    s = _RE_ALEF_VARIANTS.sub("ا", s)        # normalize alef variants → bare alef
     s = s.replace("ى", "ي")                  # alef maqsura → yaa
     s = s.replace("ة", "ه")                  # taa marbuta → haa (common search behaviour)
 
@@ -204,14 +212,12 @@ def normalize_address_text(s: str) -> str:
 
     # Expand English abbreviations (word-boundary aware)
     def _expand_en(m: re.Match) -> str:
-        word = m.group(0).lower()
-        return _EN_ABBREVS.get(word, m.group(0))
+        return _EN_ABBREVS.get(m.group(0).lower(), m.group(0))
 
-    abbrev_pattern = r"\b(" + "|".join(re.escape(k) for k in _EN_ABBREVS) + r")\b"
-    s = re.sub(abbrev_pattern, _expand_en, s, flags=re.IGNORECASE)
+    s = _RE_EN_ABBREVS.sub(_expand_en, s)
 
     # Collapse multiple spaces
-    s = re.sub(r"\s+", " ", s).strip()
+    s = _RE_WHITESPACE.sub(" ", s).strip()
     return s
 
 
@@ -352,7 +358,7 @@ def parse_address_query(q: str) -> dict:
         if len(remaining_parts) == 1:
             tok = remaining_parts[0]
             # Check if it's a known city/area
-            if tok in _AR_CITY_KEYWORDS or _is_likely_city(tok):
+            if tok in _AR_CITY_KEYWORDS:
                 result["city"] = tok
             else:
                 result["street"] = tok
@@ -379,7 +385,7 @@ def parse_address_query(q: str) -> dict:
             result.setdefault("country", part)
             continue
         # Known city?
-        if part in _AR_CITY_KEYWORDS or _is_likely_city(part):
+        if part in _AR_CITY_KEYWORDS:
             result.setdefault("city", part)
             continue
         # First unassigned locality → city (or suburb if city already set)
@@ -391,15 +397,3 @@ def parse_address_query(q: str) -> dict:
             result["state"] = part
 
     return result
-
-
-def _is_likely_city(text: str) -> bool:
-    """Simple heuristic: is this likely a city/area name rather than a street?
-
-    Cities tend to be short (1-2 words) without street keywords.
-    """
-    if _STREET_RE.search(text):
-        return False
-    # Very short single words without numbers are likely area names in certain contexts
-    # but we can't be sure — return False to avoid false positives
-    return False

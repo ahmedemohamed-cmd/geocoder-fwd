@@ -1,12 +1,13 @@
 """Download OSM PBF files listed in .env into data/ if not already present."""
 
 import os
+
 import requests
-import urllib3
+
 from shared.config import OSM_URL, DATA_DIR
 
-# Suppress SSL warnings for development environments
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Set SSL_VERIFY=false in .env to disable certificate verification (dev only)
+_SSL_VERIFY = os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
 
 
 def download():
@@ -24,7 +25,7 @@ def download():
         return
 
     print(f"[downloader] Downloading {filename} ...")
-    resp = requests.get(OSM_URL, stream=True, timeout=30, verify=False)
+    resp = requests.get(OSM_URL, stream=True, timeout=60, verify=_SSL_VERIFY)
     resp.raise_for_status()
 
     total = int(resp.headers.get("content-length", 0))

@@ -345,6 +345,8 @@ class OSMHandler(osmium.SimpleHandler):
         self.node_count = 0
         self.way_count = 0
         self.relation_count = 0
+        self.skipped_way_count = 0
+        self.skipped_relation_count = 0
         self.redis = redis_client
         self.redis_prefix = "osm:nodes:"
         self.progress_tracker = progress_tracker
@@ -436,17 +438,17 @@ class OSMHandler(osmium.SimpleHandler):
             tags = dict(w.tags) if w.tags else {}
 
             if not tags:
-                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                self.skipped_way_count += 1
                 return
 
             if not _has_identifiable_tags(tags):
-                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                self.skipped_way_count += 1
                 return
 
             if len(coords) < 2:
                 if self.way_count < 10:
                     print(f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})")
-                self.skipped_way_count = getattr(self, 'skipped_way_count', 0) + 1
+                self.skipped_way_count += 1
                 return
         except Exception as e:
             print(f"[watcher] Error processing way {w.id}: {e}")
@@ -485,7 +487,7 @@ class OSMHandler(osmium.SimpleHandler):
         if rel_type not in ("multipolygon", "boundary"):
             if self.relation_count < 10:
                 print(f"[watcher] Relation {r.id}: Skipped (type={rel_type})")
-            self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+            self.skipped_relation_count += 1
             return
 
         # Assemble geometry from cached way coordinates (populated during way pass)
@@ -512,7 +514,7 @@ class OSMHandler(osmium.SimpleHandler):
             else:
                 if self.relation_count < 10:
                     print(f"[watcher] Relation {r.id}: No way coords available, skipping")
-                self.skipped_relation_count = getattr(self, 'skipped_relation_count', 0) + 1
+                self.skipped_relation_count += 1
                 return
 
         self.q.put(
@@ -582,19 +584,6 @@ async def publish_file(filepath: str):
             except Exception as e2:
                 print(f"[watcher] Failed to recreate stream: {e2}")
                 raise
-    
-    # Test publish to verify stream is working
-    print(f"[watcher] Testing stream with a test message...")
-    try:
-        test_msg = json.dumps({"test": True, "osm_id": "test", "osm_type": "node"}).encode()
-        ack = await js.publish(NATS_SUBJECT, test_msg, timeout=10)
-        if ack:
-            print(f"[watcher] Stream test successful")
-        else:
-            print(f"[watcher] Stream test failed: no ack received")
-    except Exception as e:
-        print(f"[watcher] Stream test failed with error: {e}")
-        raise
     
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
@@ -822,8 +811,8 @@ async def publish_file(filepath: str):
     if publish_progress is not None:
         publish_progress.close()
 
-    skipped_ways = getattr(handler, 'skipped_way_count', 0)
-    skipped_relations = getattr(handler, 'skipped_relation_count', 0)
+    skipped_ways = handler.skipped_way_count
+    skipped_relations = handler.skipped_relation_count
     print(f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})")
     if skipped_ways > 0:
         print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_ways} ways (insufficient coordinates)")

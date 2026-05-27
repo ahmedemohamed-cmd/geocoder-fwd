@@ -322,6 +322,7 @@ async def run():
 
     # Use mutable containers for connection objects so workers can update them
     conn_state = {"nc": nc, "js": js, "sub": sub}
+    reconnect_lock = asyncio.Lock()
 
     # Create worker pool for concurrent batch processing
     async def worker(worker_id: int):
@@ -342,22 +343,24 @@ async def run():
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
                     print(f"[es-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, connection_error: {is_conn_err})", flush=True)
-                    
+
                     if is_conn_err:
-                        # Connection is broken, need to reconnect
-                        print(f"[es-inserter] Worker {worker_id}: Connection error detected, reconnecting...", flush=True)
-                        try:
-                            conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
-                            conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
-                            print(f"[es-inserter] Worker {worker_id}: Reconnected and resubscribed", flush=True)
-                            break  # Retry fetch with new connection
-                        except Exception as reconnect_err:
-                            print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
-                            await asyncio.sleep(5)
-                            continue
+                        # Only one worker should reconnect at a time
+                        async with reconnect_lock:
+                            # Double-check: another worker may have already reconnected
+                            if conn_state["nc"].is_closed:
+                                print(f"[es-inserter] Worker {worker_id}: Reconnecting...", flush=True)
+                                try:
+                                    conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
+                                    conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
+                                    print(f"[es-inserter] Worker {worker_id}: Reconnected", flush=True)
+                                except Exception as reconnect_err:
+                                    print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
+                                    await asyncio.sleep(5)
+                                    continue
+                        break  # Retry fetch with new connection
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
-                        # Exponential backoff for transient errors
-                        delay = min(1 * (2 ** fetch_attempt), 10)  # Cap at 10 seconds
+                        delay = min(1 * (2 ** fetch_attempt), 10)
                         await asyncio.sleep(delay)
                     else:
                         await asyncio.sleep(1)

@@ -264,6 +264,19 @@ def _venue_score(tags: dict) -> float:
     return score
 
 
+_BUILDING_SCORES: dict[str, float] = {
+    "commercial": 0.65,
+    "office": 0.60,
+    "retail": 0.60,
+    "supermarket": 0.70,
+    "department_store": 0.65,
+    "hotel": 0.70,
+    "hospital": 0.80,
+    "school": 0.65,
+    "university": 0.75,
+}
+
+
 def _building_score(tags: dict) -> float:
     """Score based on building type.
 
@@ -273,18 +286,6 @@ def _building_score(tags: dict) -> float:
     building = tags.get("building", "")
     if not building:
         return 0.0
-
-    _BUILDING_SCORES: dict[str, float] = {
-        "commercial": 0.65,
-        "office": 0.60,
-        "retail": 0.60,
-        "supermarket": 0.70,
-        "department_store": 0.65,
-        "hotel": 0.70,
-        "hospital": 0.80,
-        "school": 0.65,
-        "university": 0.75,
-    }
     return _BUILDING_SCORES.get(building, 0.0)
 
 

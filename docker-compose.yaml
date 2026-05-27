@@ -8,6 +8,15 @@ services:
     volumes:
       - nats-data:/data
       - ./nats.conf:/etc/nats/nats.conf:ro
+    healthcheck:
+      test: ["CMD", "nats-server", "--signal", "ldm="]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   redis:
     image: redis:7-alpine
@@ -20,12 +29,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     ports:
       - "9200:9200"
-      - "9300:9300"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -38,6 +50,10 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   postgis:
     image: postgis/postgis:16-3.4-alpine
@@ -54,6 +70,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # Python services
   watcher:
@@ -70,7 +90,7 @@ services:
       - REDIS_PORT=6379
     depends_on:
       nats:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -90,7 +110,7 @@ services:
       - TRANSFORMERS_CACHE=/app/models
     depends_on:
       nats:
-        condition: service_started
+        condition: service_healthy
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
@@ -109,7 +129,7 @@ services:
       - POSTGRES_PASSWORD=postgres
     depends_on:
       nats:
-        condition: service_started
+        condition: service_healthy
       postgis:
         condition: service_healthy
     restart: unless-stopped
@@ -141,7 +161,7 @@ services:
       postgis:
         condition: service_healthy
       nats:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   downloader:
@@ -173,7 +193,7 @@ services:
       postgis:
         condition: service_healthy
       nats:
-        condition: service_started
+        condition: service_healthy
     restart: "no"
 
 volumes:

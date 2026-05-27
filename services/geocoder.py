@@ -383,36 +383,44 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
 
     point_wkt = f"POINT({lon} {lat})"
 
-    async with pg_pool.acquire() as conn:
-        # Find nearest lines (fetch several to find one with a name)
-        nearest_lines_query = """
-            SELECT osm_id, osm_type
-            FROM osm_geometries
-            WHERE ST_GeometryType(geom) = 'ST_LineString'
-            ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
-            LIMIT 10
-        """
-        nearest_lines = await conn.fetch(nearest_lines_query, point_wkt)
+    try:
+        async with pg_pool.acquire() as conn:
+            # Set a query timeout to avoid slow enrichment blocking the API
+            await conn.execute("SET LOCAL statement_timeout = '3000'")  # 3s
 
-        # Find enclosing polygons/multipolygons
-        enclosing_query = """
-            SELECT osm_id, osm_type
-            FROM osm_geometries
-            WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
-            AND ST_Contains(geom, ST_GeomFromText($1, 4326))
-        """
-        enclosing_polygons = await conn.fetch(enclosing_query, point_wkt)
+            # Find nearest lines (fetch several to find one with a name)
+            nearest_lines_query = """
+                SELECT osm_id, osm_type
+                FROM osm_geometries
+                WHERE ST_GeometryType(geom) = 'ST_LineString'
+                  AND ST_DWithin(geom, ST_GeomFromText($1, 4326), 0.005)
+                ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
+                LIMIT 10
+            """
+            nearest_lines = await conn.fetch(nearest_lines_query, point_wkt)
 
-        # Also check closed LineStrings that form boundaries around the point
-        closed_lines_query = """
-            SELECT osm_id, osm_type
-            FROM osm_geometries
-            WHERE ST_GeometryType(geom) = 'ST_LineString'
-            AND ST_IsClosed(geom)
-            AND ST_NPoints(geom) >= 4
-            AND ST_Contains(ST_MakePolygon(geom), ST_GeomFromText($1, 4326))
-        """
-        closed_lines = await conn.fetch(closed_lines_query, point_wkt)
+            # Find enclosing polygons/multipolygons
+            enclosing_query = """
+                SELECT osm_id, osm_type
+                FROM osm_geometries
+                WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
+                AND ST_Contains(geom, ST_GeomFromText($1, 4326))
+            """
+            enclosing_polygons = await conn.fetch(enclosing_query, point_wkt)
+
+            # Also check closed LineStrings that form boundaries around the point
+            closed_lines_query = """
+                SELECT osm_id, osm_type
+                FROM osm_geometries
+                WHERE ST_GeometryType(geom) = 'ST_LineString'
+                AND ST_IsClosed(geom)
+                AND ST_NPoints(geom) >= 4
+                AND ST_Contains(ST_MakePolygon(geom), ST_GeomFromText($1, 4326))
+            """
+            closed_lines = await conn.fetch(closed_lines_query, point_wkt)
+    except Exception as e:
+        print(f"[geocoder] Enrichment PostGIS query failed for {osm_id}: {e}")
+        return None
 
     # Collect all osm_ids to fetch from ES
     line_ids = [row["osm_id"] for row in nearest_lines]
@@ -432,7 +440,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     # Batch-fetch metadata from ES
     es_data: dict[str, dict] = {}
     try:
-        resp = await es.mget(index=INDEX, ids=all_ids)
+        resp = await es.mget(index=INDEX, ids=all_ids, request_timeout=5)
         for doc in resp["docs"]:
             if doc.get("found"):
                 es_data[doc["_id"]] = doc["_source"]
