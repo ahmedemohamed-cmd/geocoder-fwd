@@ -8,6 +8,7 @@ provides everything the pipeline needs to index and search addresses:
   - ``build_full_address(tags)``      → human-readable address string
   - ``is_address_query(q)``           → True when query looks like an address
   - ``parse_address_query(q)``        → structured dict from a free-form string
+  - ``normalize_address_text(s)``     → expand abbreviations, normalize whitespace
 
 Supported OSM address tags
 --------------------------
@@ -43,6 +44,66 @@ ADDR_FIELD_MAP: dict[str, str] = {
 
 # City-level fallback order when addr:city is absent
 _CITY_FALLBACKS = ("addr:city", "addr:town", "addr:village", "addr:hamlet")
+
+# ── Abbreviation / synonym expansion (English) ───────────────────────────
+_EN_ABBREVS: dict[str, str] = {
+    "st":    "street",
+    "str":   "street",
+    "rd":    "road",
+    "ave":   "avenue",
+    "av":    "avenue",
+    "blvd":  "boulevard",
+    "bvd":   "boulevard",
+    "ln":    "lane",
+    "dr":    "drive",
+    "pl":    "place",
+    "ct":    "court",
+    "sq":    "square",
+    "hwy":   "highway",
+    "cres":  "crescent",
+    "terr":  "terrace",
+    "pkwy":  "parkway",
+}
+
+# ── Arabic street-type normalizations ─────────────────────────────────────
+# Maps common short/variant Arabic street prefixes to canonical forms
+_AR_STREET_TYPES: dict[str, str] = {
+    "ش":     "شارع",
+    "ش.":    "شارع",
+    "شار":   "شارع",
+    "ط":     "طريق",
+    "م":     "ميدان",
+}
+
+# Arabic tokens that indicate a street/address context
+_AR_STREET_KEYWORDS = frozenset([
+    "شارع", "طريق", "ميدان", "حارة", "زقاق", "كورنيش", "حي",
+    "منطقة", "مدينة", "محافظة", "عمارة", "برج", "مبنى", "عمائر",
+])
+
+# Arabic city/area names for detection (common ones)
+# We store both original and normalized forms to match regardless of normalization
+_AR_CITY_KEYWORDS_RAW = [
+    "القاهرة", "الجيزة", "الاسكندرية", "الإسكندرية", "المنصورة",
+    "الزمالك", "المعادي", "مصر الجديدة", "مدينة نصر", "المهندسين",
+    "الدقي", "العجوزة", "شبرا", "حلوان", "المقطم", "التجمع",
+    "الرحاب", "العبور", "أكتوبر", "الشيخ زايد",
+]
+
+
+def _normalize_ar(s: str) -> str:
+    """Light Arabic normalization for keyword matching (no abbreviation expansion)."""
+    s = s.replace("\u0640", "")
+    s = re.sub(r"[إأآا]", "ا", s)
+    s = s.replace("ى", "ي")
+    s = s.replace("ة", "ه")
+    return s
+
+
+# Build keyword set with both original and normalized forms
+_AR_CITY_KEYWORDS = frozenset(
+    _AR_CITY_KEYWORDS_RAW + [_normalize_ar(c) for c in _AR_CITY_KEYWORDS_RAW]
+)
 
 
 # ── Component extraction ──────────────────────────────────────────────────
@@ -116,15 +177,59 @@ def build_full_address(tags: dict) -> str:
     return ", ".join(parts)
 
 
+# ── Text normalization ────────────────────────────────────────────────────
+
+def normalize_address_text(s: str) -> str:
+    """Expand abbreviations, normalize Arabic variants, collapse whitespace.
+
+    Used at both index-time (full_address) and query-time to ensure
+    abbreviations in the query match expanded forms in the index.
+    """
+    if not s:
+        return s
+
+    # Normalize Arabic characters: remove tatweel, normalize alef/yaa
+    s = s.replace("\u0640", "")              # tatweel
+    s = re.sub(r"[إأآا]", "ا", s)            # normalize alef variants → bare alef
+    s = s.replace("ى", "ي")                  # alef maqsura → yaa
+    s = s.replace("ة", "ه")                  # taa marbuta → haa (common search behaviour)
+
+    # Expand Arabic abbreviated street types
+    tokens = s.split()
+    for i, tok in enumerate(tokens):
+        canonical = _AR_STREET_TYPES.get(tok)
+        if canonical:
+            tokens[i] = canonical
+    s = " ".join(tokens)
+
+    # Expand English abbreviations (word-boundary aware)
+    def _expand_en(m: re.Match) -> str:
+        word = m.group(0).lower()
+        return _EN_ABBREVS.get(word, m.group(0))
+
+    abbrev_pattern = r"\b(" + "|".join(re.escape(k) for k in _EN_ABBREVS) + r")\b"
+    s = re.sub(abbrev_pattern, _expand_en, s, flags=re.IGNORECASE)
+
+    # Collapse multiple spaces
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 # ── Query detection & parsing ─────────────────────────────────────────────
 
-# Street-type keywords — English + common Arabic equivalents
+# Street-type keywords — English + Arabic
 _STREET_RE = re.compile(
     r"\b(street|road|avenue|ave|blvd|boulevard|lane|drive|dr|place|pl|"
-    r"court|ct|way|alley|square|sq|highway|hwy|st)\b"
-    r"|شارع|طريق|ميدان|حارة|زقاق|كورنيش",
+    r"court|ct|way|alley|square|sq|highway|hwy|st|crescent|terrace|parkway)\b"
+    r"|شارع|طريق|ميدان|حارة|زقاق|كورنيش|حي|منطقة|ش\s",
     re.IGNORECASE,
 )
+
+# Postcode pattern: 4-6 digits (standalone)
+_POSTCODE_RE = re.compile(r"^\d{4,6}$")
+
+# House-number pattern: digits optionally followed by a letter or slash-suffix
+_HOUSENUMBER_RE = re.compile(r"^\d[\w/-]*$")
 
 
 def is_address_query(q: str) -> bool:
@@ -133,17 +238,52 @@ def is_address_query(q: str) -> bool:
     Returns True when ANY of these conditions hold:
 
     1. Starts with a house-number token followed by words — ``"12B Main St"``
-    2. Comma-separated with at least one numeric token — ``"Main St, Cairo, 11511"``
-    3. Contains an explicit street-type keyword — ``"Tahrir Square"``
+    2. Contains comma-separated parts (structured input) — ``"Main St, Cairo"``
+    3. Contains a street-type keyword (English or Arabic) — ``"Tahrir Square"``
+    4. Contains Arabic address-related keywords — ``"شارع التحرير"``
+    5. Contains a postcode-like token within a longer string
     """
     q = q.strip()
+    if not q:
+        return False
+    # Starts with housenumber + words
     if re.match(r"^\d[\w/-]*\s+\w", q):
         return True
-    if "," in q and re.search(r"\b\d+\b", q):
+    # Has commas (structured address)
+    if "," in q:
         return True
+    # Contains street-type keyword
     if _STREET_RE.search(q):
         return True
+    # Arabic address keywords in the query
+    for tok in q.split():
+        if tok in _AR_STREET_KEYWORDS or tok in _AR_CITY_KEYWORDS:
+            return True
     return False
+
+
+def _detect_arabic_street(text: str) -> tuple[str, str]:
+    """Try to split an Arabic text into (street_name, area/city).
+
+    Arabic addresses commonly follow the pattern:
+      شارع <name>            → street only
+      شارع <name>, <city>    → already comma-separated (handled elsewhere)
+      <name> - <area>        → dash separator
+
+    Returns (street, city) — either may be empty.
+    """
+    # Pattern: شارع/طريق/ميدان + name (the street keyword + everything after)
+    m = re.match(r"^(شارع|طريق|ميدان|حارة|كورنيش|ش)\s+(.+)", text.strip())
+    if m:
+        street_part = f"{m.group(1)} {m.group(2)}"
+        # Check if a known city/area appears at the end
+        for city in _AR_CITY_KEYWORDS:
+            if street_part.endswith(city):
+                street_name = street_part[: -len(city)].strip()
+                return street_name, city
+        return street_part, ""
+
+    return text.strip(), ""
 
 
 def parse_address_query(q: str) -> dict:
@@ -154,38 +294,112 @@ def parse_address_query(q: str) -> dict:
     * ``"123 Main Street, Cairo, 11511"``
     * ``"Main Street, Zamalek, Cairo"``
     * ``"شارع التحرير, القاهرة"``
+    * ``"Cairo, 12 Tahrir St"``          (reversed order)
+    * ``"المهندسين شارع لبنان"``          (Arabic: area + street)
+    * ``"Tahrir"``                       (single-token fallback)
 
     Returns a dict with any subset of:
-      ``housenumber``, ``street``, ``city``, ``postcode``, ``state``, ``country``
+      ``housenumber``, ``street``, ``city``, ``postcode``, ``suburb``,
+      ``state``, ``country``, ``raw`` (normalized full query)
     """
-    parts = [p.strip() for p in q.split(",")]
-    result: dict = {}
+    q_norm = normalize_address_text(q)
+    parts = [p.strip() for p in q_norm.split(",")]
+    result: dict = {"raw": q_norm}
 
     if not parts:
         return result
 
-    # First part: optional house-number + street
-    first = parts[0]
-    m = re.match(r"^(\d[\w/-]*)\s+(.+)", first)
-    if m:
-        result["housenumber"] = m.group(1).strip()
-        result["street"]      = m.group(2).strip()
-    else:
-        result["street"] = first.strip()
+    # ── Pass 1: extract postcodes from any position ───────────────────────
+    remaining_parts: list[str] = []
+    for p in parts:
+        if _POSTCODE_RE.match(p):
+            result.setdefault("postcode", p)
+        else:
+            remaining_parts.append(p)
 
-    # Subsequent parts: city, postcode, state, country
-    for i, part in enumerate(parts[1:], 1):
-        part = part.strip()
+    if not remaining_parts:
+        return result
+
+    # ── Pass 2: detect house number + street in any part ──────────────────
+    street_part_idx: int | None = None
+    for i, part in enumerate(remaining_parts):
+        m = re.match(r"^(\d[\w/-]*)\s+(.+)", part)
+        if m:
+            result["housenumber"] = m.group(1).strip()
+            result["street"] = m.group(2).strip()
+            street_part_idx = i
+            break
+
+    # ── Pass 3: if no housenumber found, detect street via keywords ───────
+    if street_part_idx is None:
+        for i, part in enumerate(remaining_parts):
+            # Arabic street detection
+            street_candidate, city_candidate = _detect_arabic_street(part)
+            if city_candidate:
+                result["street"] = street_candidate
+                result.setdefault("city", city_candidate)
+                street_part_idx = i
+                break
+            # English street keyword detection
+            if _STREET_RE.search(part):
+                result["street"] = part
+                street_part_idx = i
+                break
+
+    # ── Pass 4: if still no street, use heuristic position ────────────────
+    if street_part_idx is None:
+        # If only one part, it could be a street name, area, or POI
+        if len(remaining_parts) == 1:
+            tok = remaining_parts[0]
+            # Check if it's a known city/area
+            if tok in _AR_CITY_KEYWORDS or _is_likely_city(tok):
+                result["city"] = tok
+            else:
+                result["street"] = tok
+            street_part_idx = 0
+        else:
+            # Multiple parts: first = street, rest = locality hierarchy
+            result["street"] = remaining_parts[0]
+            street_part_idx = 0
+
+    # ── Pass 5: assign remaining parts (city, suburb, state, country) ─────
+    locality_parts = [
+        p for i, p in enumerate(remaining_parts) if i != street_part_idx
+    ]
+
+    for i, part in enumerate(locality_parts):
         if not part:
             continue
-        # Pure digits (4–6 chars) → postcode
-        if re.match(r"^\d{4,6}$", part):
+        # Detect postcodes that slipped through
+        if _POSTCODE_RE.match(part):
             result.setdefault("postcode", part)
-        elif i == 1:
-            result.setdefault("city", part)
-        elif i == 2:
-            result.setdefault("state", part)
-        elif i == 3:
+            continue
+        # Short 2-3 uppercase letters → country code
+        if re.match(r"^[A-Z]{2,3}$", part):
             result.setdefault("country", part)
+            continue
+        # Known city?
+        if part in _AR_CITY_KEYWORDS or _is_likely_city(part):
+            result.setdefault("city", part)
+            continue
+        # First unassigned locality → city (or suburb if city already set)
+        if "city" not in result:
+            result["city"] = part
+        elif "suburb" not in result:
+            result["suburb"] = part
+        elif "state" not in result:
+            result["state"] = part
 
     return result
+
+
+def _is_likely_city(text: str) -> bool:
+    """Simple heuristic: is this likely a city/area name rather than a street?
+
+    Cities tend to be short (1-2 words) without street keywords.
+    """
+    if _STREET_RE.search(text):
+        return False
+    # Very short single words without numbers are likely area names in certain contexts
+    # but we can't be sure — return False to avoid false positives
+    return False

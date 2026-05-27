@@ -35,13 +35,118 @@ from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATC
 from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
 from shared.ranking import compute_offline_rank
 from shared.centroid import centroid_latlon
-from shared.address import extract_address_components, build_full_address, has_address
+from shared.address import extract_address_components, build_full_address, has_address, normalize_address_text
 
 INDEX = "osm_places"
 
 MAPPING = {
     "settings": {
         "index": {"number_of_replicas": 0},
+        "analysis": {
+            "char_filter": {
+                # Normalize Arabic characters at char level before tokenization
+                "arabic_normalize_char": {
+                    "type": "pattern_replace",
+                    "pattern": "[\u0640]",  # tatweel
+                    "replacement": "",
+                },
+            },
+            "filter": {
+                # English street-type synonyms (bidirectional)
+                "street_synonyms_en": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "st, street",
+                        "rd, road",
+                        "ave, av, avenue",
+                        "blvd, bvd, boulevard",
+                        "ln, lane",
+                        "dr, drive",
+                        "pl, place",
+                        "ct, court",
+                        "sq, square",
+                        "hwy, highway",
+                        "cres, crescent",
+                        "terr, terrace",
+                        "pkwy, parkway",
+                    ],
+                },
+                # Arabic street-type synonyms
+                "street_synonyms_ar": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "ش, شارع",
+                        "ط, طريق",
+                        "م, ميدان",
+                    ],
+                },
+                # Edge n-gram for autocomplete / prefix matching
+                "edge_ngram_filter": {
+                    "type": "edge_ngram",
+                    "min_gram": 2,
+                    "max_gram": 15,
+                },
+                # Arabic normalization (alef, taa marbuta, etc.)
+                "arabic_normalization": {
+                    "type": "arabic_normalization",
+                },
+            },
+            "normalizer": {
+                "lowercase": {
+                    "type": "custom",
+                    "filter": ["lowercase"],
+                },
+            },
+            "analyzer": {
+                # Primary address analyzer: synonyms + lowercase
+                "address_standard": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                    ],
+                },
+                # Edge n-gram analyzer for autocomplete (index-time only)
+                "address_autocomplete": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                        "edge_ngram_filter",
+                    ],
+                },
+                # Search analyzer: same as address_standard but NO edge n-gram
+                "address_search": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                    ],
+                },
+                # Arabic-optimized analyzer for name fields
+                "arabic_name": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                    ],
+                },
+            },
+        },
     },
     "mappings": {
         "properties": {
@@ -49,17 +154,31 @@ MAPPING = {
             "osm_type": {"type": "keyword"},
             "name": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "arabic_name",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "name_en": {
                 "type": "text",
                 "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "tags_text": {
                 "type": "text",
-                "analyzer": "standard",
+                "analyzer": "arabic_name",
             },
             "tags": {"type": "object", "enabled": False},
             "geom": {"type": "geo_shape"},
@@ -75,23 +194,63 @@ MAPPING = {
                 "similarity": "cosine",
             },
             # ── address fields ────────────────────────────────────────────
-            "addr_housenumber": {"type": "keyword"},
+            "addr_housenumber": {
+                "type": "keyword",
+                "normalizer": "lowercase",
+            },
             "addr_street": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "address_standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "addr_city": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "address_standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "addr_postcode": {"type": "keyword"},
             "addr_country":  {"type": "keyword"},
-            "addr_suburb":   {"type": "text"},
-            "addr_state":    {"type": "text"},
-            "full_address":  {"type": "text", "analyzer": "standard"},
-            "has_address":   {"type": "boolean"},
+            "addr_suburb": {
+                "type": "text",
+                "analyzer": "address_standard",
+                "fields": {
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "addr_state": {
+                "type": "text",
+                "analyzer": "address_standard",
+            },
+            "full_address": {
+                "type": "text",
+                "analyzer": "address_standard",
+                "fields": {
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "has_address": {"type": "boolean"},
         }
     },
 }
@@ -244,7 +403,7 @@ async def run():
 
                 # address fields
                 addr = extract_address_components(tags)
-                full_addr = build_full_address(tags)
+                full_addr = normalize_address_text(build_full_address(tags))
 
                 doc = {
                     "_index": INDEX,

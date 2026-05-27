@@ -59,14 +59,112 @@ from shared.address import (
     build_full_address,
     is_address_query,
     parse_address_query,
+    normalize_address_text,
 )
 
 INDEX = "osm_places"
 
 # ── Elasticsearch index mapping ───────────────────────────────────────────
+# NOTE: This must stay in sync with es_inserter.py MAPPING.
 ES_MAPPING = {
     "settings": {
         "index": {"number_of_replicas": 0},
+        "analysis": {
+            "char_filter": {
+                "arabic_normalize_char": {
+                    "type": "pattern_replace",
+                    "pattern": "[\u0640]",
+                    "replacement": "",
+                },
+            },
+            "filter": {
+                "street_synonyms_en": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "st, street",
+                        "rd, road",
+                        "ave, av, avenue",
+                        "blvd, bvd, boulevard",
+                        "ln, lane",
+                        "dr, drive",
+                        "pl, place",
+                        "ct, court",
+                        "sq, square",
+                        "hwy, highway",
+                        "cres, crescent",
+                        "terr, terrace",
+                        "pkwy, parkway",
+                    ],
+                },
+                "street_synonyms_ar": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "ش, شارع",
+                        "ط, طريق",
+                        "م, ميدان",
+                    ],
+                },
+                "edge_ngram_filter": {
+                    "type": "edge_ngram",
+                    "min_gram": 2,
+                    "max_gram": 15,
+                },
+                "arabic_normalization": {
+                    "type": "arabic_normalization",
+                },
+            },
+            "normalizer": {
+                "lowercase": {
+                    "type": "custom",
+                    "filter": ["lowercase"],
+                },
+            },
+            "analyzer": {
+                "address_standard": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                    ],
+                },
+                "address_autocomplete": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                        "edge_ngram_filter",
+                    ],
+                },
+                "address_search": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                        "street_synonyms_en",
+                        "street_synonyms_ar",
+                    ],
+                },
+                "arabic_name": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "char_filter": ["arabic_normalize_char"],
+                    "filter": [
+                        "lowercase",
+                        "arabic_normalization",
+                    ],
+                },
+            },
+        },
     },
     "mappings": {
         "properties": {
@@ -74,17 +172,31 @@ ES_MAPPING = {
             "osm_type": {"type": "keyword"},
             "name": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "arabic_name",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "name_en": {
                 "type": "text",
                 "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "tags_text": {
                 "type": "text",
-                "analyzer": "standard",
+                "analyzer": "arabic_name",
             },
             "tags": {"type": "object", "enabled": False},
             "geom": {"type": "geo_shape"},
@@ -100,23 +212,63 @@ ES_MAPPING = {
                 "similarity": "cosine",
             },
             # ── address fields ────────────────────────────────────────────
-            "addr_housenumber": {"type": "keyword"},
+            "addr_housenumber": {
+                "type": "keyword",
+                "normalizer": "lowercase",
+            },
             "addr_street": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "address_standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "addr_city": {
                 "type": "text",
-                "analyzer": "standard",
-                "fields": {"keyword": {"type": "keyword"}},
+                "analyzer": "address_standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
             },
             "addr_postcode": {"type": "keyword"},
             "addr_country":  {"type": "keyword"},
-            "addr_suburb":   {"type": "text"},
-            "addr_state":    {"type": "text"},
-            "full_address":  {"type": "text", "analyzer": "standard"},
-            "has_address":   {"type": "boolean"},
+            "addr_suburb": {
+                "type": "text",
+                "analyzer": "address_standard",
+                "fields": {
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "addr_state": {
+                "type": "text",
+                "analyzer": "address_standard",
+            },
+            "full_address": {
+                "type": "text",
+                "analyzer": "address_standard",
+                "fields": {
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "has_address": {"type": "boolean"},
         }
     },
 }
@@ -420,15 +572,22 @@ async def geocode(
         }
     )
 
+    # Normalize query for better Arabic/abbreviation matching
+    q_norm = normalize_address_text(q)
+
     # text query – multi_match across name/name_en using best_fields so that
     # matching the query in EITHER field yields the same score (no double-counting
     # for places that happen to have the query language in both fields).
     should_clauses: list[dict] = [
-        # fuzzy token matching across all searchable fields
+        # fuzzy token matching across all searchable fields (including autocomplete)
         {
             "multi_match": {
-                "query": q,
-                "fields": ["name^5", "name_en^5", "tags_text"],
+                "query": q_norm,
+                "fields": [
+                    "name^5", "name.autocomplete^2",
+                    "name_en^5", "name_en.autocomplete^2",
+                    "tags_text",
+                ],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
@@ -436,7 +595,7 @@ async def geocode(
         # phrase boost: "New York" as a contiguous phrase (best of name or name_en)
         {
             "multi_match": {
-                "query": q,
+                "query": q_norm,
                 "fields": ["name", "name_en"],
                 "type": "phrase",
                 "boost": 10,
@@ -445,7 +604,7 @@ async def geocode(
         # all-tokens-required boost: every query word appears (best of name or name_en)
         {
             "multi_match": {
-                "query": q,
+                "query": q_norm,
                 "fields": ["name", "name_en"],
                 "type": "best_fields",
                 "operator": "and",
@@ -457,12 +616,35 @@ async def geocode(
     # When the query looks like a structured address, also search address fields
     if is_address_query(q):
         parsed_addr = parse_address_query(q)
+
+        # Cross-field search across address fields (lets "Tahrir Cairo" match)
         should_clauses.append(
-            {"match": {"full_address": {"query": q, "boost": 3, "fuzziness": "AUTO"}}}
+            {
+                "multi_match": {
+                    "query": q_norm,
+                    "fields": [
+                        "addr_street^4", "addr_street.autocomplete^2",
+                        "addr_city^3", "addr_city.autocomplete",
+                        "addr_suburb^2",
+                        "full_address^3", "full_address.autocomplete",
+                    ],
+                    "type": "cross_fields",
+                    "operator": "or",
+                    "minimum_should_match": "75%",
+                    "boost": 3,
+                }
+            }
+        )
+        # Phrase match on full_address
+        should_clauses.append(
+            {"match_phrase": {"full_address": {"query": q_norm, "boost": 5, "slop": 1}}}
         )
         if parsed_addr.get("street"):
             should_clauses.append(
-                {"match": {"addr_street": {"query": parsed_addr["street"], "boost": 4}}}
+                {"match_phrase": {"addr_street": {"query": parsed_addr["street"], "boost": 6, "slop": 1}}}
+            )
+            should_clauses.append(
+                {"match": {"addr_street": {"query": parsed_addr["street"], "fuzziness": "AUTO", "boost": 4}}}
             )
         if parsed_addr.get("city"):
             should_clauses.append(
@@ -470,7 +652,7 @@ async def geocode(
             )
         if parsed_addr.get("housenumber"):
             should_clauses.append(
-                {"term": {"addr_housenumber": parsed_addr["housenumber"]}}
+                {"term": {"addr_housenumber": {"value": parsed_addr["housenumber"].lower(), "boost": 5}}}
             )
 
     text_query: dict = {
@@ -610,14 +792,18 @@ async def address_search(
     - ``"123 Tahrir Street, Cairo"``  → parsed into housenumber + street + city
     - ``"Tahrir Street, Zamalek"``    → street + suburb/city
     - ``"شارع التحرير, القاهرة"``     → Arabic address
+    - ``"ش التحرير"``                 → abbreviated Arabic
     - ``"11511"``                     → postcode lookup
+    - ``"Cairo Tower"``               → name fallback (no addr:* required)
 
     Use the ``postcode``, ``city``, ``country`` query params to add hard filters
     on top of the free-text query.
 
     Results are ordered by: text relevance × (offline_rank + geo proximity).
-    Only elements that carry at least one ``addr:*`` tag are returned.
+    Searches addr:* fields first, then falls back to name/full-text if no
+    address-specific results are found.
     """
+    q_norm = normalize_address_text(q)
     parsed = parse_address_query(q)
 
     # Explicit query params override parsed components
@@ -630,12 +816,9 @@ async def address_search(
 
     must_clauses:   list[dict] = []
     should_clauses: list[dict] = []
-    filter_clauses: list[dict] = [{"term": {"has_address": True}}]
+    filter_clauses: list[dict] = []
 
     # ── hard filters ─────────────────────────────────────────────────────
-    if parsed.get("housenumber"):
-        must_clauses.append({"term": {"addr_housenumber": parsed["housenumber"]}})
-
     if parsed.get("postcode"):
         must_clauses.append({"term": {"addr_postcode": parsed["postcode"]}})
 
@@ -645,29 +828,119 @@ async def address_search(
     # City as hard filter only when supplied as explicit query param
     if city and parsed.get("city"):
         filter_clauses.append(
-            {"match": {"addr_city": {"query": parsed["city"], "operator": "or"}}}
+            {"match": {"addr_city": {"query": parsed["city"], "operator": "and"}}}
         )
 
     # ── scored should clauses ────────────────────────────────────────────
+
+    # 1. Cross-field search: the full normalized query across all address fields
+    #    This lets "Tahrir Cairo" match street=Tahrir + city=Cairo
+    should_clauses.append(
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": [
+                    "addr_street^5",
+                    "addr_street.autocomplete^2",
+                    "addr_city^3",
+                    "addr_city.autocomplete",
+                    "addr_suburb^2",
+                    "addr_suburb.autocomplete",
+                    "full_address^2",
+                    "full_address.autocomplete",
+                ],
+                "type": "cross_fields",
+                "operator": "or",
+                "minimum_should_match": "75%",
+            }
+        }
+    )
+
+    # 2. Phrase match on full_address for exact ordering boost
+    should_clauses.append(
+        {
+            "match_phrase": {
+                "full_address": {"query": q_norm, "boost": 8, "slop": 1}
+            }
+        }
+    )
+
+    # 3. Parsed component-specific boosts (higher precision)
     if parsed.get("street"):
+        # Exact phrase match on street
         should_clauses.append(
             {
-                "multi_match": {
-                    "query": parsed["street"],
-                    "fields": ["addr_street^4", "full_address^2"],
-                    "fuzziness": "AUTO",
+                "match_phrase": {
+                    "addr_street": {"query": parsed["street"], "boost": 10, "slop": 1}
                 }
             }
         )
+        # Fuzzy token match on street
+        should_clauses.append(
+            {
+                "match": {
+                    "addr_street": {
+                        "query": parsed["street"],
+                        "fuzziness": "AUTO",
+                        "boost": 4,
+                    }
+                }
+            }
+        )
+        # Autocomplete match on street
+        should_clauses.append(
+            {
+                "match": {
+                    "addr_street.autocomplete": {
+                        "query": parsed["street"],
+                        "boost": 2,
+                    }
+                }
+            }
+        )
+
+    if parsed.get("housenumber"):
+        # Housenumber as case-insensitive term (normalizer handles case)
+        should_clauses.append(
+            {"term": {"addr_housenumber": {"value": parsed["housenumber"].lower(), "boost": 6}}}
+        )
+
     # City as boost (when not already a hard filter)
     if parsed.get("city") and not city:
         should_clauses.append(
-            {"match": {"addr_city": {"query": parsed["city"], "boost": 2}}}
+            {"match": {"addr_city": {"query": parsed["city"], "boost": 3}}}
+        )
+        should_clauses.append(
+            {"match": {"addr_city.autocomplete": {"query": parsed["city"], "boost": 1}}}
         )
 
-    # Full-address fallback: always present so we can still find partial matches
+    if parsed.get("suburb"):
+        should_clauses.append(
+            {"match": {"addr_suburb": {"query": parsed["suburb"], "boost": 2}}}
+        )
+
+    # 4. Name fallback — search POI/place names so "Cairo Tower" still works
     should_clauses.append(
-        {"match": {"full_address": {"query": q, "fuzziness": "AUTO", "boost": 1}}}
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": ["name^3", "name.autocomplete^1", "name_en^3", "name_en.autocomplete^1"],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+                "boost": 2,
+            }
+        }
+    )
+
+    # 5. Tags-text fallback for broad matching
+    should_clauses.append(
+        {"match": {"tags_text": {"query": q_norm, "boost": 0.5}}}
+    )
+
+    # ── Prefer results with addr:* data but don't exclude others ─────────
+    # Instead of filtering has_address=true, we boost it
+    should_clauses.append(
+        {"term": {"has_address": {"value": True, "boost": 3}}}
     )
 
     text_query: dict = {
@@ -675,35 +948,53 @@ async def address_search(
             "must":   must_clauses,
             "should": should_clauses,
             "filter": filter_clauses,
-            "minimum_should_match": 1 if should_clauses else 0,
+            "minimum_should_match": 1,
         }
     }
 
     # ── scoring functions ────────────────────────────────────────────────
     functions: list[dict] = [{"weight": 1.0}]
+
+    # offline_rank: use linear (no log compression) so main streets clearly
+    # outrank minor POIs in address context
     functions.append(
         {
             "field_value_factor": {
                 "field": "offline_rank",
+                "modifier": "none",
+                "factor": 1,
+                "missing": 0,
+            },
+            "weight": 1.5,
+        }
+    )
+
+    # popularity boost
+    functions.append(
+        {
+            "field_value_factor": {
+                "field": "popularity",
                 "modifier": "log1p",
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 3,
+            "weight": 0.5,
         }
     )
+
     if lat is not None and lon is not None:
-        # Tight geo decay for address search (500 m scale)
+        # Tight geo decay for address search (1 km scale)
         functions.append(
             {
                 "gauss": {
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
-                        "scale": "500m",
+                        "scale": "1km",
+                        "offset": "100m",
                         "decay": 0.5,
                     }
                 },
-                "weight": 4,
+                "weight": 5,
             }
         )
 
@@ -723,12 +1014,14 @@ async def address_search(
 
     return {
         "query": q,
+        "normalized": q_norm,
         "parsed": parsed,
         "results": [
             {
                 "osm_id":          h["_source"]["osm_id"],
                 "osm_type":        h["_source"].get("osm_type", ""),
                 "name":            h["_source"].get("name", ""),
+                "name_en":         h["_source"].get("name_en", ""),
                 "full_address":    h["_source"].get("full_address", ""),
                 "addr_housenumber": h["_source"].get("addr_housenumber", ""),
                 "addr_street":     h["_source"].get("addr_street", ""),
