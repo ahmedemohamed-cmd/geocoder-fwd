@@ -347,18 +347,20 @@ async def run():
                     if is_conn_err:
                         # Only one worker should reconnect at a time
                         async with reconnect_lock:
-                            # Double-check: another worker may have already reconnected
-                            if conn_state["nc"].is_closed:
-                                print(f"[es-inserter] Worker {worker_id}: Reconnecting...", flush=True)
-                                try:
+                            try:
+                                if conn_state["nc"].is_closed:
+                                    print(f"[es-inserter] Worker {worker_id}: Reconnecting...", flush=True)
                                     conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
-                                    conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
-                                    print(f"[es-inserter] Worker {worker_id}: Reconnected", flush=True)
-                                except Exception as reconnect_err:
-                                    print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
-                                    await asyncio.sleep(5)
-                                    continue
-                        break  # Retry fetch with new connection
+                                # Always recreate subscription — the consumer may
+                                # be missing even when the TCP connection is alive
+                                # (e.g. ServiceUnavailableError).
+                                conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
+                                print(f"[es-inserter] Worker {worker_id}: Reconnected / resubscribed", flush=True)
+                            except Exception as reconnect_err:
+                                print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
+                                await asyncio.sleep(5)
+                                continue
+                        break  # Retry fetch with new connection/subscription
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
                         delay = min(1 * (2 ** fetch_attempt), 10)
                         await asyncio.sleep(delay)

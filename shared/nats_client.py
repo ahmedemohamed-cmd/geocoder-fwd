@@ -110,20 +110,28 @@ async def reconnect(nc, js):
 
 
 async def subscribe(js, consumer_name):
-    """Create a durable pull subscription for a consumer with retry logic."""
+    """Create a durable pull subscription for a consumer with retry logic.
+
+    After obtaining the subscription object we verify with ``consumer_info``
+    that the server-side consumer really exists.  Earlier versions silently
+    returned a local subscription even when the server-side consumer creation
+    failed (e.g. due to a concurrent stream update), leading to
+    ``ServiceUnavailableError`` on every ``fetch()``.
+    """
     max_retries = 5
     for attempt in range(max_retries):
+        sub = None
         try:
             await js.consumer_info(NATS_STREAM, consumer_name)
             logger.info("Using existing consumer: %s", consumer_name)
-            return await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
+            sub = await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
         except Exception as e:
             logger.debug("Consumer %s not found (attempt %d/%d): %s", consumer_name, attempt + 1, max_retries, e)
 
             # Consumer doesn't exist, create it with proper config
             try:
                 logger.info("Creating new consumer: %s", consumer_name)
-                return await js.pull_subscribe(
+                sub = await js.pull_subscribe(
                     NATS_SUBJECT,
                     durable=consumer_name,
                     stream=NATS_STREAM,
@@ -137,7 +145,7 @@ async def subscribe(js, consumer_name):
                 # Fallback to simple subscription
                 try:
                     logger.debug("Trying simple subscription for: %s", consumer_name)
-                    return await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
+                    sub = await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
                 except Exception as e3:
                     any_transient = is_transient_error(e) or is_transient_error(e2) or is_transient_error(e3)
                     if any_transient and attempt < max_retries - 1:
@@ -146,5 +154,23 @@ async def subscribe(js, consumer_name):
                         continue
                     logger.error("Failed to create subscription after %d attempts: %s", max_retries, e3)
                     raise
+
+        # Verify the consumer actually exists on the server
+        if sub is not None:
+            try:
+                await js.consumer_info(NATS_STREAM, consumer_name)
+                logger.info("Verified consumer %s exists on server", consumer_name)
+                return sub
+            except Exception as verify_err:
+                logger.warning(
+                    "Consumer %s not found on server after subscribe (attempt %d/%d): %s",
+                    consumer_name, attempt + 1, max_retries, verify_err,
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                raise RuntimeError(
+                    f"Consumer {consumer_name} was not created on the server"
+                ) from verify_err
 
     raise RuntimeError(f"Failed to subscribe consumer {consumer_name} after {max_retries} attempts")
