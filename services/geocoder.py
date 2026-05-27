@@ -575,6 +575,16 @@ async def geocode(
     # Normalize query for better Arabic/abbreviation matching
     q_norm = normalize_address_text(q)
 
+    # ── Auto address detection & decomposition ────────────────────────────
+    # Always attempt to detect and decompose the query into address components.
+    # This drives two things:
+    #   1. Additional address-specific should clauses for scoring
+    #   2. A response field showing the decomposition to the client
+    addr_detected = is_address_query(q)
+    parsed_addr: dict = {}
+    if addr_detected:
+        parsed_addr = parse_address_query(q)
+
     # text query – multi_match across name/name_en using best_fields so that
     # matching the query in EITHER field yields the same score (no double-counting
     # for places that happen to have the query language in both fields).
@@ -613,47 +623,107 @@ async def geocode(
         },
     ]
 
-    # When the query looks like a structured address, also search address fields
-    if is_address_query(q):
-        parsed_addr = parse_address_query(q)
-
-        # Cross-field search across address fields (lets "Tahrir Cairo" match)
+    # ── Address-specific search layers (active when address detected) ─────
+    if addr_detected:
+        # Layer 1: Cross-field search across ALL address fields simultaneously.
+        # This is the key improvement — "Tahrir Cairo" will match documents where
+        # addr_street contains "Tahrir" AND addr_city contains "Cairo" even though
+        # neither field alone contains both words.
         should_clauses.append(
             {
                 "multi_match": {
                     "query": q_norm,
                     "fields": [
-                        "addr_street^4", "addr_street.autocomplete^2",
-                        "addr_city^3", "addr_city.autocomplete",
+                        "addr_street^5",
+                        "addr_street.autocomplete^2",
+                        "addr_city^3",
+                        "addr_city.autocomplete^1.5",
                         "addr_suburb^2",
-                        "full_address^3", "full_address.autocomplete",
+                        "addr_suburb.autocomplete",
+                        "full_address^3",
+                        "full_address.autocomplete^1.5",
                     ],
                     "type": "cross_fields",
                     "operator": "or",
                     "minimum_should_match": "75%",
-                    "boost": 3,
+                    "boost": 4,
                 }
             }
         )
-        # Phrase match on full_address
+
+        # Layer 2: Phrase match on full_address — rewards documents where the
+        # query appears as a contiguous phrase in the stored address string
         should_clauses.append(
-            {"match_phrase": {"full_address": {"query": q_norm, "boost": 5, "slop": 1}}}
+            {"match_phrase": {"full_address": {"query": q_norm, "boost": 6, "slop": 2}}}
         )
+
+        # Layer 3: Component-specific targeted matching from the decomposition.
+        # Each parsed component gets its own clause with high precision.
         if parsed_addr.get("street"):
+            street = parsed_addr["street"]
+            # Phrase match: "شارع التحرير" or "Main Street" as ordered tokens
             should_clauses.append(
-                {"match_phrase": {"addr_street": {"query": parsed_addr["street"], "boost": 6, "slop": 1}}}
+                {"match_phrase": {"addr_street": {"query": street, "boost": 10, "slop": 1}}}
             )
+            # Fuzzy token match: tolerates typos in street name
             should_clauses.append(
-                {"match": {"addr_street": {"query": parsed_addr["street"], "fuzziness": "AUTO", "boost": 4}}}
+                {"match": {"addr_street": {"query": street, "fuzziness": "AUTO", "boost": 5}}}
             )
-        if parsed_addr.get("city"):
+            # Autocomplete: prefix matching for partial street names
             should_clauses.append(
-                {"match": {"addr_city": {"query": parsed_addr["city"], "boost": 2}}}
+                {"match": {"addr_street.autocomplete": {"query": street, "boost": 3}}}
             )
+            # Also match street name against the place name field (many streets
+            # are indexed as named ways/linestrings with the street in "name")
+            should_clauses.append(
+                {"match_phrase": {"name": {"query": street, "boost": 4, "slop": 1}}}
+            )
+
         if parsed_addr.get("housenumber"):
+            hn = parsed_addr["housenumber"].lower()
+            # Exact term match on housenumber (uses lowercase normalizer)
             should_clauses.append(
-                {"term": {"addr_housenumber": {"value": parsed_addr["housenumber"].lower(), "boost": 5}}}
+                {"term": {"addr_housenumber": {"value": hn, "boost": 8}}}
             )
+
+        if parsed_addr.get("city"):
+            city_val = parsed_addr["city"]
+            # City match boosts results in the right locality
+            should_clauses.append(
+                {"match": {"addr_city": {"query": city_val, "boost": 3}}}
+            )
+            should_clauses.append(
+                {"match": {"addr_city.autocomplete": {"query": city_val, "boost": 1.5}}}
+            )
+            # Also check name field — cities themselves are named places
+            should_clauses.append(
+                {"match": {"name": {"query": city_val, "boost": 2}}}
+            )
+
+        if parsed_addr.get("suburb"):
+            suburb_val = parsed_addr["suburb"]
+            should_clauses.append(
+                {"match": {"addr_suburb": {"query": suburb_val, "boost": 2}}}
+            )
+            should_clauses.append(
+                {"match": {"addr_suburb.autocomplete": {"query": suburb_val, "boost": 1}}}
+            )
+
+        if parsed_addr.get("postcode"):
+            should_clauses.append(
+                {"term": {"addr_postcode": {"value": parsed_addr["postcode"], "boost": 6}}}
+            )
+
+        if parsed_addr.get("country"):
+            should_clauses.append(
+                {"term": {"addr_country": {"value": parsed_addr["country"], "boost": 4}}}
+            )
+
+        # Layer 4: Boost documents that have address data (they're more likely
+        # to be what the user wants when searching for an address)
+        should_clauses.append(
+            {"term": {"has_address": {"value": True, "boost": 2}}}
+        )
 
     text_query: dict = {
         "bool": {
@@ -739,6 +809,9 @@ async def geocode(
             "vectors_enabled": use_vectors,
             "ai_enabled": use_ai,
         },
+        # Address decomposition: shows what the system understood from the query
+        "address_detected": addr_detected,
+        "address_parsed": parsed_addr if addr_detected else None,
         "results": results,
     }
 
