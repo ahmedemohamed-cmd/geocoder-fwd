@@ -255,37 +255,100 @@ async def publish_csv(filepath: str, js):
     return published
 
 
+def _is_ndjson(filepath: str) -> bool:
+    """Detect newline-delimited GeoJSON (one Feature per line) vs FeatureCollection."""
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        first_char = f.read(1).strip()
+        if not first_char:
+            return False
+        f.seek(0)
+        first_line = f.readline().strip()
+        if not first_line:
+            return False
+        try:
+            obj = json.loads(first_line)
+            # If the first line is a Feature (not a FeatureCollection), it's NDJSON
+            return obj.get("type") == "Feature"
+        except json.JSONDecodeError:
+            return False
+
+
+def _count_lines(filepath: str) -> int:
+    """Count lines in a file for progress tracking."""
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        return sum(1 for _ in f)
+
+
 async def publish_geojson(filepath: str, js):
-    """Read a GeoJSON file and publish features as NATS messages."""
+    """Read a GeoJSON file and publish features as NATS messages.
+
+    Supports both standard FeatureCollection and newline-delimited GeoJSON
+    (NDJSON), which is the format OpenAddresses actually distributes.
+    """
     basename = os.path.basename(filepath)
     print(f"[oa-watcher] Processing GeoJSON: {basename}", flush=True)
 
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        data = json.load(f)
+    ndjson = _is_ndjson(filepath)
 
-    features = data.get("features", [])
-    progress = ProgressTracker(f"oa-watcher {basename}", total=len(features))
+    if ndjson:
+        print(f"[oa-watcher] Detected newline-delimited GeoJSON (NDJSON)", flush=True)
+        total = _count_lines(filepath)
+        features = None  # will stream line-by-line
+    else:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+        features = data.get("features", [])
+        total = len(features)
+
+    progress = ProgressTracker(f"oa-watcher {basename}", total=total)
 
     published = 0
     consecutive_failures = 0
     batch: list[bytes] = []
 
-    for row_idx, feature in enumerate(features):
+    def _process_feature(feature: dict, row_idx: int) -> bool:
+        """Process a single feature. Returns False if we should abort."""
+        nonlocal published, consecutive_failures
         msg = _parse_geojson_feature(feature, row_idx)
         if msg is None:
             progress.skip()
-            continue
-
+            return True
         batch.append(json.dumps(msg).encode())
+        return True
 
+    async def _flush_if_full() -> bool:
+        """Flush batch if full. Returns False if we should abort."""
+        nonlocal published, consecutive_failures
         if len(batch) >= BATCH_PUBLISH:
             published, consecutive_failures = await _publish_batch(
                 js, batch, published, consecutive_failures, progress
             )
+            batch.clear()
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"[oa-watcher] Too many failures, aborting {basename}", flush=True)
+                return False
+        return True
+
+    if ndjson:
+        # Stream line-by-line to avoid loading entire file into memory
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            for row_idx, line in enumerate(f):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    feature = json.loads(line)
+                except json.JSONDecodeError:
+                    progress.skip()
+                    continue
+                _process_feature(feature, row_idx)
+                if not await _flush_if_full():
+                    break
+    else:
+        for row_idx, feature in enumerate(features):
+            _process_feature(feature, row_idx)
+            if not await _flush_if_full():
                 break
-            batch.clear()
 
     if batch and consecutive_failures < MAX_CONSECUTIVE_FAILURES:
         published, consecutive_failures = await _publish_batch(
@@ -345,30 +408,36 @@ async def run():
     print("[oa-watcher] Starting OpenAddresses watcher service ...", flush=True)
     os.makedirs(OA_DATA_DIR, exist_ok=True)
 
-    csv_files = sorted(glob.glob(os.path.join(OA_DATA_DIR, "*.csv")))
+    # Scan recursively — OA archives often unzip into nested dirs
+    # (e.g. collection-ca/ca/on/york-addresses-county.geojson)
+    csv_files = sorted(glob.glob(os.path.join(OA_DATA_DIR, "**", "*.csv"), recursive=True))
     geojson_files = sorted(
-        glob.glob(os.path.join(OA_DATA_DIR, "*.geojson"))
-        + glob.glob(os.path.join(OA_DATA_DIR, "*.geojson.gz"))
+        glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson"), recursive=True)
+        + glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson.gz"), recursive=True)
     )
+    # Filter out .meta files that OpenAddresses ships alongside data files
+    geojson_files = [f for f in geojson_files if not f.endswith(".meta")]
 
     all_files = csv_files + geojson_files
     if not all_files:
         print(
-            f"[oa-watcher] No CSV or GeoJSON files found in {OA_DATA_DIR}. "
+            f"[oa-watcher] No CSV or GeoJSON files found in {OA_DATA_DIR} (scanned recursively). "
             f"Place OpenAddresses files there and restart.",
             flush=True,
         )
         return
 
-    print(f"[oa-watcher] Found {len(csv_files)} CSV, {len(geojson_files)} GeoJSON files", flush=True)
+    print(f"[oa-watcher] Found {len(csv_files)} CSV, {len(geojson_files)} GeoJSON files (recursive scan)", flush=True)
 
     nc, js = await nats_client.connect()
 
     total_published = 0
     for filepath in all_files:
+        # Show path relative to OA_DATA_DIR for readability
+        rel_path = os.path.relpath(filepath, OA_DATA_DIR)
         lock_file = f"{filepath}.processed"
         if os.path.exists(lock_file):
-            print(f"[oa-watcher] Skipping {os.path.basename(filepath)} (already processed)", flush=True)
+            print(f"[oa-watcher] Skipping {rel_path} (already processed)", flush=True)
             continue
 
         try:
@@ -384,10 +453,10 @@ async def run():
             # Mark as processed
             with open(lock_file, "w") as lf:
                 lf.write(f"processed: {filepath}\n")
-            print(f"[oa-watcher] Completed {os.path.basename(filepath)}", flush=True)
+            print(f"[oa-watcher] Completed {rel_path}", flush=True)
 
         except Exception as e:
-            print(f"[oa-watcher] Error processing {os.path.basename(filepath)}: {e}", flush=True)
+            print(f"[oa-watcher] Error processing {rel_path}: {e}", flush=True)
             import traceback
             traceback.print_exc()
 
