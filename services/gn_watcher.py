@@ -41,6 +41,7 @@ import zipfile
 
 from shared.config import GN_DATA_DIR, NATS_SUBJECT
 from shared import nats_client
+from shared.progress import ProgressTracker
 
 BATCH_PUBLISH = 50
 MAX_RETRIES = 10
@@ -88,6 +89,15 @@ _FEATURE_CODE_TO_PLACE: dict[str, str] = {
     "PPLQ": "hamlet",         # abandoned populated place
     "PPLR": "hamlet",         # religious populated place
     "PPLW": "hamlet",         # destroyed populated place
+    # A — administrative (place tag for ranking)
+    "PCLI": "country",        # independent political entity
+    "PCLD": "country",        # dependent political entity
+    "PCLF": "country",        # freely associated state
+    "PCLS": "country",        # semi-independent political entity
+    "ADM1": "state",          # first-order admin division
+    "ADM1H": "state",
+    "ADM2": "region",         # second-order admin division
+    "ADM2H": "region",
 }
 
 # Feature_class → broad OSM-compatible tag key
@@ -123,55 +133,6 @@ _FEATURE_CODE_ADMIN_LEVEL: dict[str, int] = {
     "ADMD": 6,   # administrative division
     "ADMDH": 6,
 }
-
-
-class ProgressTracker:
-    """Simple progress tracker that logs updates at regular intervals."""
-
-    def __init__(self, description: str, total: int = 0, log_interval: int = 5):
-        self.description = description
-        self.total = total
-        self.log_interval = log_interval
-        self.count = 0
-        self.skipped = 0
-        self.start_time = time.time()
-        self.last_log_time = self.start_time
-
-    def update(self, n: int = 1):
-        self.count += n
-        now = time.time()
-        if now - self.last_log_time >= self.log_interval:
-            self._log()
-            self.last_log_time = now
-
-    def skip(self, n: int = 1):
-        self.skipped += n
-
-    def _log(self):
-        elapsed = time.time() - self.start_time
-        rate = self.count / elapsed if elapsed > 0 else 0
-        if self.total > 0:
-            pct = self.count / self.total * 100
-            print(
-                f"[{self.description}] {self.count}/{self.total} ({pct:.1f}%) "
-                f"- {rate:.0f} items/sec  (skipped {self.skipped})",
-                flush=True,
-            )
-        else:
-            print(
-                f"[{self.description}] {self.count} items - {rate:.0f} items/sec"
-                f"  (skipped {self.skipped})",
-                flush=True,
-            )
-
-    def close(self):
-        self._log()
-        elapsed = time.time() - self.start_time
-        print(
-            f"[{self.description}] Completed in {elapsed:.1f}s — "
-            f"{self.count} published, {self.skipped} skipped",
-            flush=True,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +183,12 @@ def _parse_geonames_row(fields: list[str]) -> dict | None:
     if asciiname and asciiname != name:
         tags["name:en"] = asciiname
 
-    # Alternate names (first few, for search coverage)
+    # Alternate names — limit to first 10 to avoid bloating the index
+    # (GeoNames can have 10,000+ characters of comma-separated names)
     if alternatenames:
-        tags["alt_name"] = alternatenames
+        names = [n.strip() for n in alternatenames.split(",")[:10] if n.strip()]
+        if names:
+            tags["alt_name"] = ", ".join(names)
 
     # Country code
     if country_code:
@@ -336,7 +300,8 @@ async def publish_tsv(filepath: str, js):
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     print(f"[gn-watcher] Too many failures, aborting {basename}", flush=True)
-                    break
+                    progress.close()
+                    return -1
                 batch.clear()
 
     # Flush remainder
@@ -361,24 +326,21 @@ async def _publish_batch(
     for payload in batch:
         for attempt in range(MAX_RETRIES):
             try:
-                ack = await js.publish(NATS_SUBJECT, payload, timeout=30)
-                if ack:
-                    published += 1
-                    consecutive_failures = 0
-                    progress.update()
-                    break
-                else:
-                    consecutive_failures += 1
-                    if attempt < MAX_RETRIES - 1:
-                        await asyncio.sleep(0.5 * (attempt + 1))
+                await js.publish(NATS_SUBJECT, payload, timeout=30)
+                published += 1
+                consecutive_failures = 0
+                progress.update()
+                break
             except Exception as e:
-                consecutive_failures += 1
                 err_str = str(e).lower()
-                if "payload" in err_str and ("large" in err_str or "exceeded" in err_str):
+                # Permanent error — message too large, skip it
+                if any(kw in err_str for kw in ("payload", "large", "exceeded")):
                     progress.skip()
                     break
+                # Transient error — retry with exponential backoff
+                consecutive_failures += 1
                 if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    await asyncio.sleep(min(2 ** attempt, 30))
                 else:
                     print(f"[gn-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}", flush=True)
 
@@ -434,12 +396,15 @@ async def run():
 
         try:
             count = await publish_tsv(filepath, js)
-            total_published += count
+            total_published += max(count, 0)
 
-            # Mark as processed
-            with open(lock_file, "w") as lf:
-                lf.write(f"processed: {filepath}\n")
-            print(f"[gn-watcher] Completed {os.path.basename(filepath)}", flush=True)
+            # Only mark as processed if we didn't abort early
+            if count >= 0:
+                with open(lock_file, "w") as lf:
+                    lf.write(f"processed: {filepath}\ncount: {count}\n")
+                print(f"[gn-watcher] Completed {os.path.basename(filepath)}", flush=True)
+            else:
+                print(f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next run", flush=True)
 
         except Exception as e:
             print(f"[gn-watcher] Error processing {os.path.basename(filepath)}: {e}", flush=True)

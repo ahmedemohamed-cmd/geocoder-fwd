@@ -27,12 +27,14 @@ Usage:
 import asyncio
 import csv
 import glob
+import hashlib
 import json
 import os
 import time
 
 from shared.config import OA_DATA_DIR, NATS_SUBJECT
 from shared import nats_client
+from shared.progress import ProgressTracker
 
 BATCH_PUBLISH = 50
 # Maximum retries per message
@@ -40,63 +42,21 @@ MAX_RETRIES = 10
 MAX_CONSECUTIVE_FAILURES = 50
 
 
-class ProgressTracker:
-    """Simple progress tracker that logs updates at regular intervals."""
-
-    def __init__(self, description: str, total: int = 0, log_interval: int = 5):
-        self.description = description
-        self.total = total
-        self.log_interval = log_interval
-        self.count = 0
-        self.skipped = 0
-        self.start_time = time.time()
-        self.last_log_time = self.start_time
-
-    def update(self, n: int = 1):
-        self.count += n
-        now = time.time()
-        if now - self.last_log_time >= self.log_interval:
-            self._log()
-            self.last_log_time = now
-
-    def skip(self, n: int = 1):
-        self.skipped += n
-
-    def _log(self):
-        elapsed = time.time() - self.start_time
-        rate = self.count / elapsed if elapsed > 0 else 0
-        if self.total > 0:
-            pct = self.count / self.total * 100
-            print(
-                f"[{self.description}] {self.count}/{self.total} ({pct:.1f}%) "
-                f"- {rate:.0f} items/sec  (skipped {self.skipped})",
-                flush=True,
-            )
-        else:
-            print(
-                f"[{self.description}] {self.count} items - {rate:.0f} items/sec"
-                f"  (skipped {self.skipped})",
-                flush=True,
-            )
-
-    def close(self):
-        self._log()
-        elapsed = time.time() - self.start_time
-        print(
-            f"[{self.description}] Completed in {elapsed:.1f}s — "
-            f"{self.count} published, {self.skipped} skipped",
-            flush=True,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Row parsing
 # ---------------------------------------------------------------------------
 
-def _parse_csv_row(row: dict, row_idx: int) -> dict | None:
+def _source_hash(filepath: str) -> str:
+    """Short deterministic hash of a file path for use in ID generation."""
+    return hashlib.md5(filepath.encode()).hexdigest()[:12]
+
+
+def _parse_csv_row(row: dict, row_idx: int, src_hash: str = "") -> dict | None:
     """Convert one OpenAddresses CSV row to a NATS message dict.
 
     Returns None if the row is unusable (missing coordinates or address data).
+    *src_hash* is a short hash of the source file path, used to guarantee
+    unique IDs across files when the HASH column is missing.
     """
     lon_raw = (row.get("LON") or "").strip()
     lat_raw = (row.get("LAT") or "").strip()
@@ -136,9 +96,13 @@ def _parse_csv_row(row: dict, row_idx: int) -> dict | None:
     if (postcode := (row.get("POSTCODE") or "").strip()):
         tags["addr:postcode"] = postcode
 
-    # Generate a stable ID — prefer the HASH column, fall back to row index
+    # Generate a stable ID — prefer the HASH column, fall back to
+    # source_hash + row_idx to avoid collisions across files.
     oa_hash = (row.get("HASH") or "").strip()
-    oa_id_suffix = oa_hash if oa_hash else str(row_idx)
+    if oa_hash:
+        oa_id_suffix = oa_hash
+    else:
+        oa_id_suffix = f"{src_hash}_{row_idx}" if src_hash else str(row_idx)
 
     return {
         "osm_id": f"oa{oa_id_suffix}",
@@ -150,8 +114,11 @@ def _parse_csv_row(row: dict, row_idx: int) -> dict | None:
     }
 
 
-def _parse_geojson_feature(feature: dict, row_idx: int) -> dict | None:
-    """Convert one OpenAddresses GeoJSON Feature to a NATS message dict."""
+def _parse_geojson_feature(feature: dict, row_idx: int, src_hash: str = "") -> dict | None:
+    """Convert one OpenAddresses GeoJSON Feature to a NATS message dict.
+
+    *src_hash* disambiguates row-index-based IDs across files.
+    """
     geom = feature.get("geometry")
     props = feature.get("properties", {})
 
@@ -162,7 +129,12 @@ def _parse_geojson_feature(feature: dict, row_idx: int) -> dict | None:
     if not coords or len(coords) < 2:
         return None
 
-    lon, lat = coords[0], coords[1]
+    try:
+        lon = float(coords[0])
+        lat = float(coords[1])
+    except (TypeError, ValueError):
+        return None
+
     if not (-180 <= lon <= 180 and -90 <= lat <= 90):
         return None
 
@@ -190,7 +162,10 @@ def _parse_geojson_feature(feature: dict, row_idx: int) -> dict | None:
             tags[osm_key] = val
 
     oa_hash = (str(props.get("HASH") or props.get("hash") or "")).strip()
-    oa_id_suffix = oa_hash if oa_hash else str(row_idx)
+    if oa_hash:
+        oa_id_suffix = oa_hash
+    else:
+        oa_id_suffix = f"{src_hash}_{row_idx}" if src_hash else str(row_idx)
 
     return {
         "osm_id": f"oa{oa_id_suffix}",
@@ -222,13 +197,14 @@ async def publish_csv(filepath: str, js):
 
     published = 0
     consecutive_failures = 0
+    shash = _source_hash(filepath)
 
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
         batch: list[bytes] = []
 
         for row_idx, row in enumerate(reader):
-            msg = _parse_csv_row(row, row_idx)
+            msg = _parse_csv_row(row, row_idx, src_hash=shash)
             if msg is None:
                 progress.skip()
                 continue
@@ -241,7 +217,8 @@ async def publish_csv(filepath: str, js):
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     print(f"[oa-watcher] Too many failures, aborting {basename}", flush=True)
-                    break
+                    progress.close()
+                    return -1
                 batch.clear()
 
         # Flush remainder
@@ -258,19 +235,20 @@ async def publish_csv(filepath: str, js):
 def _is_ndjson(filepath: str) -> bool:
     """Detect newline-delimited GeoJSON (one Feature per line) vs FeatureCollection."""
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        first_char = f.read(1).strip()
-        if not first_char:
-            return False
-        f.seek(0)
-        first_line = f.readline().strip()
-        if not first_line:
-            return False
-        try:
-            obj = json.loads(first_line)
-            # If the first line is a Feature (not a FeatureCollection), it's NDJSON
-            return obj.get("type") == "Feature"
-        except json.JSONDecodeError:
-            return False
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                return (
+                    obj.get("type") == "Feature"
+                    and "geometry" in obj
+                    and "properties" in obj
+                )
+            except json.JSONDecodeError:
+                return False
+    return False
 
 
 def _count_lines(filepath: str) -> int:
@@ -284,15 +262,26 @@ async def publish_geojson(filepath: str, js):
 
     Supports both standard FeatureCollection and newline-delimited GeoJSON
     (NDJSON), which is the format OpenAddresses actually distributes.
+    Also supports gzip-compressed files (.geojson.gz).
     """
+    import gzip
+
     basename = os.path.basename(filepath)
     print(f"[oa-watcher] Processing GeoJSON: {basename}", flush=True)
 
-    ndjson = _is_ndjson(filepath)
+    is_gz = filepath.endswith(".gz")
+    _open = gzip.open if is_gz else open
+
+    ndjson = False
+    if not is_gz:
+        ndjson = _is_ndjson(filepath)
+    else:
+        # For .gz we always assume NDJSON (OpenAddresses convention)
+        ndjson = True
 
     if ndjson:
         print(f"[oa-watcher] Detected newline-delimited GeoJSON (NDJSON)", flush=True)
-        total = _count_lines(filepath)
+        total = _count_lines(filepath) if not is_gz else 0
         features = None  # will stream line-by-line
     else:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -301,6 +290,7 @@ async def publish_geojson(filepath: str, js):
         total = len(features)
 
     progress = ProgressTracker(f"oa-watcher {basename}", total=total)
+    shash = _source_hash(filepath)
 
     published = 0
     consecutive_failures = 0
@@ -309,7 +299,7 @@ async def publish_geojson(filepath: str, js):
     def _process_feature(feature: dict, row_idx: int) -> bool:
         """Process a single feature. Returns False if we should abort."""
         nonlocal published, consecutive_failures
-        msg = _parse_geojson_feature(feature, row_idx)
+        msg = _parse_geojson_feature(feature, row_idx, src_hash=shash)
         if msg is None:
             progress.skip()
             return True
@@ -331,7 +321,7 @@ async def publish_geojson(filepath: str, js):
 
     if ndjson:
         # Stream line-by-line to avoid loading entire file into memory
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with _open(filepath, "rt", encoding="utf-8", errors="replace") as f:
             for row_idx, line in enumerate(f):
                 line = line.strip()
                 if not line:
@@ -343,12 +333,14 @@ async def publish_geojson(filepath: str, js):
                     continue
                 _process_feature(feature, row_idx)
                 if not await _flush_if_full():
-                    break
+                    progress.close()
+                    return -1
     else:
         for row_idx, feature in enumerate(features):
             _process_feature(feature, row_idx)
             if not await _flush_if_full():
-                break
+                progress.close()
+                return -1
 
     if batch and consecutive_failures < MAX_CONSECUTIVE_FAILURES:
         published, consecutive_failures = await _publish_batch(
@@ -371,25 +363,21 @@ async def _publish_batch(
     for payload in batch:
         for attempt in range(MAX_RETRIES):
             try:
-                ack = await js.publish(NATS_SUBJECT, payload, timeout=30)
-                if ack:
-                    published += 1
-                    consecutive_failures = 0
-                    progress.update()
-                    break
-                else:
-                    consecutive_failures += 1
-                    if attempt < MAX_RETRIES - 1:
-                        await asyncio.sleep(0.5 * (attempt + 1))
+                await js.publish(NATS_SUBJECT, payload, timeout=30)
+                published += 1
+                consecutive_failures = 0
+                progress.update()
+                break
             except Exception as e:
-                consecutive_failures += 1
                 err_str = str(e).lower()
-                if "payload" in err_str and ("large" in err_str or "exceeded" in err_str):
-                    # Permanent error — skip this message
+                # Permanent error — message too large, skip it
+                if any(kw in err_str for kw in ("payload", "large", "exceeded")):
                     progress.skip()
                     break
+                # Transient error — retry with exponential backoff
+                consecutive_failures += 1
                 if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    await asyncio.sleep(min(2 ** attempt, 30))
                 else:
                     print(f"[oa-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}", flush=True)
 
@@ -443,17 +431,18 @@ async def run():
         try:
             if filepath.endswith(".csv"):
                 count = await publish_csv(filepath, js)
-            elif filepath.endswith(".geojson") or filepath.endswith(".geojson.gz"):
+            elif filepath.endswith((".geojson", ".geojson.gz")):
                 count = await publish_geojson(filepath, js)
             else:
                 continue
 
             total_published += count
 
-            # Mark as processed
-            with open(lock_file, "w") as lf:
-                lf.write(f"processed: {filepath}\n")
-            print(f"[oa-watcher] Completed {rel_path}", flush=True)
+            # Only mark as processed if we didn't abort early
+            if count >= 0:
+                with open(lock_file, "w") as lf:
+                    lf.write(f"processed: {filepath}\ncount: {count}\n")
+                print(f"[oa-watcher] Completed {rel_path}", flush=True)
 
         except Exception as e:
             print(f"[oa-watcher] Error processing {rel_path}: {e}", flush=True)

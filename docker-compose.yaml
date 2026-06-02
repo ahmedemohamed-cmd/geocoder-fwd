@@ -196,6 +196,8 @@ services:
       - ./data:/app/data
     environment:
       - osm_url=https://download.geofabrik.de/africa/egypt-latest.osm.pbf
+      - OA_URL=
+      - GN_URL=
       - DATA_DIR=/app/data
     restart: "no"
 
