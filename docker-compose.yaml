@@ -174,6 +174,21 @@ services:
         condition: service_started
     restart: "no"
 
+  gn-watcher:
+    build: .
+    command: python -u -m services.gn_watcher
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
+      - GN_DATA_DIR=/app/data/geonames
+    depends_on:
+      nats:
+        condition: service_started
+    restart: "no"
+
   downloader:
     build: .
     command: python -u -m services.downloader

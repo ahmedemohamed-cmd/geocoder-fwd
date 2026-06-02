@@ -1,9 +1,10 @@
-"""Download OSM PBF and OpenAddresses files into data/ if not already present.
+"""Download OSM PBF, OpenAddresses, and GeoNames files into data/.
 
 Environment variables
 ---------------------
 osm_url       URL of an OSM PBF extract (e.g. Geofabrik)
 OA_URL        URL of an OpenAddresses CSV or GeoJSON archive
+GN_URL        URL of a GeoNames dump zip (e.g. allCountries.zip or CA.zip)
 SSL_VERIFY    Set to ``false`` to skip certificate checks (dev only)
 """
 
@@ -11,12 +12,13 @@ import os
 
 import requests
 
-from shared.config import OSM_URL, DATA_DIR, OA_DATA_DIR
+from shared.config import OSM_URL, DATA_DIR, OA_DATA_DIR, GN_DATA_DIR
 
 # Set SSL_VERIFY=false in .env to disable certificate verification (dev only)
 _SSL_VERIFY = os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
 
 _OA_URL = os.getenv("OA_URL", "")
+_GN_URL = os.getenv("GN_URL", "")
 
 
 def _download_file(url: str, dest_dir: str, label: str = "downloader"):
@@ -67,6 +69,12 @@ def download():
         _download_file(_OA_URL, OA_DATA_DIR, label="downloader/oa")
     else:
         print("[downloader] No OA_URL configured, skipping OpenAddresses download")
+
+    # ── GeoNames ──────────────────────────────────────────────────────────
+    if _GN_URL:
+        _download_file(_GN_URL, GN_DATA_DIR, label="downloader/gn")
+    else:
+        print("[downloader] No GN_URL configured, skipping GeoNames download")
 
 
 if __name__ == "__main__":

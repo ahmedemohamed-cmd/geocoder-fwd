@@ -1430,10 +1430,11 @@ async def reverse(
 
     # Helper to merge PostGIS and ES data
     def merge_result(pg_row, es_source):
+        raw_geom = pg_row["geom"]
         result = {
             "osm_id": pg_row["osm_id"],
             "osm_type": pg_row["osm_type"],
-            "geom": pg_row["geom"],
+            "geom": json.loads(raw_geom) if isinstance(raw_geom, str) else raw_geom,
         }
         if es_source:
             result["name"] = es_source.get("name", "")
@@ -1453,6 +1454,7 @@ async def reverse(
 
     # nearest_address comes directly from osm_addresses (no ES lookup needed)
     if nearest_addr_row:
+        raw_addr_geom = nearest_addr_row["geom"]
         result["nearest_address"] = {
             "osm_id":       nearest_addr_row["osm_id"],
             "osm_type":     nearest_addr_row["osm_type"],
@@ -1462,7 +1464,7 @@ async def reverse(
             "postcode":     nearest_addr_row["postcode"],
             "country":      nearest_addr_row["country"],
             "full_address": nearest_addr_row["full_address"],
-            "geom":         nearest_addr_row["geom"],
+            "geom":         json.loads(raw_addr_geom) if isinstance(raw_addr_geom, str) else raw_addr_geom,
             "distance_m":   round(nearest_addr_row["distance_m"], 1),
         }
 
