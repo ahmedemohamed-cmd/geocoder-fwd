@@ -1,31 +1,37 @@
-"""Download OSM PBF files listed in .env into data/ if not already present."""
+"""Download OSM PBF and OpenAddresses files into data/ if not already present.
+
+Environment variables
+---------------------
+osm_url       URL of an OSM PBF extract (e.g. Geofabrik)
+OA_URL        URL of an OpenAddresses CSV or GeoJSON archive
+SSL_VERIFY    Set to ``false`` to skip certificate checks (dev only)
+"""
 
 import os
 
 import requests
 
-from shared.config import OSM_URL, DATA_DIR
+from shared.config import OSM_URL, DATA_DIR, OA_DATA_DIR
 
 # Set SSL_VERIFY=false in .env to disable certificate verification (dev only)
 _SSL_VERIFY = os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
 
+_OA_URL = os.getenv("OA_URL", "")
 
-def download():
-    os.makedirs(DATA_DIR, exist_ok=True)
 
-    if not OSM_URL:
-        print("[downloader] No osm_url configured in .env, nothing to download")
-        return
+def _download_file(url: str, dest_dir: str, label: str = "downloader"):
+    """Download a single file into *dest_dir*, skipping if it already exists."""
+    os.makedirs(dest_dir, exist_ok=True)
 
-    filename = OSM_URL.rsplit("/", 1)[-1]
-    filepath = os.path.join(DATA_DIR, filename)
+    filename = url.rsplit("/", 1)[-1]
+    filepath = os.path.join(dest_dir, filename)
 
     if os.path.exists(filepath):
-        print(f"[downloader] {filename} already exists, skipping")
-        return
+        print(f"[{label}] {filename} already exists, skipping")
+        return filepath
 
-    print(f"[downloader] Downloading {filename} ...")
-    resp = requests.get(OSM_URL, stream=True, timeout=60, verify=_SSL_VERIFY)
+    print(f"[{label}] Downloading {filename} ...")
+    resp = requests.get(url, stream=True, timeout=60, verify=_SSL_VERIFY)
     resp.raise_for_status()
 
     total = int(resp.headers.get("content-length", 0))
@@ -38,14 +44,29 @@ def download():
             downloaded += len(chunk)
             if total:
                 print(
-                    f"\r[downloader] {downloaded * 100 // total}%"
+                    f"\r[{label}] {downloaded * 100 // total}%"
                     f"  ({downloaded}/{total} bytes)",
                     end="",
                     flush=True,
                 )
 
     os.rename(tmp, filepath)
-    print(f"\n[downloader] Saved {filename}")
+    print(f"\n[{label}] Saved {filename}")
+    return filepath
+
+
+def download():
+    # ── OSM PBF ───────────────────────────────────────────────────────────
+    if OSM_URL:
+        _download_file(OSM_URL, DATA_DIR, label="downloader")
+    else:
+        print("[downloader] No osm_url configured, skipping OSM download")
+
+    # ── OpenAddresses ─────────────────────────────────────────────────────
+    if _OA_URL:
+        _download_file(_OA_URL, OA_DATA_DIR, label="downloader/oa")
+    else:
+        print("[downloader] No OA_URL configured, skipping OpenAddresses download")
 
 
 if __name__ == "__main__":

@@ -159,6 +159,21 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  oa-watcher:
+    build: .
+    command: python -u -m services.oa_watcher
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
+      - OA_DATA_DIR=/app/data/openaddresses
+    depends_on:
+      nats:
+        condition: service_started
+    restart: "no"
+
   downloader:
     build: .
     command: python -u -m services.downloader

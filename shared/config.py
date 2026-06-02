@@ -33,6 +33,9 @@ def _safe_bool(env_var: str, default: bool) -> bool:
 OSM_URL = os.getenv("osm_url", "")
 DATA_DIR = str(Path(__file__).resolve().parent.parent / "data")
 
+# OpenAddresses data directory (CSV/GeoJSON files)
+OA_DATA_DIR = os.getenv("OA_DATA_DIR", str(Path(DATA_DIR) / "openaddresses"))
+
 # NATS
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_STREAM = "OSM"

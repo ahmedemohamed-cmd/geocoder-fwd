@@ -7,6 +7,7 @@ Usage:
 Services:
     downloader        Download OSM PBF files from .env URLs
     watcher           Parse PBF files and publish to NATS
+    oa-watcher        Parse OpenAddresses CSV/GeoJSON files and publish to NATS
     es-inserter       NATS -> Elasticsearch
     postgis-inserter  NATS -> PostGIS
     geocoder          FastAPI geocoding HTTP server (includes /insert endpoint)
@@ -31,6 +32,11 @@ def main():
 
     elif service == "watcher":
         from services.watcher import run
+
+        asyncio.run(run())
+
+    elif service == "oa-watcher":
+        from services.oa_watcher import run
 
         asyncio.run(run())
 
