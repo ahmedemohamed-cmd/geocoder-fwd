@@ -1392,12 +1392,14 @@ async def reverse(
         """
         nearest_addr_row = await conn.fetchrow(nearest_addr_query, point_wkt)
 
-        # Find nearest line (LineString)
+        # Find nearest line (LineString) — uses GiST index via <-> operator
         nearest_line_query = """
-            SELECT osm_id, osm_type, ST_AsGeoJSON(geom) as geom
+            SELECT osm_id, osm_type, ST_AsGeoJSON(geom) as geom,
+                   ST_Distance(geom::geography,
+                               ST_GeomFromText($1, 4326)::geography) AS distance_m
             FROM osm_geometries
             WHERE ST_GeometryType(geom) = 'ST_LineString'
-            ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
+            ORDER BY geom <-> ST_GeomFromText($1, 4326)
             LIMIT 1
         """
         nearest_line = await conn.fetchrow(nearest_line_query, point_wkt)
@@ -1470,7 +1472,9 @@ async def reverse(
 
     if nearest_line:
         es_source = es_data.get(nearest_line["osm_id"])
-        result["nearest_line"] = merge_result(nearest_line, es_source)
+        merged = merge_result(nearest_line, es_source)
+        merged["distance_m"] = round(nearest_line["distance_m"], 1)
+        result["nearest_line"] = merged
 
     result["enclosing_polygons"] = [
         merge_result(row, es_data.get(row["osm_id"]))
