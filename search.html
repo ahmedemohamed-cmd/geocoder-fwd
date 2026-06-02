@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .mode-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .mode-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .config-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .config-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        #hostInput {
+            width: 100%;
+            padding: 10px 14px;
+            font-size: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #hostInput:focus {
+            border-color: #667eea;
+        }
+
+        .config-hint {
+            font-size: 11px;
+            color: #999;
+            margin-top: 6px;
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        #searchInput {
+            width: 100%;
+            padding: 16px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        #searchInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .results {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .result-item {
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .result-item:hover {
+            background-color: #f8f9ff;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .result-description {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .no-results {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-size: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            padding: 20px;
+        }
+
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Geocoder Search</h1>
+        <div class="config-section">
+            <label class="config-label" for="hostInput">API Host URL</label>
+            <input 
+                type="text" 
+                id="hostInput" 
+                placeholder="http://localhost:8000"
+                autocomplete="off"
+            >
+            <div class="config-hint">Enter the API host URL (e.g., http://localhost:8000). Auto-saved to browser storage.</div>
+        </div>
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="geocode">Normal Search</button>
+            <button class="mode-btn" data-mode="address">Address Search</button>
+        </div>
+        <div class="search-box">
+            <input 
+                type="text" 
+                id="searchInput" 
+                placeholder="Type to search..."
+                autocomplete="off"
+            >
+        </div>
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        const DEFAULT_HOST = ''; // Empty string for same-origin requests (via nginx proxy)
+        let API_BASE_URL = localStorage.getItem('geocoder_api_host') || DEFAULT_HOST;
+        
+        const searchInput = document.getElementById('searchInput');
+        const hostInput = document.getElementById('hostInput');
+        const resultsContainer = document.getElementById('results');
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        
+        let currentMode = 'geocode'; // 'geocode' or 'address'
+        let debounceTimer;
+        
+        // Initialize host input with saved value
+        hostInput.value = API_BASE_URL || '(same origin)';
+        
+        // Save host URL to localStorage on change
+        hostInput.addEventListener('change', (e) => {
+            const newHost = e.target.value.trim() === '(same origin)' ? '' : e.target.value.trim();
+            API_BASE_URL = newHost;
+            localStorage.setItem('geocoder_api_host', newHost);
+            hostInput.value = newHost || '(same origin)';
+            
+            // Re-search if there's a query
+            if (searchInput.value.trim()) {
+                performSearch(searchInput.value);
+            }
+        });
+
+        // Debounce function to limit API calls
+        function debounce(func, delay) {
+            return function(...args) {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        // Search function
+        async function performSearch(query) {
+            if (!query.trim()) {
+                resultsContainer.innerHTML = '';
+                return;
+            }
+
+            // Show loading state
+            resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
+
+            try {
+                const endpoint = currentMode === 'geocode' ? '/geocode' : '/address';
+                const url = `${API_BASE_URL}${endpoint}?q=${encodeURIComponent(query)}&limit=10`;
+                
+                console.log('Fetching:', url);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data.features || data, query);
+            } catch (error) {
+                console.error('Search error:', error);
+                let errorMessage = 'Error fetching results. ';
+                
+                if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+                    errorMessage += 'CORS error detected. The API server may not allow cross-origin requests from this page. ';
+                    errorMessage += 'Try serving this HTML file from the same origin as the API, or configure CORS on the server.';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                resultsContainer.innerHTML = `<div class="no-results">${errorMessage}</div>`;
+            }
+        }
+
+        // Display results
+        function displayResults(results, query) {
+            if (!results || results.length === 0) {
+                resultsContainer.innerHTML = '<div class="no-results">No results found</div>';
+                return;
+            }
+
+            const html = results.map(item => {
+                // Handle different response formats
+                const name = item.properties?.name || item.name || 'Unknown';
+                const address = item.properties?.full_address || 
+                               item.properties?.addr_street || 
+                               item.full_address || 
+                               item.address || 
+                               '';
+                
+                const lat = item.properties?.centroid?.coordinates?.[1] || 
+                           item.geometry?.coordinates?.[1] || 
+                           item.lat;
+                const lon = item.properties?.centroid?.coordinates?.[0] || 
+                           item.geometry?.coordinates?.[0] || 
+                           item.lon;
+                
+                const highlightedName = highlightText(name, query);
+                const highlightedAddress = highlightText(address, query);
+                
+                return `
+                    <div class="result-item" data-lat="${lat}" data-lon="${lon}">
+                        <div class="result-title">${highlightedName}</div>
+                        ${address ? `<div class="result-description">${highlightedAddress}</div>` : ''}
+                        ${lat && lon ? `<div class="result-description" style="color: #999; font-size: 12px;">${lat.toFixed(4)}, ${lon.toFixed(4)}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            resultsContainer.innerHTML = html;
+        }
+
+        // Highlight matching text
+        function highlightText(text, query) {
+            if (!query) return text;
+            const regex = new RegExp(`(${query})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        // Debounced search handler
+        const debouncedSearch = debounce((e) => {
+            performSearch(e.target.value);
+        }, 300);
+
+        // Event listener for input
+        searchInput.addEventListener('input', debouncedSearch);
+
+        // Mode selector event listeners
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                modeButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMode = btn.dataset.mode;
+                
+                // Update placeholder based on mode
+                searchInput.placeholder = currentMode === 'geocode' 
+                    ? 'Search places, cities, venues...' 
+                    : 'Search addresses (street, city, postcode)...';
+                
+                // Clear results and re-search if there's a query
+                if (searchInput.value.trim()) {
+                    performSearch(searchInput.value);
+                }
+            });
+        });
+
+        // Click handler for result items
+        resultsContainer.addEventListener('click', (e) => {
+            const resultItem = e.target.closest('.result-item');
+            if (resultItem) {
+                const title = resultItem.querySelector('.result-title').textContent;
+                const lat = resultItem.dataset.lat;
+                const lon = resultItem.dataset.lon;
+                console.log('Selected:', title, 'Coordinates:', lat, lon);
+                // Add your selection handling logic here
+            }
+        });
+    </script>
+</body>
+</html>
