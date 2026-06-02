@@ -691,8 +691,22 @@ async def geocode(
             hn = parsed_addr["housenumber"].lower()
             # Exact term match on housenumber (uses lowercase normalizer)
             should_clauses.append(
-                {"term": {"addr_housenumber": {"value": hn, "boost": 8}}}
+                {"term": {"addr_housenumber": {"value": hn, "boost": 15}}}
             )
+            # Combined housenumber + street match: strongly boost documents
+            # that match BOTH the street and exact housenumber together
+            if parsed_addr.get("street"):
+                should_clauses.append(
+                    {
+                        "bool": {
+                            "must": [
+                                {"term": {"addr_housenumber": {"value": hn}}},
+                                {"match_phrase": {"addr_street": {"query": parsed_addr["street"], "slop": 1}}},
+                            ],
+                            "boost": 50,
+                        }
+                    }
+                )
 
         if parsed_addr.get("city"):
             city_val = parsed_addr["city"]
@@ -739,6 +753,35 @@ async def geocode(
             "minimum_should_match": 1,
         }
     }
+
+    # ── Housenumber proximity boost ───────────────────────────────────────
+    # When the user specifies a housenumber, add a script_score function
+    # that gives higher scores to documents whose housenumber is numerically
+    # closer to the requested one.  This ensures that when an exact match
+    # doesn't exist, the nearest house numbers rank first.
+    if addr_detected and parsed_addr.get("housenumber"):
+        try:
+            requested_hn = int(parsed_addr["housenumber"])
+            functions.append(
+                {
+                    "script_score": {
+                        "script": {
+                            "source": (
+                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
+                                "try { "
+                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
+                                "  double diff = Math.abs(hn - params.requested_hn); "
+                                "  return 1.0 / (1.0 + diff); "
+                                "} catch (NumberFormatException e) { return 0; }"
+                            ),
+                            "params": {"requested_hn": requested_hn},
+                        }
+                    },
+                    "weight": 5,
+                }
+            )
+        except ValueError:
+            pass  # non-numeric housenumber, skip proximity scoring
 
     body: dict = {
         "size": limit,
@@ -981,10 +1024,24 @@ async def address_search(
         )
 
     if parsed.get("housenumber"):
+        hn_val = parsed["housenumber"].lower()
         # Housenumber as case-insensitive term (normalizer handles case)
         should_clauses.append(
-            {"term": {"addr_housenumber": {"value": parsed["housenumber"].lower(), "boost": 6}}}
+            {"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}}
         )
+        # Combined housenumber + street match: strongly boost exact address
+        if parsed.get("street"):
+            should_clauses.append(
+                {
+                    "bool": {
+                        "must": [
+                            {"term": {"addr_housenumber": {"value": hn_val}}},
+                            {"match_phrase": {"addr_street": {"query": parsed["street"], "slop": 1}}},
+                        ],
+                        "boost": 50,
+                    }
+                }
+            )
 
     # City as boost (when not already a hard filter)
     if parsed.get("city") and not city:
@@ -1078,6 +1135,31 @@ async def address_search(
                 "weight": 5,
             }
         )
+
+    # ── Housenumber proximity boost ─────────────────────────────────────
+    if parsed.get("housenumber"):
+        try:
+            requested_hn = int(parsed["housenumber"])
+            functions.append(
+                {
+                    "script_score": {
+                        "script": {
+                            "source": (
+                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
+                                "try { "
+                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
+                                "  double diff = Math.abs(hn - params.requested_hn); "
+                                "  return 1.0 / (1.0 + diff); "
+                                "} catch (NumberFormatException e) { return 0; }"
+                            ),
+                            "params": {"requested_hn": requested_hn},
+                        }
+                    },
+                    "weight": 5,
+                }
+            )
+        except ValueError:
+            pass
 
     body: dict = {
         "size": limit,
