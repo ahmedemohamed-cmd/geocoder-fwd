@@ -1206,6 +1206,145 @@ async def geocode(
     }
 
 
+# ── autocomplete ──────────────────────────────────────────────────────────
+
+@app.get("/autocomplete")
+async def autocomplete(
+    request: Request,
+    q: str = Query(..., min_length=1, description="Partial query text"),
+    lat: float | None = Query(None, description="Latitude for geo-bias"),
+    lon: float | None = Query(None, description="Longitude for geo-bias"),
+    limit: int = Query(7, ge=1, le=20, description="Max suggestions"),
+):
+    """Fast prefix-based autocomplete using edge-ngram sub-fields.
+
+    Designed for keystroke-by-keystroke suggestions.  Much lighter than
+    ``/geocode``: no address parsing, no vector search, no PostGIS calls,
+    no interpolation.  Ranking combines text relevance, ``offline_rank``,
+    ``popularity`` (feedback-driven), and optional geo-distance bias.
+    """
+    q_norm = normalize_address_text(q)
+
+    # ── Build a lightweight bool query on .autocomplete sub-fields ─────
+    should: list[dict] = [
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": [
+                    "name.autocomplete^5",
+                    "name_en.autocomplete^5",
+                    "addr_street.autocomplete^3",
+                    "addr_city.autocomplete^2",
+                    "full_address.autocomplete^2",
+                ],
+                "type": "best_fields",
+            }
+        },
+        # Exact-prefix phrase boost: "new yo" → "New York" ranks above
+        # "New Yorker Restaurant"
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": ["name^8", "name_en^8"],
+                "type": "phrase_prefix",
+            }
+        },
+    ]
+
+    text_query: dict = {
+        "bool": {
+            "should": should,
+            "minimum_should_match": 1,
+        }
+    }
+
+    # ── Scoring functions (kept minimal for speed) ─────────────────────
+    functions: list[dict] = [
+        {"weight": 1.0},
+        # offline_rank: cities/countries float above minor POIs
+        {
+            "field_value_factor": {
+                "field": "offline_rank",
+                "modifier": "none",
+                "factor": 1,
+                "missing": 0,
+            },
+            "weight": 2,
+        },
+        # popularity: feedback-driven boost
+        {
+            "field_value_factor": {
+                "field": "popularity",
+                "modifier": "log1p",
+                "factor": 1,
+                "missing": 0,
+            },
+            "weight": 1.5,
+        },
+    ]
+
+    # geo-bias: prefer results near the user when location is known
+    if lat is not None and lon is not None:
+        functions.append(
+            {
+                "gauss": {
+                    "centroid": {
+                        "origin": {"lat": lat, "lon": lon},
+                        "scale": "15km",
+                        "offset": "2km",
+                        "decay": 0.5,
+                    }
+                },
+                "weight": 1.5,
+            }
+        )
+
+    body: dict = {
+        "size": limit,
+        "query": {
+            "function_score": {
+                "query": text_query,
+                "functions": functions,
+                "score_mode": "sum",
+                "boost_mode": "multiply",
+            }
+        },
+        # Return only the fields needed for a suggestion dropdown
+        "_source": [
+            "osm_id", "osm_type", "name", "name_en",
+            "centroid", "admin_level", "offline_rank", "popularity",
+            "full_address", "addr_street", "addr_city", "addr_country",
+        ],
+    }
+
+    resp = await es.search(index=INDEX, **body)
+
+    max_score = resp["hits"].get("max_score") or 0
+    results = []
+    for h in resp["hits"]["hits"]:
+        src = h["_source"]
+        # Build a concise display label
+        name = src.get("name_en") or src.get("name", "")
+        addr = src.get("full_address", "")
+        if addr and addr != name:
+            label = f"{name}, {addr}" if name else addr
+        else:
+            label = name
+
+        results.append({
+            "osm_id": src.get("osm_id"),
+            "label": label,
+            "name": src.get("name", ""),
+            "name_en": src.get("name_en", ""),
+            "centroid": src.get("centroid"),
+            "admin_level": src.get("admin_level", 0),
+            "confidence": _normalize_confidence(h["_score"], max_score),
+        })
+
+    request.state.result_count = len(results)
+    return {"results": results}
+
+
 # ── feedback loop ─────────────────────────────────────────────────────────
 _POPULARITY_CAP = 1000.0
 

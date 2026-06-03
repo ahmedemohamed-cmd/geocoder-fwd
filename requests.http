@@ -4,6 +4,7 @@
 ### Endpoints
 ###   GET  /features          – which optional features are enabled
 ###   GET  /health            – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
+###   GET  /autocomplete      – fast prefix-based suggestions (edge-ngram, ~5-15ms)
 ###   GET  /geocode           – full-text + vector + geo search (with address interpolation fallback)
 ###   GET  /address           – structured address search (with address interpolation fallback)
 ###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
@@ -39,6 +40,67 @@ GET {{baseUrl}}/features
 ### Check all dependencies: ES, PostGIS, NATS, Redis, Ollama
 ### Returns 200 (healthy) or 503 (degraded) with per-service status
 GET {{baseUrl}}/health
+
+###
+
+# ============================================================================
+# /autocomplete  –  Fast prefix-based suggestions (edge-ngram)
+#
+# Designed for keystroke-by-keystroke dropdown suggestions.
+# Much lighter than /geocode: no address parsing, no vector search,
+# no PostGIS calls, no interpolation.  Typically 5-15ms vs 80-300ms.
+#
+# Params:
+#   q      (required) – partial query text (min 1 char)
+#   lat/lon            – geo-bias: prefer results near this location
+#   limit              – max suggestions (1–20, default 7)
+#
+# Ranking: text relevance × (offline_rank + popularity + geo_proximity)
+# Popularity is driven by the /feedback endpoint — more-clicked results
+# rank higher over time.
+#
+# Response fields per suggestion:
+#   osm_id, label (display string), name, name_en, centroid,
+#   admin_level, confidence
+# ============================================================================
+
+### Basic autocomplete – first few characters
+GET {{baseUrl}}/autocomplete?q=cai
+
+###
+
+### Longer prefix narrows results
+GET {{baseUrl}}/autocomplete?q=cairo
+
+###
+
+### Arabic prefix
+GET {{baseUrl}}/autocomplete?q=القاه
+
+###
+
+### Street name prefix
+GET {{baseUrl}}/autocomplete?q=tahrir
+
+###
+
+### With geo-bias (near downtown Cairo — prefers local results)
+GET {{baseUrl}}/autocomplete?q=corn&lat=30.0444&lon=31.2357
+
+###
+
+### Address-like prefix (street + city)
+GET {{baseUrl}}/autocomplete?q=tahrir street cai&lat=30.0444&lon=31.2357
+
+###
+
+### Short prefix with geo-bias (restaurants nearby)
+GET {{baseUrl}}/autocomplete?q=rest&lat=30.0444&lon=31.2357&limit=10
+
+###
+
+### Single character (min allowed)
+GET {{baseUrl}}/autocomplete?q=a&limit=5
 
 ###
 
