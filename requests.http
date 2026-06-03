@@ -4,9 +4,9 @@
 ### Endpoints
 ###   GET  /features          – which optional features are enabled
 ###   GET  /health            – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
-###   GET  /geocode           – full-text + vector + geo search
-###   GET  /address           – structured address search
-###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / street / boundaries)
+###   GET  /geocode           – full-text + vector + geo search (with address interpolation fallback)
+###   GET  /address           – structured address search (with address interpolation fallback)
+###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
 ###   GET  /describe          – AI-generated title + description for a place
 ###   POST /feedback          – popularity feedback loop
 ###   POST /places            – add a custom place
@@ -127,6 +127,22 @@ GET {{baseUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=5&describe=tr
 
 ###
 
+### Address interpolation – search for a housenumber that may not exist
+### If 15 Tahrir Street is not in the DB, the system interpolates its
+### position from nearby addresses (e.g. #10 and #20) on the same street.
+### The interpolated result appears first with match_type: "interpolated",
+### side: "odd", and bracket_low/bracket_high showing the reference addresses.
+GET {{baseUrl}}/geocode?q=15 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
+
+###
+
+### Odd/even detection – search for an even housenumber
+### The system separates addresses by parity (odd side vs even side of
+### the street) and interpolates along the correct side.
+GET {{baseUrl}}/geocode?q=22 Kasr El Aini Street, Cairo&lat=30.0380&lon=31.2336&limit=5
+
+###
+
 # ============================================================================
 # /address  –  Structured address search (Elasticsearch)
 #
@@ -213,6 +229,18 @@ GET {{baseUrl}}/address?q=10 Tahrir Street, Cairo&describe=true
 
 ###
 
+### Address interpolation on /address endpoint
+### Same fallback as /geocode: if no exact housenumber match, interpolates
+### from known addresses on the same street with odd/even side detection.
+GET {{baseUrl}}/address?q=17 Corniche El Nil&city=Cairo&limit=5
+
+###
+
+### Interpolation with country filter
+GET {{baseUrl}}/address?q=33 El Galaa Street&country=EG&limit=5
+
+###
+
 # ============================================================================
 # /reverse  –  Reverse geocoding (PostGIS + Elasticsearch)
 #
@@ -222,17 +250,23 @@ GET {{baseUrl}}/address?q=10 Tahrir Street, Cairo&describe=true
 #   describe=true|false – include AI descriptions on nearest_line / polygons
 #
 # Returns:
-#   nearest_address    – closest building/address point from osm_addresses table
-#                        fields: housenumber, street, city, postcode, country,
-#                                full_address, geom, distance_m, confidence
-#   nearest_line       – closest LineString (road/path) with ES metadata
-#                        fields: osm_id, osm_type, name, name_en, tags,
-#                                admin_level, area_km2, offline_rank, geom,
-#                                distance_m, confidence
-#   enclosing_polygons – all polygons/multipolygons containing the point
-#                        (admin boundaries, landuse areas, etc.) sorted by
-#                        admin_level descending (most specific first)
-#                        same fields as nearest_line
+#   nearest_address       – closest building/address point from osm_addresses table
+#                           fields: housenumber, street, city, postcode, country,
+#                                   full_address, geom, distance_m, confidence
+#   interpolated_address  – estimated address at the query point, interpolated from
+#                           nearby addresses on the same street with odd/even detection
+#                           fields: housenumber, street, city, postcode, country,
+#                                   lat, lon, match_type ("interpolated"), confidence,
+#                                   side ("odd"|"even"), bracket_low, bracket_high
+#                           null if fewer than 2 addresses nearby
+#   nearest_line          – closest LineString (road/path) with ES metadata
+#                           fields: osm_id, osm_type, name, name_en, tags,
+#                                   admin_level, area_km2, offline_rank, geom,
+#                                   distance_m, confidence
+#   enclosing_polygons    – all polygons/multipolygons containing the point
+#                           (admin boundaries, landuse areas, etc.) sorted by
+#                           admin_level descending (most specific first)
+#                           same fields as nearest_line
 # ============================================================================
 
 ### Reverse geocode Tahrir Square, Cairo

@@ -76,6 +76,7 @@ from shared.config import (
     OLLAMA_MODEL,
 )
 from shared.llm import generate_description, is_ollama_available
+from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
 from shared.embeddings import embed_texts
 from shared.address import (
     extract_address_components,
@@ -674,6 +675,41 @@ async def health():
     )
 
 
+# ── address interpolation helper ──────────────────────────────────────────
+def _interpolated_to_result(ia: InterpolatedAddress) -> dict:
+    """Convert an InterpolatedAddress to a search-result dict."""
+    return {
+        "osm_id": None,
+        "osm_type": "",
+        "name": f"{ia.housenumber} {ia.street}",
+        "name_en": "",
+        "tags": {},
+        "tags_text": "",
+        "geom": {"type": "Point", "coordinates": [ia.lon, ia.lat]},
+        "centroid": {"lat": ia.lat, "lon": ia.lon},
+        "admin_level": 0,
+        "area_km2": 0,
+        "offline_rank": 0,
+        "popularity": 0,
+        "confidence": ia.confidence,
+        "match_type": ia.match_type,
+        "interpolation": {
+            "side": ia.side,
+            "bracket_low": ia.bracket_low,
+            "bracket_high": ia.bracket_high,
+        },
+        "full_address": f"{ia.housenumber} {ia.street}, {ia.city}".strip(", "),
+        "addr_housenumber": ia.housenumber,
+        "addr_street": ia.street,
+        "addr_city": ia.city,
+        "addr_postcode": ia.postcode,
+        "addr_country": ia.country,
+        "addr_suburb": "",
+        "addr_state": "",
+        "address": None,
+    }
+
+
 # ── AI place descriptions ────────────────────────────────────────────────
 async def _get_or_generate_description(
     osm_id: str, *, wait: bool = False
@@ -1128,6 +1164,31 @@ async def geocode(
             if isinstance(addr, dict):
                 results[idx]["address"] = addr
 
+    # ── Address interpolation fallback ────────────────────────────────────
+    # When the query contained a housenumber but no result matched it
+    # exactly, try to interpolate the position from known addresses on
+    # the same street.
+    interpolated_result = None
+    if addr_detected and parsed_addr.get("housenumber"):
+        try:
+            req_hn = int(parsed_addr["housenumber"])
+            has_exact = any(
+                r.get("addr_housenumber") == str(req_hn)
+                for r in results
+            )
+            if not has_exact:
+                ia = await interpolate_address(
+                    pg_pool,
+                    req_hn,
+                    street=parsed_addr.get("street", ""),
+                    city=parsed_addr.get("city"),
+                )
+                if ia:
+                    interpolated_result = _interpolated_to_result(ia)
+                    results.insert(0, interpolated_result)
+        except (ValueError, TypeError):
+            pass
+
     # Attach AI descriptions when requested
     if describe and ENABLE_AI:
         await _attach_descriptions(results)
@@ -1479,6 +1540,26 @@ async def address_search(
         for h in addr_results
     ]
 
+    # ── Address interpolation fallback ────────────────────────────────────
+    if parsed.get("housenumber"):
+        try:
+            req_hn = int(parsed["housenumber"])
+            has_exact = any(
+                r.get("addr_housenumber") == str(req_hn)
+                for r in results
+            )
+            if not has_exact:
+                ia = await interpolate_address(
+                    pg_pool,
+                    req_hn,
+                    street=parsed.get("street", ""),
+                    city=parsed.get("city") or city,
+                )
+                if ia:
+                    results.insert(0, _interpolated_to_result(ia))
+        except (ValueError, TypeError):
+            pass
+
     if describe and ENABLE_AI:
         await _attach_descriptions(results)
 
@@ -1739,6 +1820,7 @@ async def reverse(
 
     result: dict = {
         "nearest_address": None,
+        "interpolated_address": None,
         "nearest_line": None,
         "enclosing_polygons": [],
     }
@@ -1760,6 +1842,28 @@ async def reverse(
             "distance_m":   dist,
             "confidence":   _distance_confidence(dist),
         }
+
+    # ── Reverse address interpolation ─────────────────────────────────
+    # Estimate the housenumber at the query point from nearby addresses.
+    try:
+        ia = await reverse_interpolate(pg_pool, lat, lon)
+        if ia:
+            result["interpolated_address"] = {
+                "housenumber": ia.housenumber,
+                "street": ia.street,
+                "city": ia.city,
+                "postcode": ia.postcode,
+                "country": ia.country,
+                "lat": ia.lat,
+                "lon": ia.lon,
+                "match_type": ia.match_type,
+                "confidence": ia.confidence,
+                "side": ia.side,
+                "bracket_low": ia.bracket_low,
+                "bracket_high": ia.bracket_high,
+            }
+    except Exception as e:
+        _logger.debug("Reverse interpolation failed: %s", e)
 
     if nearest_line:
         es_source = es_data.get(nearest_line["osm_id"])
