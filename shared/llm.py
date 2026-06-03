@@ -18,7 +18,8 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
 # Timeout for the generation call (seconds).
 # Small models on GPU should respond in <2s; CPU may take 5-10s.
-_GENERATE_TIMEOUT = 30.0
+# Cold starts (first request after model load) on CPU can take 30-40s.
+_GENERATE_TIMEOUT = 90.0
 
 # ── prompt template ───────────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
             "temperature": 0.3,
             "num_predict": 300,
         },
+        "keep_alive": -1,
     }
 
     try:
@@ -145,8 +147,11 @@ async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
     except httpx.ConnectError:
         logger.error("Cannot connect to Ollama at %s", OLLAMA_URL)
         return None
+    except httpx.TimeoutException:
+        logger.error("Ollama request timed out after %ss (model may be loading)", _GENERATE_TIMEOUT)
+        return None
     except Exception as e:
-        logger.error("Unexpected LLM error: %s", e)
+        logger.error("Unexpected LLM error: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -157,4 +162,28 @@ async def is_ollama_available() -> bool:
             resp = await client.get(f"{OLLAMA_URL}/api/tags")
             return resp.status_code == 200
     except Exception:
+        return False
+
+
+async def warm_up_model() -> bool:
+    """Pre-load the model so the first real request doesn't pay cold-start cost.
+
+    Sends a tiny generation request with keep_alive=-1 (keep loaded forever).
+    Returns True if the model was loaded successfully.
+    """
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [{"role": "user", "content": "hi"}],
+        "stream": False,
+        "options": {"num_predict": 1},
+        "keep_alive": -1,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+            resp.raise_for_status()
+        logger.info("Ollama model %s warmed up successfully", OLLAMA_MODEL)
+        return True
+    except Exception as e:
+        logger.warning("Failed to warm up Ollama model: %s: %s", type(e).__name__, e)
         return False

@@ -75,7 +75,7 @@ from shared.config import (
     OLLAMA_URL,
     OLLAMA_MODEL,
 )
-from shared.llm import generate_description, is_ollama_available
+from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
 from shared.autocomplete import (
     query as ac_query,
@@ -359,6 +359,15 @@ async def _warm_autocomplete():
         print(f"[geocoder] Autocomplete warm-up failed: {e}")
 
 
+async def _warm_ollama():
+    """Background task: pre-load the Ollama model to avoid cold-start delays."""
+    ok = await warm_up_model()
+    if ok:
+        print("[geocoder] Ollama model pre-loaded successfully")
+    else:
+        print("[geocoder] Ollama model warm-up failed (descriptions may be slow on first call)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global es, pg_pool, nc, js, redis_pool
@@ -446,6 +455,9 @@ async def lifespan(app: FastAPI):
         print(f"[geocoder] Redis connection failed: {e}")
         print(f"[geocoder] Autocomplete will fall back to Elasticsearch")
         redis_pool = None  # type: ignore[assignment]
+
+    # Warm up Ollama model so the first /describe request doesn't pay cold-start cost
+    asyncio.create_task(_warm_ollama())
 
     yield
     await es.close()

@@ -194,6 +194,8 @@ services:
       - HF_HOME=/app/models
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5:1.5b
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     deploy:
       resources:
         reservations:
@@ -210,6 +212,8 @@ services:
         condition: service_started
       ollama:
         condition: service_started
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   oa-watcher:
