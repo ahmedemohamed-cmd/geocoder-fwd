@@ -251,6 +251,8 @@ MAPPING = {
                 },
             },
             "has_address": {"type": "boolean"},
+            # AI-generated place description (cached, not indexed)
+            "ai_description": {"type": "object", "enabled": False},
         }
     },
 }

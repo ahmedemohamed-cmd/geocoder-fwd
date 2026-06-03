@@ -66,6 +66,10 @@ EMBEDDING_DIM = 384
 ENABLE_VECTORS = _safe_bool("ENABLE_VECTORS", True)
 ENABLE_AI = _safe_bool("ENABLE_AI", True)
 
+# Ollama LLM (place descriptions)
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
+
 # Performance tuning
 # When vectors are enabled, use smaller batch sizes to avoid timeouts
 _BATCH_SIZE = _safe_int("BATCH_SIZE", 100)

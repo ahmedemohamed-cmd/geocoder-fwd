@@ -70,6 +70,34 @@ services:
         limits:
           memory: 1G
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # Pull the model on startup (one-shot init container)
+  ollama-init:
+    image: curlimages/curl:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["sh", "-c", "curl -sf http://ollama:11434/api/pull -d '{\"name\":\"qwen2.5:1.5b\"}' || true"]
+
   # Python services
   watcher:
     build: .
@@ -150,6 +178,8 @@ services:
       - ENABLE_VECTORS=false
       - ENABLE_AI=false
       - TRANSFORMERS_CACHE=/app/models
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:1.5b
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -157,6 +187,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   oa-watcher:
@@ -228,3 +260,4 @@ volumes:
   redis-data:
   elasticsearch-data:
   postgis-data:
+  ollama-data:

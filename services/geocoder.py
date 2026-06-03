@@ -9,12 +9,17 @@ GET  /reverse       - reverse geocoding via PostGIS + Elasticsearch
                       (nearest line + nearest address + enclosing polygons)
 POST /insert        - insert OSM element by publishing to NATS stream (matches watcher.py format)
 POST /places        - add a new place to the geocoding database
+GET  /describe      - on-demand AI title + description for a place (blocks until ready)
+GET  /health        - dependency health check (ES, PostGIS, NATS, Redis, Ollama)
+GET  /features      - feature flags discovery
 
 Query-string flags shared by search endpoints:
-  vector=true   enable semantic / AI vector search  (requires ENABLE_VECTORS=true)
-  vector=false  disable vector search (text-only)
-  ai=true       enable AI-assisted search (requires ENABLE_AI=true)
-  ai=false      disable AI features
+  vector=true    enable semantic / AI vector search  (requires ENABLE_VECTORS=true)
+  vector=false   disable vector search (text-only)
+  ai=true        enable AI-assisted search (requires ENABLE_AI=true)
+  ai=false       disable AI features
+  describe=true  include AI-generated title + description per result (cached)
+  describe=false (default) omit AI descriptions
 
 Online ranking formula: text_similarity × (offline_rank + geo_decay + popularity) via boost_mode=multiply
 
@@ -67,7 +72,10 @@ from shared.config import (
     NATS_SUBJECT,
     REDIS_HOST,
     REDIS_PORT,
+    OLLAMA_URL,
+    OLLAMA_MODEL,
 )
+from shared.llm import generate_description, is_ollama_available
 from shared.embeddings import embed_texts
 from shared.address import (
     extract_address_components,
@@ -322,6 +330,8 @@ ES_MAPPING = {
                 },
             },
             "has_address": {"type": "boolean"},
+            # ── AI-generated place description (cached) ───────────────────
+            "ai_description": {"type": "object", "enabled": False},
         }
     },
 }
@@ -649,6 +659,12 @@ async def health():
     overall = "healthy" if critical_ok else "degraded"
     status_code = 200 if critical_ok else 503
 
+    # Ollama (non-critical — only used for AI descriptions)
+    ollama_ok = await is_ollama_available()
+    checks["ollama"] = {"status": "ok", "model": OLLAMA_MODEL} if ollama_ok else {
+        "status": "error", "detail": "unreachable",
+    }
+
     return JSONResponse(
         status_code=status_code,
         content={
@@ -656,6 +672,100 @@ async def health():
             "checks": checks,
         },
     )
+
+
+# ── AI place descriptions ────────────────────────────────────────────────
+async def _get_or_generate_description(
+    osm_id: str, *, wait: bool = False
+) -> dict[str, str] | None:
+    """Return cached AI description or generate one.
+
+    If ``wait=True`` (used by /describe), blocks until generation completes.
+    If ``wait=False`` (used by ?describe=true), returns the cached value
+    immediately and fires a background task for cache misses.
+
+    Returns the description dict or None.
+    """
+    # 1. Check ES cache
+    try:
+        doc = await es.get(index=INDEX, id=osm_id, _source_includes=[
+            "ai_description", "name", "name_en", "tags", "centroid",
+            "full_address", "addr_housenumber", "addr_street", "addr_city",
+            "addr_suburb", "addr_state", "addr_postcode", "addr_country",
+            "admin_level",
+        ])
+        src = doc["_source"]
+        cached = src.get("ai_description")
+        if cached:
+            return cached
+    except Exception:
+        return None
+
+    if not wait:
+        # Fire background generation — caller gets None for now
+        asyncio.create_task(_generate_and_cache(osm_id, src))
+        return None
+
+    # Synchronous path: generate, cache, return
+    return await _generate_and_cache(osm_id, src)
+
+
+async def _generate_and_cache(osm_id: str, place_data: dict) -> dict[str, str] | None:
+    """Call Ollama, cache the result in ES, return the description."""
+    desc = await generate_description(place_data)
+    if desc is None:
+        return None
+
+    # Cache in ES
+    try:
+        await es.update(index=INDEX, id=osm_id, body={"doc": {"ai_description": desc}})
+    except Exception as e:
+        print(f"[geocoder] Failed to cache ai_description for {osm_id}: {e}")
+
+    return desc
+
+
+async def _attach_descriptions(results: list[dict]) -> None:
+    """Attach cached AI descriptions to search results, fire background
+    generation for misses.  Mutates ``results`` in place."""
+    for result in results:
+        osm_id = result.get("osm_id")
+        if not osm_id:
+            continue
+        try:
+            doc = await es.get(
+                index=INDEX, id=osm_id,
+                _source_includes=["ai_description", "name", "name_en", "tags",
+                                  "centroid", "full_address",
+                                  "addr_housenumber", "addr_street",
+                                  "addr_city", "addr_suburb", "addr_state",
+                                  "addr_postcode", "addr_country",
+                                  "admin_level"],
+            )
+            src = doc["_source"]
+            cached = src.get("ai_description")
+            if cached:
+                result["ai_description"] = cached
+            else:
+                result["ai_description"] = None
+                asyncio.create_task(_generate_and_cache(osm_id, src))
+        except Exception:
+            result["ai_description"] = None
+
+
+@app.get("/describe")
+async def describe(
+    osm_id: str = Query(..., description="OSM ID of the place to describe"),
+):
+    """Generate (or return cached) AI title + description for a place.
+
+    Blocks until the description is ready.  Result is cached in
+    Elasticsearch for subsequent requests.
+    """
+    desc = await _get_or_generate_description(osm_id, wait=True)
+    if desc is None:
+        raise HTTPException(status_code=404, detail="Place not found or description generation failed")
+    return {"osm_id": osm_id, **desc}
 
 
 # ── geocode (Elasticsearch) ──────────────────────────────────────────────
@@ -668,6 +778,7 @@ async def geocode(
     limit: int = Query(10, ge=1, le=50),
     vector: bool = Query(True, description="Enable semantic vector search"),
     ai: bool = Query(True, description="Enable AI-assisted search"),
+    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
 ):
     """Full geocoding search.
 
@@ -1017,6 +1128,10 @@ async def geocode(
             if isinstance(addr, dict):
                 results[idx]["address"] = addr
 
+    # Attach AI descriptions when requested
+    if describe and ENABLE_AI:
+        await _attach_descriptions(results)
+
     request.state.result_count = len(results)
     return {
         "features": {
@@ -1073,6 +1188,7 @@ async def address_search(
     postcode: str | None = Query(None, description="Restrict results to postal code"),
     city: str | None = Query(None, description="Restrict results to city/town"),
     country: str | None = Query(None, description="Restrict to ISO country code (e.g. EG)"),
+    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
 ):
     """Structured address search powered by Elasticsearch.
 
@@ -1341,32 +1457,37 @@ async def address_search(
 
     max_score = resp["hits"].get("max_score") or 0
     addr_results = resp["hits"]["hits"]
-    request.state.result_count = len(addr_results)
+    results = [
+        {
+            "osm_id":          h["_source"]["osm_id"],
+            "osm_type":        h["_source"].get("osm_type", ""),
+            "name":            h["_source"].get("name", ""),
+            "name_en":         h["_source"].get("name_en", ""),
+            "full_address":    h["_source"].get("full_address", ""),
+            "addr_housenumber": h["_source"].get("addr_housenumber", ""),
+            "addr_street":     h["_source"].get("addr_street", ""),
+            "addr_city":       h["_source"].get("addr_city", ""),
+            "addr_postcode":   h["_source"].get("addr_postcode", ""),
+            "addr_country":    h["_source"].get("addr_country", ""),
+            "addr_suburb":     h["_source"].get("addr_suburb", ""),
+            "addr_state":      h["_source"].get("addr_state", ""),
+            "centroid":        h["_source"].get("centroid"),
+            "geom":            h["_source"].get("geom"),
+            "offline_rank":    h["_source"].get("offline_rank", 0),
+            "confidence":      _normalize_confidence(h["_score"], max_score),
+        }
+        for h in addr_results
+    ]
+
+    if describe and ENABLE_AI:
+        await _attach_descriptions(results)
+
+    request.state.result_count = len(results)
     return {
         "query": q,
         "normalized": q_norm,
         "parsed": parsed,
-        "results": [
-            {
-                "osm_id":          h["_source"]["osm_id"],
-                "osm_type":        h["_source"].get("osm_type", ""),
-                "name":            h["_source"].get("name", ""),
-                "name_en":         h["_source"].get("name_en", ""),
-                "full_address":    h["_source"].get("full_address", ""),
-                "addr_housenumber": h["_source"].get("addr_housenumber", ""),
-                "addr_street":     h["_source"].get("addr_street", ""),
-                "addr_city":       h["_source"].get("addr_city", ""),
-                "addr_postcode":   h["_source"].get("addr_postcode", ""),
-                "addr_country":    h["_source"].get("addr_country", ""),
-                "addr_suburb":     h["_source"].get("addr_suburb", ""),
-                "addr_state":      h["_source"].get("addr_state", ""),
-                "centroid":        h["_source"].get("centroid"),
-                "geom":            h["_source"].get("geom"),
-                "offline_rank":    h["_source"].get("offline_rank", 0),
-                "confidence":      _normalize_confidence(h["_score"], max_score),
-            }
-            for h in addr_results
-        ],
+        "results": results,
     }
 
 
@@ -1534,6 +1655,7 @@ async def add_place(place: PlaceCreate):
 async def reverse(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
+    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
 ):
     """Reverse geocoding using PostGIS + Elasticsearch.
 
@@ -1651,6 +1773,15 @@ async def reverse(
         merge_result(row, es_data.get(row["osm_id"]))
         for row in enclosing_polygons
     ]
+
+    # Attach AI descriptions when requested
+    if describe and ENABLE_AI:
+        desc_targets = []
+        if result.get("nearest_line"):
+            desc_targets.append(result["nearest_line"])
+        desc_targets.extend(result.get("enclosing_polygons", []))
+        if desc_targets:
+            await _attach_descriptions(desc_targets)
 
     return result
 
