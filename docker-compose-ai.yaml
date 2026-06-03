@@ -99,7 +99,7 @@ services:
     image: curlimages/curl:latest
     depends_on:
       ollama:
-        condition: service_healthy
+        condition: service_started
     restart: "no"
     entrypoint: ["sh", "-c", "curl -sf http://ollama:11434/api/pull -d '{\"name\":\"qwen2.5:1.5b\"}' || true"]
 
@@ -209,7 +209,7 @@ services:
       nats:
         condition: service_started
       ollama:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
 
   oa-watcher:
