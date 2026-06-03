@@ -4,7 +4,7 @@
 ### Endpoints
 ###   GET  /features          – which optional features are enabled
 ###   GET  /health            – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
-###   GET  /autocomplete      – fast prefix-based suggestions (edge-ngram, ~5-15ms)
+###   GET  /autocomplete      – fast prefix-based suggestions (Redis sorted sets, ~1-3ms)
 ###   GET  /geocode           – full-text + vector + geo search (with address interpolation fallback)
 ###   GET  /address           – structured address search (with address interpolation fallback)
 ###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
@@ -44,24 +44,32 @@ GET {{baseUrl}}/health
 ###
 
 # ============================================================================
-# /autocomplete  –  Fast prefix-based suggestions (edge-ngram)
+# /autocomplete  –  Fast prefix-based suggestions (Redis sorted sets)
 #
 # Designed for keystroke-by-keystroke dropdown suggestions.
-# Much lighter than /geocode: no address parsing, no vector search,
-# no PostGIS calls, no interpolation.  Typically 5-15ms vs 80-300ms.
+# Primary path: Redis sorted-set lookup (~1-3ms).
+# Fallback: ES edge-ngram query if Redis is unavailable.
+#
+# Architecture:
+#   - At startup, the geocoder warms the Redis index from ES
+#     (scroll by offline_rank desc, index all prefixes 2-6 chars)
+#   - Each prefix key is a sorted set scored by:
+#     offline_rank * 10 + log1p(popularity) * 5
+#   - /feedback updates both ES popularity AND Redis scores in real-time
+#   - /places indexes new entries into Redis immediately
+#   - Geo-bias uses geohash-4 partitioned keys (~20km cells)
 #
 # Params:
 #   q      (required) – partial query text (min 1 char)
 #   lat/lon            – geo-bias: prefer results near this location
 #   limit              – max suggestions (1–20, default 7)
 #
-# Ranking: text relevance × (offline_rank + popularity + geo_proximity)
-# Popularity is driven by the /feedback endpoint — more-clicked results
-# rank higher over time.
+# Response includes "source": "redis"|"elasticsearch" so you can
+# verify which backend served the request.
 #
 # Response fields per suggestion:
 #   osm_id, label (display string), name, name_en, centroid,
-#   admin_level, confidence
+#   admin_level
 # ============================================================================
 
 ### Basic autocomplete – first few characters
@@ -140,7 +148,7 @@ GET {{baseUrl}}/describe?osm_id=w888001
 ### Basic city search
 GET {{baseUrl}}/geocode?q=9 pentland cres
 ### Basic city search
-GET {{baseUrl}}/geocode?q=farm boy
+GET {{baseUrl}}/geocode?q=farm boy3
 ###
 
 ### Search with geo-distance bias (near the Pyramids)

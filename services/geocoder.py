@@ -77,6 +77,12 @@ from shared.config import (
 )
 from shared.llm import generate_description, is_ollama_available
 from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
+from shared.autocomplete import (
+    query as ac_query,
+    index_entry as ac_index_entry,
+    update_score as ac_update_score,
+    warm_from_es as ac_warm_from_es,
+)
 from shared.embeddings import embed_texts
 from shared.address import (
     extract_address_components,
@@ -341,11 +347,21 @@ es: AsyncElasticsearch = None  # type: ignore[assignment]
 pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
 nc = None  # type: ignore[assignment]
 js = None  # type: ignore[assignment]
+redis_pool: aioredis.Redis = None  # type: ignore[assignment]
+
+
+async def _warm_autocomplete():
+    """Background task: populate Redis autocomplete from ES."""
+    try:
+        count = await ac_warm_from_es(redis_pool, es, INDEX)
+        print(f"[geocoder] Autocomplete warm-up done: {count} entries")
+    except Exception as e:
+        print(f"[geocoder] Autocomplete warm-up failed: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, pg_pool, nc, js
+    global es, pg_pool, nc, js, redis_pool
 
     # Retry logic for connecting to dependencies
     max_retries = 10
@@ -413,10 +429,30 @@ async def lifespan(app: FastAPI):
         except Exception as e2:
             print(f"[geocoder] Failed to create ES index: {e2}")
 
+    # Connect to Redis and warm autocomplete index
+    try:
+        redis_pool = aioredis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            decode_responses=True,
+            socket_connect_timeout=5,
+        )
+        await redis_pool.ping()
+        print(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+
+        # Warm autocomplete index from ES in background
+        asyncio.create_task(_warm_autocomplete())
+    except Exception as e:
+        print(f"[geocoder] Redis connection failed: {e}")
+        print(f"[geocoder] Autocomplete will fall back to Elasticsearch")
+        redis_pool = None  # type: ignore[assignment]
+
     yield
     await es.close()
     await pg_pool.close()
     await nc.close()
+    if redis_pool:
+        await redis_pool.aclose()
 
 
 app = FastAPI(title="Geocoding Service", lifespan=lifespan)
@@ -643,12 +679,17 @@ async def health():
     except Exception as e:
         checks["nats"] = {"status": "error", "detail": str(e)}
 
-    # Redis (non-critical — used by watcher, not the search API)
+    # Redis (non-critical — powers autocomplete + watcher node cache)
     try:
-        r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
-        await r.ping()
-        checks["redis"] = {"status": "ok"}
-        await r.aclose()
+        if redis_pool is not None:
+            await redis_pool.ping()
+            ac_keys = await redis_pool.dbsize()
+            checks["redis"] = {"status": "ok", "autocomplete_keys": ac_keys}
+        else:
+            r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
+            await r.ping()
+            checks["redis"] = {"status": "ok", "autocomplete": "not_initialised"}
+            await r.aclose()
     except Exception as e:
         checks["redis"] = {"status": "error", "detail": str(e)}
 
@@ -1216,16 +1257,30 @@ async def autocomplete(
     lon: float | None = Query(None, description="Longitude for geo-bias"),
     limit: int = Query(7, ge=1, le=20, description="Max suggestions"),
 ):
-    """Fast prefix-based autocomplete using edge-ngram sub-fields.
+    """Fast prefix-based autocomplete backed by Redis sorted sets.
 
-    Designed for keystroke-by-keystroke suggestions.  Much lighter than
-    ``/geocode``: no address parsing, no vector search, no PostGIS calls,
-    no interpolation.  Ranking combines text relevance, ``offline_rank``,
-    ``popularity`` (feedback-driven), and optional geo-distance bias.
+    Designed for keystroke-by-keystroke suggestions.  Lookups hit a
+    pre-built Redis prefix index (~1-3 ms) with automatic fallback to
+    Elasticsearch edge-ngram queries if Redis is unavailable.
+
+    Ranking is driven by ``offline_rank`` and ``popularity`` (updated
+    via ``/feedback``).  When ``lat``/``lon`` are provided, geo-local
+    results from the same geohash-4 cell are preferred.
     """
+    # ── Primary path: Redis sorted-set lookup ─────────────────────────
+    if redis_pool is not None:
+        try:
+            results = await ac_query(
+                redis_pool, q, limit=limit, lat=lat, lon=lon,
+            )
+            request.state.result_count = len(results)
+            return {"source": "redis", "results": results}
+        except Exception as e:
+            _logger.debug("Redis autocomplete failed, falling back to ES: %s", e)
+
+    # ── Fallback: Elasticsearch edge-ngram query ──────────────────────
     q_norm = normalize_address_text(q)
 
-    # ── Build a lightweight bool query on .autocomplete sub-fields ─────
     should: list[dict] = [
         {
             "multi_match": {
@@ -1240,8 +1295,6 @@ async def autocomplete(
                 "type": "best_fields",
             }
         },
-        # Exact-prefix phrase boost: "new yo" → "New York" ranks above
-        # "New Yorker Restaurant"
         {
             "multi_match": {
                 "query": q_norm,
@@ -1258,10 +1311,8 @@ async def autocomplete(
         }
     }
 
-    # ── Scoring functions (kept minimal for speed) ─────────────────────
     functions: list[dict] = [
         {"weight": 1.0},
-        # offline_rank: cities/countries float above minor POIs
         {
             "field_value_factor": {
                 "field": "offline_rank",
@@ -1271,7 +1322,6 @@ async def autocomplete(
             },
             "weight": 2,
         },
-        # popularity: feedback-driven boost
         {
             "field_value_factor": {
                 "field": "popularity",
@@ -1283,7 +1333,6 @@ async def autocomplete(
         },
     ]
 
-    # geo-bias: prefer results near the user when location is known
     if lat is not None and lon is not None:
         functions.append(
             {
@@ -1309,7 +1358,6 @@ async def autocomplete(
                 "boost_mode": "multiply",
             }
         },
-        # Return only the fields needed for a suggestion dropdown
         "_source": [
             "osm_id", "osm_type", "name", "name_en",
             "centroid", "admin_level", "offline_rank", "popularity",
@@ -1323,7 +1371,6 @@ async def autocomplete(
     results = []
     for h in resp["hits"]["hits"]:
         src = h["_source"]
-        # Build a concise display label
         name = src.get("name_en") or src.get("name", "")
         addr = src.get("full_address", "")
         if addr and addr != name:
@@ -1342,7 +1389,7 @@ async def autocomplete(
         })
 
     request.state.result_count = len(results)
-    return {"results": results}
+    return {"source": "elasticsearch", "results": results}
 
 
 # ── feedback loop ─────────────────────────────────────────────────────────
@@ -1354,10 +1401,13 @@ async def feedback(
     osm_id: str = Query(...),
     boost: float = Query(1.0, ge=0.1, le=10.0),
 ):
-    """Increment popularity for an element in Elasticsearch.
+    """Increment popularity for an element in Elasticsearch and Redis.
 
     The boost value is clamped to [0.1, 10.0] and popularity is capped
     at 1000 to prevent unbounded growth or abuse.
+
+    Also updates the Redis autocomplete index so that popular results
+    rank higher in real-time without waiting for a full re-warm.
     """
 
     try:
@@ -1373,6 +1423,13 @@ async def feedback(
         )
     except Exception:
         pass
+
+    # Update Redis autocomplete score in background
+    if redis_pool is not None:
+        try:
+            await ac_update_score(redis_pool, osm_id, boost=boost)
+        except Exception:
+            pass
 
     return {"status": "ok", "osm_id": osm_id}
 
@@ -1851,7 +1908,26 @@ async def add_place(place: PlaceCreate):
             raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
         
         print(f"[geocoder] Published place {custom_id} to NATS stream")
-        
+
+        # Index into Redis autocomplete immediately (don't wait for ES round-trip)
+        if redis_pool is not None:
+            try:
+                ac_doc = {
+                    "osm_id": custom_id,
+                    "name": place.name,
+                    "name_en": place.name_en or "",
+                    "centroid": {"lat": place.lat, "lon": place.lon},
+                    "admin_level": place.admin_level,
+                    "offline_rank": 0,
+                    "popularity": 0,
+                    "full_address": "",
+                    "addr_street": place.addr_street or "",
+                    "addr_city": place.addr_city or "",
+                }
+                await ac_index_entry(redis_pool, ac_doc)
+            except Exception:
+                pass  # non-critical
+
         return PlaceResponse(
             osm_id=custom_id,
             osm_type=place.osm_type,
