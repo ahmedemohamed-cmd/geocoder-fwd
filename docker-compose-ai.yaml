@@ -4,9 +4,14 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
-    command: "-js -sd /data -m 8222"
+    command: "-c /etc/nats/nats.conf"
     volumes:
       - nats-data:/data
+      - ./nats.conf:/etc/nats/nats.conf:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   redis:
     image: redis:7-alpine
@@ -19,16 +24,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     ports:
       - "9200:9200"
-      - "9300:9300"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -37,6 +45,10 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   postgis:
     image: postgis/postgis:16-3.4-alpine
@@ -53,6 +65,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # Python services
   watcher:
@@ -77,6 +93,8 @@ services:
   es-inserter:
     build: .
     command: python -u -m services.es_inserter
+    volumes:
+      - ./models:/app/models
     environment:
       - NATS_URL=nats://nats:4222
       - NATS_STREAM=OSM
@@ -86,8 +104,6 @@ services:
       - ENABLE_VECTORS=true
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
-    volumes:
-      - ./models:/app/models
     deploy:
       resources:
         reservations:
@@ -126,6 +142,8 @@ services:
     command: python -u -m services.geocoder
     ports:
       - "8000:8000"
+    volumes:
+      - ./models:/app/models
     environment:
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - POSTGRES_HOST=postgis
@@ -133,16 +151,14 @@ services:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
       - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=true
       - ENABLE_AI=true
       - TRANSFORMERS_CACHE=/app/models
       - HF_HOME=/app/models
-      - NATS_URL=nats://nats:4222
-      - NATS_STREAM=OSM
-      - NATS_SUBJECT=osm.elements
-    volumes:
-      - ./models:/app/models
     deploy:
       resources:
         reservations:
@@ -155,7 +171,39 @@ services:
         condition: service_healthy
       postgis:
         condition: service_healthy
+      nats:
+        condition: service_started
     restart: unless-stopped
+
+  oa-watcher:
+    build: .
+    command: python -u -m services.oa_watcher
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
+      - OA_DATA_DIR=/app/data/openaddresses
+    depends_on:
+      nats:
+        condition: service_started
+    restart: "no"
+
+  gn-watcher:
+    build: .
+    command: python -u -m services.gn_watcher
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
+      - GN_DATA_DIR=/app/data/geonames
+    depends_on:
+      nats:
+        condition: service_started
+    restart: "no"
 
   downloader:
     build: .
@@ -164,6 +212,8 @@ services:
       - ./data:/app/data
     environment:
       - osm_url=https://download.geofabrik.de/africa/egypt-latest.osm.pbf
+      - OA_URL=
+      - GN_URL=
       - DATA_DIR=/app/data
     restart: "no"
 

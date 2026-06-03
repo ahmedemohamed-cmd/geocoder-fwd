@@ -285,6 +285,8 @@ async def ensure_index(es: AsyncElasticsearch):
 
 
 async def run():
+    import time as _time
+
     # Retry logic for connecting to Elasticsearch
     max_retries = 10
     retry_delay = 2
@@ -324,67 +326,75 @@ async def run():
     conn_state = {"nc": nc, "js": js, "sub": sub}
     reconnect_lock = asyncio.Lock()
 
-    # Create worker pool for concurrent batch processing
-    async def worker(worker_id: int):
-        """Worker that fetches and processes batches concurrently."""
+    # ── Pipeline parallelism ──────────────────────────────────────────────
+    # A single fetcher goroutine pulls batches from NATS and places them on
+    # an asyncio.Queue.  Multiple worker coroutines pop from the queue,
+    # process (embed + rank), and bulk-insert into Elasticsearch.
+    # This avoids concurrent .fetch() calls on the same pull subscription
+    # and cleanly separates I/O (fetch/ack) from CPU-bound work (embed).
+    work_queue: asyncio.Queue[list] = asyncio.Queue(maxsize=MAX_CONCURRENT_BATCHES * 2)
+
+    async def fetcher():
+        """Single fetcher that pulls batches from NATS into the work queue."""
         while True:
-            msgs = None
             max_fetch_retries = 5
+            msgs = None
             for fetch_attempt in range(max_fetch_retries):
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
-                    print(f"[es-inserter] Worker {worker_id}: Fetched {len(msgs)} messages", flush=True)
                     break
                 except nats.errors.TimeoutError:
-                    # Stream is empty — normal idle state, no messages to process.
                     msgs = []
                     break
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[es-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, connection_error: {is_conn_err})", flush=True)
+                    print(f"[es-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
 
                     if is_conn_err:
-                        # Only one worker should reconnect at a time
                         async with reconnect_lock:
                             try:
                                 if conn_state["nc"].is_closed:
-                                    print(f"[es-inserter] Worker {worker_id}: Reconnecting...", flush=True)
+                                    print("[es-inserter] Fetcher: Reconnecting...", flush=True)
                                     conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
-                                # Always recreate subscription — the consumer may
-                                # be missing even when the TCP connection is alive
-                                # (e.g. ServiceUnavailableError).
                                 conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
-                                print(f"[es-inserter] Worker {worker_id}: Reconnected / resubscribed", flush=True)
+                                print("[es-inserter] Fetcher: Reconnected / resubscribed", flush=True)
                             except Exception as reconnect_err:
-                                print(f"[es-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
+                                print(f"[es-inserter] Fetcher: Reconnection failed: {reconnect_err}", flush=True)
                                 await asyncio.sleep(5)
                                 continue
-                        break  # Retry fetch with new connection/subscription
+                        break
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
                         delay = min(1 * (2 ** fetch_attempt), 10)
                         await asyncio.sleep(delay)
                     else:
                         await asyncio.sleep(1)
-            
+
             if not msgs:
                 continue
+
+            # Place the raw messages on the queue (blocks if queue is full,
+            # providing natural back-pressure to the fetcher).
+            await work_queue.put(msgs)
+
+    async def worker(worker_id: int):
+        """Worker that processes batches from the queue and indexes into ES."""
+        from shared.embeddings import embed_texts, build_text
+
+        while True:
+            msgs = await work_queue.get()
+            batch_start = _time.monotonic()
 
             # Parse messages (don't ack yet)
             elements = []
             for msg in msgs:
                 elements.append(json.loads(msg.data))
 
-            print(f"[es-inserter] Worker {worker_id}: Parsed {len(elements)} elements", flush=True)
-            
             if not elements:
-                # Ack empty/unparseable messages
                 for msg in msgs:
                     await msg.ack()
+                work_queue.task_done()
                 continue
-
-            # Import embedding functions here to avoid slow startup
-            from shared.embeddings import embed_texts, build_text
 
             # build searchable text from ALL tags for each element
             texts = [build_text(e["tags"]) for e in elements]
@@ -444,18 +454,23 @@ async def run():
                 actions.append(doc)
 
             await async_bulk(es, actions, raise_on_error=False)
-            print(f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs", flush=True)
 
             # Ack messages only after successful indexing
             for msg in msgs:
                 await msg.ack()
 
-    # Spawn multiple workers
-    workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
-    print(f"[es-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
+            elapsed = _time.monotonic() - batch_start
+            throughput = len(actions) / elapsed if elapsed > 0 else 0
+            print(f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs in {elapsed:.2f}s ({throughput:.0f} docs/s)", flush=True)
+            work_queue.task_done()
+
+    # Spawn one fetcher + multiple processing workers
+    tasks = [asyncio.create_task(fetcher())]
+    tasks += [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
+    print(f"[es-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)", flush=True)
     
-    # Wait for all workers (they run indefinitely)
-    await asyncio.gather(*workers)
+    # Wait for all tasks (they run indefinitely)
+    await asyncio.gather(*tasks)
 
     await es.close()
     await conn_state["nc"].close()

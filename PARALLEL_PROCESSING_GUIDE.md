@@ -2,13 +2,11 @@
 
 ## Status Summary
 
-**Current State**: Sequential processing with adaptive batch sizes
-- ✅ **Standard mode**: BATCH_SIZE=100, MAX_CONCURRENT_BATCHES=4 (sequential)
-- ✅ **AI mode**: BATCH_SIZE=50, MAX_CONCURRENT_BATCHES=2 (sequential, GPU-optimized)
-- ✅ Configuration for parallel processing added but not yet implemented
-- ⏳ Parallel processing NOT YET IMPLEMENTED
-- 📊 Current performance: ~500-1000 docs/sec per inserter (standard), ~100-300 docs/sec (AI mode)
-- 🎯 Potential performance with parallel: ~2000-4000 docs/sec per inserter (standard), ~400-1200 docs/sec (AI mode)
+**Current State**: Pipeline-parallel processing with adaptive batch sizes
+- ✅ **Standard mode**: BATCH_SIZE=100, MAX_CONCURRENT_BATCHES=4
+- ✅ **AI mode**: BATCH_SIZE=50, MAX_CONCURRENT_BATCHES=2 (GPU-optimized)
+- ✅ Pipeline parallelism implemented (1 fetcher + N workers)
+- 📊 Expected performance: ~2000-4000 docs/sec per inserter (standard), ~400-1200 docs/sec (AI mode)
 
 This document describes how to implement parallel processing to achieve additional 2-4x performance improvement.
 
@@ -16,28 +14,29 @@ This document describes how to implement parallel processing to achieve addition
 
 This guide documents parallel processing implementation for the geocoding service pipeline. Currently, the system uses **sequential batch processing** with adaptive batch sizes based on deployment mode. Parallel processing can provide 2-4x additional performance improvements by better utilizing CPU and I/O resources.
 
-## Current Architecture (Sequential)
+## Architecture (Pipeline Parallel)
 
 ```
-NATS → Fetch Batch 1 → Process → Insert → Fetch Batch 2 → Process → Insert → ...
+                      ┌→ Worker 0: Process → Insert ─┐
+NATS → Fetcher ─ Q ──┼→ Worker 1: Process → Insert ──┼→ Ack
+                      ├→ Worker 2: Process → Insert ──┤
+                      └→ Worker 3: Process → Insert ──┘
 ```
 
-**Current State**: Sequential processing with adaptive batch sizes:
-- **Standard mode**: BATCH_SIZE=100, MAX_CONCURRENT_BATCHES=4 (sequential only)
-- **AI mode**: BATCH_SIZE=50, MAX_CONCURRENT_BATCHES=2 (sequential only, reduced for GPU efficiency)
+A single **fetcher** coroutine pulls batches from the NATS pull subscription and
+places them on a bounded `asyncio.Queue`.  Multiple **worker** coroutines consume
+from the queue, process (embed / rank / convert), and insert into the target
+database.  Messages are acknowledged only after successful insertion.
 
-**Problem**: While one batch is being processed/inserted, CPU and I/O resources may be underutilized.
+The bounded queue (`maxsize = MAX_CONCURRENT_BATCHES * 2`) provides natural
+back-pressure: when workers are saturated the fetcher blocks, preventing
+unbounded memory growth.
 
-## Proposed Architecture (Parallel)
-
-```
-NATS → Fetch Batch 1 ─┐
-     → Fetch Batch 2 ─┼→ Concurrent Processing → Concurrent Insertion
-     → Fetch Batch 3 ─┤
-     → Fetch Batch 4 ─┘
-```
-
-**Benefit**: Multiple batches are processed simultaneously, maximizing resource utilization.
+**Benefits**:
+- No concurrent `.fetch()` calls on the same pull subscription (avoids race conditions)
+- Multiple batches processed simultaneously, maximizing CPU/IO utilization
+- Back-pressure prevents memory overload
+- Per-batch throughput metrics (docs/s) logged by each worker
 
 ## Implementation Approaches
 

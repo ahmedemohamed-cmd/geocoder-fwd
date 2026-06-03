@@ -30,15 +30,28 @@ address point stored in the osm_addresses PostGIS table.
 
 import asyncio
 from contextlib import asynccontextmanager
+import logging
+import sys
+import time
 import uuid
 from datetime import datetime, timezone
 import json
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from elasticsearch import AsyncElasticsearch
 import asyncpg
 import nats
+import redis.asyncio as aioredis
+
+# ── structured logger ─────────────────────────────────────────────────────
+_logger = logging.getLogger("geocoder.access")
+_logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+_logger.addHandler(_handler)
+_logger.propagate = False
 
 from shared.config import (
     ELASTICSEARCH_URL,
@@ -52,6 +65,8 @@ from shared.config import (
     POSTGRES_PASSWORD,
     NATS_URL,
     NATS_SUBJECT,
+    REDIS_HOST,
+    REDIS_PORT,
 )
 from shared.embeddings import embed_texts
 from shared.address import (
@@ -63,6 +78,44 @@ from shared.address import (
 )
 
 INDEX = "osm_places"
+
+
+def _normalize_confidence(score: float, max_score: float) -> float:
+    """Normalize an Elasticsearch score to a 0.0-1.0 confidence value.
+
+    Uses the max score in the result set as the reference point so the
+    top result always gets 1.0 and others are proportional.
+    """
+    if max_score <= 0:
+        return 0.0
+    return round(min(score / max_score, 1.0), 4)
+
+
+def _distance_confidence(distance_m: float) -> float:
+    """Convert a distance in metres to a 0.0-1.0 confidence score.
+
+    Follows the Pelias convention:
+      <1 m   → 1.0
+      1-10   → 0.9
+      10-100 → 0.8
+      100-250→ 0.7
+      250-1k → 0.6
+      1k-5k  → 0.4
+      5k+    → 0.2
+    """
+    if distance_m < 1:
+        return 1.0
+    if distance_m < 10:
+        return 0.9
+    if distance_m < 100:
+        return 0.8
+    if distance_m < 250:
+        return 0.7
+    if distance_m < 1000:
+        return 0.6
+    if distance_m < 5000:
+        return 0.4
+    return 0.2
 
 # ── Elasticsearch index mapping ───────────────────────────────────────────
 # NOTE: This must stay in sync with es_inserter.py MAPPING.
@@ -358,6 +411,49 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Geocoding Service", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    """Log every request with method, path, latency, and status code."""
+    start = time.monotonic()
+    request_id = uuid.uuid4().hex[:12]
+    request.state.request_id = request_id
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        latency_ms = round((time.monotonic() - start) * 1000, 1)
+        _logger.info(
+            json.dumps({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "query": str(request.url.query),
+                "status": 500,
+                "latency_ms": latency_ms,
+            })
+        )
+        raise
+
+    latency_ms = round((time.monotonic() - start) * 1000, 1)
+    log_entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "query": str(request.url.query),
+        "status": response.status_code,
+        "latency_ms": latency_ms,
+    }
+    # Include result count for search endpoints (stored by handlers)
+    result_count = getattr(request.state, "result_count", None)
+    if result_count is not None:
+        log_entry["result_count"] = result_count
+
+    _logger.info(json.dumps(log_entry))
+    return response
+
+
 # ── address enrichment ────────────────────────────────────────────────────
 async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     """Look up address/parent data from PostGIS and cache it in ES.
@@ -498,9 +594,74 @@ async def features():
     }
 
 
+# ── health check ─────────────────────────────────────────────────────────
+@app.get("/health")
+async def health():
+    """Check connectivity to all backend dependencies.
+
+    Returns HTTP 200 when all critical services (Elasticsearch, PostGIS)
+    are reachable, or 503 if any critical dependency is down.
+    Non-critical services (Redis, NATS) are reported but don't fail the check.
+    """
+    checks: dict[str, dict] = {}
+
+    # Elasticsearch (critical)
+    try:
+        info = await es.info()
+        checks["elasticsearch"] = {
+            "status": "ok",
+            "version": info["version"]["number"],
+        }
+    except Exception as e:
+        checks["elasticsearch"] = {"status": "error", "detail": str(e)}
+
+    # PostGIS (critical)
+    try:
+        async with pg_pool.acquire() as conn:
+            version = await conn.fetchval("SELECT version()")
+        checks["postgis"] = {"status": "ok", "version": version}
+    except Exception as e:
+        checks["postgis"] = {"status": "error", "detail": str(e)}
+
+    # NATS (non-critical — only used for /insert and /places)
+    try:
+        if nc and nc.is_connected:
+            checks["nats"] = {"status": "ok"}
+        else:
+            checks["nats"] = {"status": "error", "detail": "disconnected"}
+    except Exception as e:
+        checks["nats"] = {"status": "error", "detail": str(e)}
+
+    # Redis (non-critical — used by watcher, not the search API)
+    try:
+        r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
+        await r.ping()
+        checks["redis"] = {"status": "ok"}
+        await r.aclose()
+    except Exception as e:
+        checks["redis"] = {"status": "error", "detail": str(e)}
+
+    # Overall status: fail only if critical services are down
+    critical_ok = all(
+        checks[svc]["status"] == "ok"
+        for svc in ("elasticsearch", "postgis")
+    )
+    overall = "healthy" if critical_ok else "degraded"
+    status_code = 200 if critical_ok else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall,
+            "checks": checks,
+        },
+    )
+
+
 # ── geocode (Elasticsearch) ──────────────────────────────────────────────
 @app.get("/geocode")
 async def geocode(
+    request: Request,
     q: str = Query(..., min_length=1),
     lat: float | None = Query(None),
     lon: float | None = Query(None),
@@ -808,6 +969,7 @@ async def geocode(
     resp = await es.search(index=INDEX, **body)
 
     # Build results and enrich address data where missing
+    max_score = resp["hits"].get("max_score") or 0
     results = []
     enrich_tasks = []
 
@@ -826,7 +988,7 @@ async def geocode(
             "area_km2": src.get("area_km2", 0),
             "offline_rank": src.get("offline_rank", 0),
             "popularity": src.get("popularity", 0),
-            "score": h["_score"],
+            "confidence": _normalize_confidence(h["_score"], max_score),
             # structured address fields (present when element has addr:* tags)
             "full_address":      src.get("full_address", ""),
             "addr_housenumber":  src.get("addr_housenumber", ""),
@@ -855,6 +1017,7 @@ async def geocode(
             if isinstance(addr, dict):
                 results[idx]["address"] = addr
 
+    request.state.result_count = len(results)
     return {
         "features": {
             "vectors_enabled": use_vectors,
@@ -902,6 +1065,7 @@ async def feedback(
 # ── address search (Elasticsearch) ───────────────────────────────────────────
 @app.get("/address")
 async def address_search(
+    request: Request,
     q: str = Query(..., min_length=1, description="Address query string"),
     lat: float | None = Query(None, description="Latitude for proximity boost"),
     lon: float | None = Query(None, description="Longitude for proximity boost"),
@@ -1175,6 +1339,9 @@ async def address_search(
 
     resp = await es.search(index=INDEX, **body)
 
+    max_score = resp["hits"].get("max_score") or 0
+    addr_results = resp["hits"]["hits"]
+    request.state.result_count = len(addr_results)
     return {
         "query": q,
         "normalized": q_norm,
@@ -1196,9 +1363,9 @@ async def address_search(
                 "centroid":        h["_source"].get("centroid"),
                 "geom":            h["_source"].get("geom"),
                 "offline_rank":    h["_source"].get("offline_rank", 0),
-                "score":           h["_score"],
+                "confidence":      _normalize_confidence(h["_score"], max_score),
             }
-            for h in resp["hits"]["hits"]
+            for h in addr_results
         ],
     }
 
@@ -1457,6 +1624,7 @@ async def reverse(
     # nearest_address comes directly from osm_addresses (no ES lookup needed)
     if nearest_addr_row:
         raw_addr_geom = nearest_addr_row["geom"]
+        dist = round(nearest_addr_row["distance_m"], 1)
         result["nearest_address"] = {
             "osm_id":       nearest_addr_row["osm_id"],
             "osm_type":     nearest_addr_row["osm_type"],
@@ -1467,13 +1635,16 @@ async def reverse(
             "country":      nearest_addr_row["country"],
             "full_address": nearest_addr_row["full_address"],
             "geom":         json.loads(raw_addr_geom) if isinstance(raw_addr_geom, str) else raw_addr_geom,
-            "distance_m":   round(nearest_addr_row["distance_m"], 1),
+            "distance_m":   dist,
+            "confidence":   _distance_confidence(dist),
         }
 
     if nearest_line:
         es_source = es_data.get(nearest_line["osm_id"])
         merged = merge_result(nearest_line, es_source)
-        merged["distance_m"] = round(nearest_line["distance_m"], 1)
+        line_dist = round(nearest_line["distance_m"], 1)
+        merged["distance_m"] = line_dist
+        merged["confidence"] = _distance_confidence(line_dist)
         result["nearest_line"] = merged
 
     result["enclosing_polygons"] = [

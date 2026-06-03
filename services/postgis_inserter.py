@@ -165,6 +165,8 @@ async def ensure_table(pool: asyncpg.Pool):
 
 
 async def run():
+    import time as _time
+
     pool = await asyncpg.create_pool(
         host=POSTGRES_HOST,
         port=POSTGRES_PORT,
@@ -186,49 +188,59 @@ async def run():
 
     # Use mutable containers for connection objects so workers can update them
     conn_state = {"nc": nc, "js": js, "sub": sub}
+    reconnect_lock = asyncio.Lock()
 
-    # Create worker pool for concurrent batch processing
-    async def worker(worker_id: int):
-        """Worker that fetches and processes batches concurrently."""
+    # ── Pipeline parallelism ──────────────────────────────────────────────
+    # A single fetcher pulls batches from NATS and places them on a queue.
+    # Multiple workers pop from the queue, parse, and insert into PostGIS.
+    work_queue: asyncio.Queue[list] = asyncio.Queue(maxsize=MAX_CONCURRENT_BATCHES * 2)
+
+    async def fetcher():
+        """Single fetcher that pulls batches from NATS into the work queue."""
         while True:
-            msgs = None
             max_fetch_retries = 5
+            msgs = None
             for fetch_attempt in range(max_fetch_retries):
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     break
                 except nats.errors.TimeoutError:
-                    # Stream is empty — normal idle state, no messages to process.
                     msgs = []
                     break
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[postgis-inserter] Worker {worker_id}: Fetch error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, connection_error: {is_conn_err})", flush=True)
-                    
+                    print(f"[postgis-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
+
                     if is_conn_err:
-                        # Connection is broken, need to reconnect
-                        print(f"[postgis-inserter] Worker {worker_id}: Connection error detected, reconnecting...", flush=True)
-                        try:
-                            conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
-                            conn_state["sub"] = await subscribe(conn_state["js"], "postgis-consumer")
-                            print(f"[postgis-inserter] Worker {worker_id}: Reconnected and resubscribed", flush=True)
-                            break  # Retry fetch with new connection
-                        except Exception as reconnect_err:
-                            print(f"[postgis-inserter] Worker {worker_id}: Reconnection failed: {reconnect_err}", flush=True)
-                            await asyncio.sleep(5)
-                            continue
+                        async with reconnect_lock:
+                            try:
+                                if conn_state["nc"].is_closed:
+                                    print("[postgis-inserter] Fetcher: Reconnecting...", flush=True)
+                                    conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
+                                conn_state["sub"] = await subscribe(conn_state["js"], "postgis-consumer")
+                                print("[postgis-inserter] Fetcher: Reconnected / resubscribed", flush=True)
+                            except Exception as reconnect_err:
+                                print(f"[postgis-inserter] Fetcher: Reconnection failed: {reconnect_err}", flush=True)
+                                await asyncio.sleep(5)
+                                continue
+                        break
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
-                        # Exponential backoff for transient errors
-                        delay = min(2 * (2 ** fetch_attempt), 15)  # Increased backoff, cap at 15 seconds
-                        print(f"[postgis-inserter] Worker {worker_id}: Backing off for {delay}s before retry", flush=True)
+                        delay = min(2 * (2 ** fetch_attempt), 15)
                         await asyncio.sleep(delay)
                     else:
-                        print(f"[postgis-inserter] Worker {worker_id}: Max retries reached, waiting 10s before retry loop", flush=True)
                         await asyncio.sleep(10)
-            
+
             if not msgs:
                 continue
+
+            await work_queue.put(msgs)
+
+    async def worker(worker_id: int):
+        """Worker that processes batches from the queue and inserts into PostGIS."""
+        while True:
+            msgs = await work_queue.get()
+            batch_start = _time.monotonic()
 
             # Parse messages (don't ack yet)
             rows: list[tuple[str, str, str]] = []
@@ -241,15 +253,13 @@ async def run():
                 geom     = elem.get("geom")
 
                 if not geom:
-                    print(f"[postgis-inserter] Skipping {osm_id}: no geometry")
                     continue
 
                 wkt = _geojson_to_wkt(geom, osm_id)
-                if wkt:
-                    rows.append((osm_id, osm_type, wkt))
-                else:
-                    print(f"[postgis-inserter] Failed to convert geometry for {osm_id}")
+                if not wkt:
                     continue
+
+                rows.append((osm_id, osm_type, wkt))
 
                 # Build address row when addr:* tags are present
                 tags = elem.get("tags", {})
@@ -283,7 +293,6 @@ async def run():
                         """,
                         rows,
                     )
-                print(f"[postgis-inserter] Worker {worker_id}: Inserted {len(rows)} geometries")
 
             if addr_rows:
                 async with pool.acquire() as conn:
@@ -306,18 +315,23 @@ async def run():
                         """,
                         addr_rows,
                     )
-                print(f"[postgis-inserter] Worker {worker_id}: Inserted {len(addr_rows)} addresses")
 
             # Ack messages only after successful processing
             for msg in msgs:
                 await msg.ack()
 
-    # Spawn multiple workers
-    workers = [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
-    print(f"[postgis-inserter] Started {MAX_CONCURRENT_BATCHES} concurrent workers", flush=True)
+            elapsed = _time.monotonic() - batch_start
+            throughput = len(rows) / elapsed if elapsed > 0 else 0
+            print(f"[postgis-inserter] Worker {worker_id}: Inserted {len(rows)} geoms + {len(addr_rows)} addrs in {elapsed:.2f}s ({throughput:.0f} rows/s)", flush=True)
+            work_queue.task_done()
+
+    # Spawn one fetcher + multiple processing workers
+    tasks = [asyncio.create_task(fetcher())]
+    tasks += [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
+    print(f"[postgis-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)", flush=True)
     
-    # Wait for all workers (they run indefinitely)
-    await asyncio.gather(*workers)
+    # Wait for all tasks (they run indefinitely)
+    await asyncio.gather(*tasks)
 
     await pool.close()
     await conn_state["nc"].close()
