@@ -3,12 +3,19 @@
 ###
 ### Endpoints
 ###   GET  /features          – which optional features are enabled
+###   GET  /health            – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
 ###   GET  /geocode           – full-text + vector + geo search
 ###   GET  /address           – structured address search
 ###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / street / boundaries)
+###   GET  /describe          – AI-generated title + description for a place
 ###   POST /feedback          – popularity feedback loop
 ###   POST /places            – add a custom place
 ###   POST /insert            – insert raw OSM element via NATS
+###
+### Shared query flags for search endpoints:
+###   vector=true|false   – enable/disable semantic vector re-ranking
+###   ai=true|false       – enable/disable AI-assisted expansion
+###   describe=true|false – include AI-generated title + description (cached)
 ###
 ### Debugging helpers at the bottom:
 ###   Elasticsearch direct queries
@@ -26,6 +33,37 @@ GET {{baseUrl}}/features
 ###
 
 # ============================================================================
+# Health Check
+# ============================================================================
+
+### Check all dependencies: ES, PostGIS, NATS, Redis, Ollama
+### Returns 200 (healthy) or 503 (degraded) with per-service status
+GET {{baseUrl}}/health
+
+###
+
+# ============================================================================
+# /describe  –  AI-generated title + description for a place
+#
+# Params:
+#   osm_id  (required) – OSM ID of the place to describe
+#
+# Returns bilingual (Arabic + English) title and description.
+# Blocks until generation completes on first call; cached in ES after that.
+# Requires Ollama to be running with the configured model.
+# ============================================================================
+
+### Generate description for a specific place (blocks until ready)
+GET {{baseUrl}}/describe?osm_id=n271613766
+
+###
+
+### Generate description for a way
+GET {{baseUrl}}/describe?osm_id=w888001
+
+###
+
+# ============================================================================
 # /geocode  –  Full-text + vector + geo-decay search (Elasticsearch)
 #
 # Params:
@@ -34,6 +72,7 @@ GET {{baseUrl}}/features
 #   limit              – max results (1–50, default 10)
 #   vector=true|false  – enable/disable semantic vector re-ranking
 #   ai=true|false      – enable/disable AI-assisted expansion
+#   describe=true|false – include AI descriptions (cached where available)
 # ============================================================================
 
 ### Basic city search
@@ -78,6 +117,16 @@ GET {{baseUrl}}/geocode?q=القاهرة&limit=10
 
 ###
 
+### Search with AI descriptions included (cached where available, null otherwise)
+GET {{baseUrl}}/geocode?q=cairo tower&lat=30.0459&lon=31.2243&limit=5&describe=true
+
+###
+
+### Venue search with descriptions
+GET {{baseUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=5&describe=true
+
+###
+
 # ============================================================================
 # /address  –  Structured address search (Elasticsearch)
 #
@@ -88,6 +137,7 @@ GET {{baseUrl}}/geocode?q=القاهرة&limit=10
 #   postcode             – hard filter: restrict to this postal code
 #   city                 – hard filter: restrict to this city
 #   country              – hard filter: restrict to ISO country code (e.g. EG)
+#   describe=true|false  – include AI descriptions (cached where available)
 #
 # Only elements with at least one addr:* tag are returned.
 # The response includes a `parsed` field showing how the query was interpreted.
@@ -158,20 +208,27 @@ GET {{baseUrl}}/address?q=El Galaa Street&limit=5
 
 ###
 
+### Address search with AI descriptions
+GET {{baseUrl}}/address?q=10 Tahrir Street, Cairo&describe=true
+
+###
+
 # ============================================================================
 # /reverse  –  Reverse geocoding (PostGIS + Elasticsearch)
 #
 # Params:
 #   lat  (required) – latitude
 #   lon  (required) – longitude
+#   describe=true|false – include AI descriptions on nearest_line / polygons
 #
 # Returns:
 #   nearest_address    – closest building/address point from osm_addresses table
 #                        fields: housenumber, street, city, postcode, country,
-#                                full_address, geom, distance_m
+#                                full_address, geom, distance_m, confidence
 #   nearest_line       – closest LineString (road/path) with ES metadata
 #                        fields: osm_id, osm_type, name, name_en, tags,
-#                                admin_level, area_km2, offline_rank, geom
+#                                admin_level, area_km2, offline_rank, geom,
+#                                distance_m, confidence
 #   enclosing_polygons – all polygons/multipolygons containing the point
 #                        (admin boundaries, landuse areas, etc.) sorted by
 #                        admin_level descending (most specific first)
@@ -210,6 +267,11 @@ GET {{baseUrl}}/reverse?lat=30.0928&lon=31.3201
 
 ### Reverse geocode in Aswan (southern Egypt)
 GET {{baseUrl}}/reverse?lat=24.0889&lon=32.8998
+
+###
+
+### Reverse geocode with AI descriptions on streets/polygons
+GET {{baseUrl}}/reverse?lat=30.0444&lon=31.2357&describe=true
 
 ###
 
