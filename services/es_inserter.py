@@ -459,7 +459,7 @@ async def run():
                 actions.append(doc)
 
             # Bulk index with retry on transient ES errors (timeout, circuit breaker, etc.)
-            max_bulk_retries = 5
+            max_bulk_retries = 500
             for bulk_attempt in range(max_bulk_retries):
                 try:
                     await async_bulk(es, actions, raise_on_error=False)

@@ -36,7 +36,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -48,7 +48,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
 
   postgis:
     image: postgis/postgis:16-3.4-alpine
