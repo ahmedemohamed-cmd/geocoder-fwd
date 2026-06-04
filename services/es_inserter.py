@@ -83,6 +83,22 @@ MAPPING = {
                         "م, ميدان",
                     ],
                 },
+                # French street-type synonyms
+                "street_synonyms_fr": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "r, rue",
+                        "av, ave, avenue",
+                        "bd, blvd, boulevard",
+                        "pl, place",
+                        "ch, chemin",
+                        "imp, impasse",
+                        "all, allée",
+                        "crs, cours",
+                        "rte, route",
+                        "pass, passage",
+                    ],
+                },
                 # Edge n-gram for autocomplete / prefix matching
                 "edge_ngram_filter": {
                     "type": "edge_ngram",
@@ -111,6 +127,7 @@ MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                     ],
                 },
                 # Edge n-gram analyzer for autocomplete (index-time only)
@@ -123,6 +140,7 @@ MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                         "edge_ngram_filter",
                     ],
                 },
@@ -136,6 +154,7 @@ MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                     ],
                 },
                 # Arabic-optimized analyzer for name fields
@@ -168,6 +187,18 @@ MAPPING = {
                 },
             },
             "name_en": {
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "name_fr": {
                 "type": "text",
                 "analyzer": "standard",
                 "fields": {
@@ -432,6 +463,7 @@ async def run():
                     "osm_type": elem.get("osm_type", ""),
                     "name": tags.get("name", ""),
                     "name_en": tags.get("name:en", ""),
+                    "name_fr": tags.get("name:fr", ""),
                     "tags_text": txt,
                     "tags": tags,
                     "admin_level": admin_level,

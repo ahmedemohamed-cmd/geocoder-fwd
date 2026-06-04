@@ -172,6 +172,22 @@ ES_MAPPING = {
                         "م, ميدان",
                     ],
                 },
+                # French street-type synonyms
+                "street_synonyms_fr": {
+                    "type": "synonym",
+                    "synonyms": [
+                        "r, rue",
+                        "av, ave, avenue",
+                        "bd, blvd, boulevard",
+                        "pl, place",
+                        "ch, chemin",
+                        "imp, impasse",
+                        "all, allée",
+                        "crs, cours",
+                        "rte, route",
+                        "pass, passage",
+                    ],
+                },
                 "edge_ngram_filter": {
                     "type": "edge_ngram",
                     "min_gram": 2,
@@ -197,6 +213,7 @@ ES_MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                     ],
                 },
                 "address_autocomplete": {
@@ -208,6 +225,7 @@ ES_MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                         "edge_ngram_filter",
                     ],
                 },
@@ -220,6 +238,7 @@ ES_MAPPING = {
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
+                        "street_synonyms_fr",
                     ],
                 },
                 "arabic_name": {
@@ -251,6 +270,18 @@ ES_MAPPING = {
                 },
             },
             "name_en": {
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
+            "name_fr": {
                 "type": "text",
                 "analyzer": "standard",
                 "fields": {
@@ -606,11 +637,12 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     nearest_street = None
     for row in nearest_lines:
         src = es_data.get(row["osm_id"])
-        if src and (src.get("name") or src.get("name_en")):
+        if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
             nearest_street = {
                 "osm_id": row["osm_id"],
                 "name": src.get("name", ""),
                 "name_en": src.get("name_en", ""),
+                "name_fr": src.get("name_fr", ""),
             }
             break
 
@@ -622,11 +654,12 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
             continue
         seen.add(row_id)
         src = es_data.get(row_id)
-        if src and (src.get("name") or src.get("name_en")):
+        if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
             parents.append({
                 "osm_id": row_id,
                 "name": src.get("name", ""),
                 "name_en": src.get("name_en", ""),
+                "name_fr": src.get("name_fr", ""),
                 "admin_level": src.get("admin_level", 0),
             })
     # Sort parents by admin_level descending (most specific first: suburb→city→state→country)
@@ -736,6 +769,7 @@ def _interpolated_to_result(ia: InterpolatedAddress) -> dict:
         "osm_type": "",
         "name": f"{ia.housenumber} {ia.street}",
         "name_en": "",
+        "name_fr": "",
         "tags": {},
         "tags_text": "",
         "geom": {"type": "Point", "coordinates": [ia.lon, ia.lat]},
@@ -778,7 +812,7 @@ async def _get_or_generate_description(
     # 1. Check ES cache
     try:
         doc = await es.get(index=INDEX, id=osm_id, _source_includes=[
-            "ai_description", "name", "name_en", "tags", "centroid",
+            "ai_description", "name", "name_en", "name_fr", "tags", "centroid",
             "full_address", "addr_housenumber", "addr_street", "addr_city",
             "addr_suburb", "addr_state", "addr_postcode", "addr_country",
             "admin_level",
@@ -824,8 +858,8 @@ async def _attach_descriptions(results: list[dict]) -> None:
         try:
             doc = await es.get(
                 index=INDEX, id=osm_id,
-                _source_includes=["ai_description", "name", "name_en", "tags",
-                                  "centroid", "full_address",
+                _source_includes=["ai_description", "name", "name_en", "name_fr",
+                                  "tags", "centroid", "full_address",
                                   "addr_housenumber", "addr_street",
                                   "addr_city", "addr_suburb", "addr_state",
                                   "addr_postcode", "addr_country",
@@ -875,7 +909,7 @@ async def geocode(
     Uses boost_mode=multiply so text relevance gates ranking — a high-importance
     element with a weak text match cannot outscore a lower-rank exact match.
 
-    Text similarity searches across name, name_en, and tags_text (all tags)
+    Text similarity searches across name, name_en, name_fr, and tags_text (all tags)
     with phrase and exact-match boosting for multi-word queries.
     vector=true adds KNN cosine similarity re-ranking (requires ENABLE_VECTORS).
     ai=true enables AI-assisted query expansion (requires ENABLE_AI).
@@ -954,9 +988,9 @@ async def geocode(
     if addr_detected:
         parsed_addr = parse_address_query(q)
 
-    # text query – multi_match across name/name_en using best_fields so that
-    # matching the query in EITHER field yields the same score (no double-counting
-    # for places that happen to have the query language in both fields).
+    # text query – multi_match across name/name_en/name_fr using best_fields so that
+    # matching the query in ANY field yields the same score (no double-counting
+    # for places that happen to have the query language in multiple fields).
     should_clauses: list[dict] = [
         # fuzzy token matching across all searchable fields (including autocomplete)
         {
@@ -965,26 +999,27 @@ async def geocode(
                 "fields": [
                     "name^5", "name.autocomplete^2",
                     "name_en^5", "name_en.autocomplete^2",
+                    "name_fr^5", "name_fr.autocomplete^2",
                     "tags_text",
                 ],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
             }
         },
-        # phrase boost: "New York" as a contiguous phrase (best of name or name_en)
+        # phrase boost: contiguous phrase (best of name, name_en, or name_fr)
         {
             "multi_match": {
                 "query": q_norm,
-                "fields": ["name", "name_en"],
+                "fields": ["name", "name_en", "name_fr"],
                 "type": "phrase",
                 "boost": 10,
             }
         },
-        # all-tokens-required boost: every query word appears (best of name or name_en)
+        # all-tokens-required boost: every query word appears
         {
             "multi_match": {
                 "query": q_norm,
-                "fields": ["name", "name_en"],
+                "fields": ["name", "name_en", "name_fr"],
                 "type": "best_fields",
                 "operator": "and",
                 "boost": 15,
@@ -1180,6 +1215,7 @@ async def geocode(
             "osm_type": src.get("osm_type", ""),
             "name": src.get("name", ""),
             "name_en": src.get("name_en", ""),
+            "name_fr": src.get("name_fr", ""),
             "tags": src.get("tags", {}),
             "tags_text": src.get("tags_text", ""),
             "geom": src.get("geom"),
@@ -1300,6 +1336,7 @@ async def autocomplete(
                 "fields": [
                     "name.autocomplete^5",
                     "name_en.autocomplete^5",
+                    "name_fr.autocomplete^5",
                     "addr_street.autocomplete^3",
                     "addr_city.autocomplete^2",
                     "full_address.autocomplete^2",
@@ -1310,7 +1347,7 @@ async def autocomplete(
         {
             "multi_match": {
                 "query": q_norm,
-                "fields": ["name^8", "name_en^8"],
+                "fields": ["name^8", "name_en^8", "name_fr^8"],
                 "type": "phrase_prefix",
             }
         },
@@ -1371,7 +1408,7 @@ async def autocomplete(
             }
         },
         "_source": [
-            "osm_id", "osm_type", "name", "name_en",
+            "osm_id", "osm_type", "name", "name_en", "name_fr",
             "centroid", "admin_level", "offline_rank", "popularity",
             "full_address", "addr_street", "addr_city", "addr_country",
         ],
@@ -1395,6 +1432,7 @@ async def autocomplete(
             "label": label,
             "name": src.get("name", ""),
             "name_en": src.get("name_en", ""),
+            "name_fr": src.get("name_fr", ""),
             "centroid": src.get("centroid"),
             "admin_level": src.get("admin_level", 0),
             "confidence": _normalize_confidence(h["_score"], max_score),
@@ -1611,7 +1649,11 @@ async def address_search(
         {
             "multi_match": {
                 "query": q_norm,
-                "fields": ["name^3", "name.autocomplete^1", "name_en^3", "name_en.autocomplete^1"],
+                "fields": [
+                    "name^3", "name.autocomplete^1",
+                    "name_en^3", "name_en.autocomplete^1",
+                    "name_fr^3", "name_fr.autocomplete^1",
+                ],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
                 "boost": 2,
@@ -1732,6 +1774,7 @@ async def address_search(
             "osm_type":        h["_source"].get("osm_type", ""),
             "name":            h["_source"].get("name", ""),
             "name_en":         h["_source"].get("name_en", ""),
+            "name_fr":         h["_source"].get("name_fr", ""),
             "full_address":    h["_source"].get("full_address", ""),
             "addr_housenumber": h["_source"].get("addr_housenumber", ""),
             "addr_street":     h["_source"].get("addr_street", ""),
@@ -1785,6 +1828,7 @@ class PlaceCreate(BaseModel):
     """Model for creating a new place."""
     name: str = Field(..., min_length=1, max_length=255)
     name_en: str | None = Field(None, max_length=255)
+    name_fr: str | None = Field(None, max_length=255)
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
     tags: dict[str, str] | None = Field(default_factory=dict)
@@ -1816,6 +1860,7 @@ class PlaceResponse(BaseModel):
     osm_type: str
     name: str
     name_en: str | None
+    name_fr: str | None
     tags: dict[str, str]
     lat: float
     lon: float
@@ -1884,6 +1929,8 @@ async def add_place(place: PlaceCreate):
     tags["name"] = place.name
     if place.name_en:
         tags["name:en"] = place.name_en
+    if place.name_fr:
+        tags["name:fr"] = place.name_fr
     # Map address fields → OSM addr:* tags
     _addr_map = {
         "addr:housenumber": place.addr_housenumber,
@@ -1928,6 +1975,7 @@ async def add_place(place: PlaceCreate):
                     "osm_id": custom_id,
                     "name": place.name,
                     "name_en": place.name_en or "",
+                    "name_fr": place.name_fr or "",
                     "centroid": {"lat": place.lat, "lon": place.lon},
                     "admin_level": place.admin_level,
                     "offline_rank": 0,
@@ -1945,6 +1993,7 @@ async def add_place(place: PlaceCreate):
             osm_type=place.osm_type,
             name=place.name,
             name_en=place.name_en,
+            name_fr=place.name_fr,
             tags=tags,
             lat=place.lat,
             lon=place.lon,
@@ -2038,6 +2087,7 @@ async def reverse(
         if es_source:
             result["name"] = es_source.get("name", "")
             result["name_en"] = es_source.get("name_en", "")
+            result["name_fr"] = es_source.get("name_fr", "")
             result["tags"] = es_source.get("tags", {})
             result["admin_level"] = es_source.get("admin_level", 0)
             result["area_km2"] = es_source.get("area_km2", 0)

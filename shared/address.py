@@ -10,6 +10,8 @@ provides everything the pipeline needs to index and search addresses:
   - ``parse_address_query(q)``        → structured dict from a free-form string
   - ``normalize_address_text(s)``     → expand abbreviations, normalize whitespace
 
+Multilingual support: Arabic, English, and French.
+
 Supported OSM address tags
 --------------------------
   addr:housenumber   Building/unit number
@@ -90,11 +92,73 @@ _AR_CITY_KEYWORDS_RAW = [
     "الرحاب", "العبور", "أكتوبر", "الشيخ زايد",
 ]
 
+# ── French street-type normalizations ─────────────────────────────────────
+_FR_STREET_TYPES: dict[str, str] = {
+    "r":     "rue",
+    "r.":    "rue",
+    "av":    "avenue",
+    "av.":   "avenue",
+    "bd":    "boulevard",
+    "bd.":   "boulevard",
+    "blvd":  "boulevard",
+    "pl":    "place",
+    "pl.":   "place",
+    "ch":    "chemin",
+    "ch.":   "chemin",
+    "imp":   "impasse",
+    "imp.":  "impasse",
+    "all":   "allée",
+    "all.":  "allée",
+    "crs":   "cours",
+    "crs.":  "cours",
+    "rte":   "route",
+    "rte.":  "route",
+    "pass":  "passage",
+    "pass.": "passage",
+}
+
+# French tokens that indicate a street/address context
+_FR_STREET_KEYWORDS = frozenset([
+    "rue", "avenue", "boulevard", "place", "square", "chemin",
+    "impasse", "allée", "cour", "cours", "passage", "quai",
+    "route", "rond-point", "carrefour", "voie",
+])
+
+# French city/area names for detection (common ones)
+_FR_CITY_KEYWORDS_RAW = [
+    "Paris", "Lyon", "Marseille", "Toulouse", "Nice", "Nantes",
+    "Strasbourg", "Montpellier", "Bordeaux", "Lille", "Rennes",
+    "Reims", "Toulon", "Grenoble", "Dijon", "Angers", "Nîmes",
+    "Casablanca", "Rabat", "Marrakech", "Fès", "Tanger", "Meknès",
+    "Tunis", "Sfax", "Sousse", "Alger", "Oran", "Constantine",
+    "Dakar", "Abidjan", "Douala", "Yaoundé", "Kinshasa",
+    "Bruxelles", "Genève", "Lausanne", "Montréal", "Québec",
+]
+
+# English tokens that indicate a street/address context
+_EN_STREET_KEYWORDS = frozenset([
+    "street", "road", "avenue", "boulevard", "lane", "drive",
+    "place", "court", "square", "highway", "crescent", "terrace",
+    "parkway", "way", "alley", "circle", "trail",
+])
+
+# English city/area names for detection (common ones)
+_EN_CITY_KEYWORDS_RAW = [
+    "Cairo", "Giza", "Alexandria", "Luxor", "Aswan", "Hurghada",
+    "Sharm El Sheikh", "Mansoura", "Zamalek", "Maadi", "Heliopolis",
+    "Nasr City", "Mohandessin", "Dokki", "Agouza", "Helwan",
+    "New Cairo", "6th of October", "Sheikh Zayed",
+]
+
 
 _RE_ALEF_VARIANTS = re.compile(r"[إأآا]")
 _RE_WHITESPACE = re.compile(r"\s+")
 _RE_EN_ABBREVS = re.compile(
     r"\b(" + "|".join(re.escape(k) for k in _EN_ABBREVS) + r")\b",
+    re.IGNORECASE,
+)
+_RE_FR_ABBREVS = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _FR_STREET_TYPES) + r")\b",
     re.IGNORECASE,
 )
 
@@ -112,6 +176,19 @@ def _normalize_ar(s: str) -> str:
 _AR_CITY_KEYWORDS = frozenset(
     _AR_CITY_KEYWORDS_RAW + [_normalize_ar(c) for c in _AR_CITY_KEYWORDS_RAW]
 )
+
+# Build French city keyword set (case-insensitive matching via lowercased set)
+_FR_CITY_KEYWORDS = frozenset(
+    _FR_CITY_KEYWORDS_RAW + [c.lower() for c in _FR_CITY_KEYWORDS_RAW]
+)
+
+# Build English city keyword set (case-insensitive matching via lowercased set)
+_EN_CITY_KEYWORDS = frozenset(
+    _EN_CITY_KEYWORDS_RAW + [c.lower() for c in _EN_CITY_KEYWORDS_RAW]
+)
+
+# Combined city keywords for all languages
+_ALL_CITY_KEYWORDS = _AR_CITY_KEYWORDS | _FR_CITY_KEYWORDS | _EN_CITY_KEYWORDS
 
 
 # ── Component extraction ──────────────────────────────────────────────────
@@ -192,6 +269,7 @@ def normalize_address_text(s: str) -> str:
 
     Used at both index-time (full_address) and query-time to ensure
     abbreviations in the query match expanded forms in the index.
+    Supports Arabic, English, and French abbreviations.
     """
     if not s:
         return s
@@ -216,6 +294,12 @@ def normalize_address_text(s: str) -> str:
 
     s = _RE_EN_ABBREVS.sub(_expand_en, s)
 
+    # Expand French abbreviations (word-boundary aware)
+    def _expand_fr(m: re.Match) -> str:
+        return _FR_STREET_TYPES.get(m.group(0).lower(), m.group(0))
+
+    s = _RE_FR_ABBREVS.sub(_expand_fr, s)
+
     # Collapse multiple spaces
     s = _RE_WHITESPACE.sub(" ", s).strip()
     return s
@@ -223,10 +307,12 @@ def normalize_address_text(s: str) -> str:
 
 # ── Query detection & parsing ─────────────────────────────────────────────
 
-# Street-type keywords — English + Arabic
+# Street-type keywords — English + Arabic + French
 _STREET_RE = re.compile(
     r"\b(street|road|avenue|ave|blvd|boulevard|lane|drive|dr|place|pl|"
-    r"court|ct|way|alley|square|sq|highway|hwy|st|crescent|terrace|parkway)\b"
+    r"court|ct|way|alley|square|sq|highway|hwy|st|crescent|terrace|parkway"
+    r"|rue|chemin|impasse|allée|cour|cours|passage|quai|route|voie"
+    r"|rond-point|carrefour)\b"
     r"|شارع|طريق|ميدان|حارة|زقاق|كورنيش|حي|منطقة|ش\s",
     re.IGNORECASE,
 )
@@ -245,8 +331,8 @@ def is_address_query(q: str) -> bool:
 
     1. Starts with a house-number token followed by words — ``"12B Main St"``
     2. Contains comma-separated parts (structured input) — ``"Main St, Cairo"``
-    3. Contains a street-type keyword (English or Arabic) — ``"Tahrir Square"``
-    4. Contains Arabic address-related keywords — ``"شارع التحرير"``
+    3. Contains a street-type keyword (English, Arabic, or French) — ``"Tahrir Square"``
+    4. Contains address-related keywords in any supported language
     5. Contains a postcode-like token within a longer string
     """
     q = q.strip()
@@ -258,12 +344,17 @@ def is_address_query(q: str) -> bool:
     # Has commas (structured address)
     if "," in q:
         return True
-    # Contains street-type keyword
+    # Contains street-type keyword (English, Arabic, or French)
     if _STREET_RE.search(q):
         return True
-    # Arabic address keywords in the query
+    # Check keywords in all languages
     for tok in q.split():
         if tok in _AR_STREET_KEYWORDS or tok in _AR_CITY_KEYWORDS:
+            return True
+        tok_lower = tok.lower()
+        if tok_lower in _FR_STREET_KEYWORDS or tok_lower in _FR_CITY_KEYWORDS:
+            return True
+        if tok_lower in _EN_STREET_KEYWORDS or tok_lower in _EN_CITY_KEYWORDS:
             return True
     return False
 
@@ -292,6 +383,30 @@ def _detect_arabic_street(text: str) -> tuple[str, str]:
     return text.strip(), ""
 
 
+def _detect_french_street(text: str) -> tuple[str, str]:
+    """Try to split a French text into (street_name, area/city).
+
+    French addresses commonly follow the pattern:
+      rue <name>            → street only
+      rue <name>, <city>    → already comma-separated (handled elsewhere)
+      avenue <name>         → street only
+
+    Returns (street, city) — either may be empty.
+    """
+    fr_prefixes = "|".join(re.escape(k) for k in sorted(_FR_STREET_KEYWORDS, key=len, reverse=True))
+    m = re.match(rf"^({fr_prefixes})\s+(.+)", text.strip(), re.IGNORECASE)
+    if m:
+        street_part = f"{m.group(1)} {m.group(2)}"
+        # Check if a known city appears at the end
+        for city in _FR_CITY_KEYWORDS:
+            if street_part.lower().endswith(city.lower()):
+                street_name = street_part[: -len(city)].strip()
+                return street_name, city
+        return street_part, ""
+
+    return text.strip(), ""
+
+
 def parse_address_query(q: str) -> dict:
     """Parse a free-form address query into structured components.
 
@@ -302,6 +417,8 @@ def parse_address_query(q: str) -> dict:
     * ``"شارع التحرير, القاهرة"``
     * ``"Cairo, 12 Tahrir St"``          (reversed order)
     * ``"المهندسين شارع لبنان"``          (Arabic: area + street)
+    * ``"Rue de Rivoli, Paris"``         (French address)
+    * ``"Boulevard Mohammed V, Casablanca"``
     * ``"Tahrir"``                       (single-token fallback)
 
     Returns a dict with any subset of:
@@ -346,7 +463,14 @@ def parse_address_query(q: str) -> dict:
                 result.setdefault("city", city_candidate)
                 street_part_idx = i
                 break
-            # English street keyword detection
+            # French street detection
+            fr_street, fr_city = _detect_french_street(part)
+            if fr_city:
+                result["street"] = fr_street
+                result.setdefault("city", fr_city)
+                street_part_idx = i
+                break
+            # English/French/Arabic street keyword detection
             if _STREET_RE.search(part):
                 result["street"] = part
                 street_part_idx = i
@@ -357,8 +481,8 @@ def parse_address_query(q: str) -> dict:
         # If only one part, it could be a street name, area, or POI
         if len(remaining_parts) == 1:
             tok = remaining_parts[0]
-            # Check if it's a known city/area
-            if tok in _AR_CITY_KEYWORDS:
+            # Check if it's a known city/area (any language)
+            if tok in _ALL_CITY_KEYWORDS or tok.lower() in _ALL_CITY_KEYWORDS:
                 result["city"] = tok
             else:
                 result["street"] = tok
@@ -384,8 +508,8 @@ def parse_address_query(q: str) -> dict:
         if re.match(r"^[A-Z]{2,3}$", part):
             result.setdefault("country", part)
             continue
-        # Known city?
-        if part in _AR_CITY_KEYWORDS:
+        # Known city? (check all languages)
+        if part in _ALL_CITY_KEYWORDS or part.lower() in _ALL_CITY_KEYWORDS:
             result.setdefault("city", part)
             continue
         # First unassigned locality → city (or suburb if city already set)

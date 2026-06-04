@@ -128,6 +128,7 @@ def _build_suggestion(doc: dict[str, Any]) -> dict[str, Any]:
         "label": label,
         "name": doc.get("name", ""),
         "name_en": doc.get("name_en", ""),
+        "name_fr": doc.get("name_fr", ""),
         "centroid": doc.get("centroid"),
         "admin_level": doc.get("admin_level", 0),
     }
@@ -148,6 +149,7 @@ async def index_entry(
     osm_id = doc.get("osm_id", "")
     name = doc.get("name", "")
     name_en = doc.get("name_en", "")
+    name_fr = doc.get("name_fr", "")
     offline_rank = float(doc.get("offline_rank", 0))
     popularity = float(doc.get("popularity", 0))
 
@@ -170,6 +172,8 @@ async def index_entry(
         texts.add(name)
     if name_en:
         texts.add(name_en)
+    if name_fr:
+        texts.add(name_fr)
     addr_street = doc.get("addr_street", "")
     if addr_street:
         texts.add(addr_street)
@@ -357,7 +361,7 @@ async def warm_from_es(
         "query": {"match_all": {}},
         "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}],
         "_source": [
-            "osm_id", "name", "name_en", "centroid",
+            "osm_id", "name", "name_en", "name_fr", "centroid",
             "admin_level", "offline_rank", "popularity",
             "full_address", "addr_street", "addr_city", "addr_country",
         ],

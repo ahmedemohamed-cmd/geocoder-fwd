@@ -1,7 +1,8 @@
 """Ollama LLM client for generating place descriptions.
 
-Provides async helpers to generate bilingual (Arabic + English) titles and
-descriptions for geocoded places using a small local model served by Ollama.
+Provides async helpers to generate trilingual (Arabic + English + French)
+titles and descriptions for geocoded places using a small local model
+served by Ollama.
 """
 
 import json
@@ -25,14 +26,17 @@ _GENERATE_TIMEOUT = 90.0
 
 _SYSTEM_PROMPT = """\
 You are a concise geographic content writer. Given structured data about a \
-place, produce a short JSON object with exactly four keys:
+place, produce a short JSON object with exactly six keys:
 
   "title_en"       – a clean English title (the place name, possibly with \
 type, e.g. "Cairo Tower – Observation Tower")
   "title_ar"       – the same in Arabic (use the Arabic name if available, \
 otherwise transliterate)
+  "title_fr"       – the same in French (use the French name if available, \
+otherwise translate)
   "description_en" – 1-2 sentence English description of the place
   "description_ar" – 1-2 sentence Arabic description of the place
+  "description_fr" – 1-2 sentence French description of the place
 
 Rules:
 - Output ONLY valid JSON, no markdown, no explanation.
@@ -51,6 +55,8 @@ def _build_user_prompt(place: dict[str, Any]) -> str:
         parts.append(f"Name: {place['name']}")
     if place.get("name_en") and place["name_en"] != place.get("name"):
         parts.append(f"English name: {place['name_en']}")
+    if place.get("name_fr") and place["name_fr"] != place.get("name"):
+        parts.append(f"French name: {place['name_fr']}")
 
     # Category from OSM tags
     tags = place.get("tags", {})
@@ -96,9 +102,10 @@ def _build_user_prompt(place: dict[str, Any]) -> str:
 
 
 async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
-    """Generate a bilingual title + description for a place via Ollama.
+    """Generate a trilingual title + description for a place via Ollama.
 
-    Returns a dict with keys: title_en, title_ar, description_en, description_ar
+    Returns a dict with keys: title_en, title_ar, title_fr,
+    description_en, description_ar, description_fr
     or None if generation fails.
     """
     user_prompt = _build_user_prompt(place)
@@ -113,7 +120,7 @@ async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
         "format": "json",
         "options": {
             "temperature": 0.3,
-            "num_predict": 300,
+            "num_predict": 450,
         },
         "keep_alive": -1,
     }
@@ -129,7 +136,10 @@ async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
         result = json.loads(content)
 
         # Validate expected keys
-        expected = {"title_en", "title_ar", "description_en", "description_ar"}
+        expected = {
+            "title_en", "title_ar", "title_fr",
+            "description_en", "description_ar", "description_fr",
+        }
         if not expected.issubset(result.keys()):
             logger.warning("LLM response missing keys: %s", expected - result.keys())
             # Fill in missing keys with empty strings
