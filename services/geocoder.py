@@ -1,36 +1,22 @@
-"""Geocoding HTTP service (FastAPI).
+"""Geocoding HTTP service (FastAPI) — PostgreSQL backend.
+
+All search functionality is powered by PostgreSQL (pg_trgm + tsvector + PostGIS),
+replacing the previous Elasticsearch backend.  See shared/pg_search.py for queries.
 
 Endpoints
 ---------
-GET  /geocode       - full search via Elasticsearch (text + vector + geo + ranking)
+GET  /geocode       - full-text geocoding via PostgreSQL (trigram + tsvector + geo)
 GET  /address       - structured address search (housenumber, street, city, postcode)
-POST /feedback      - popularity feedback loop      (boosts future ranking)
-GET  /reverse       - reverse geocoding via PostGIS + Elasticsearch
-                      (nearest line + nearest address + enclosing polygons)
-POST /insert        - insert OSM element by publishing to NATS stream (matches watcher.py format)
+GET  /autocomplete  - fast prefix/fuzzy autocomplete via pg_trgm
+POST /feedback      - popularity feedback loop (boosts future ranking)
+GET  /reverse       - reverse geocoding via PostGIS (nearest line + address + polygons)
+POST /insert        - insert OSM element by publishing to NATS stream
 POST /places        - add a new place to the geocoding database
-GET  /describe      - on-demand AI title + description for a place (blocks until ready)
-GET  /health        - dependency health check (ES, PostGIS, NATS, Redis, Ollama)
+GET  /describe      - on-demand AI title + description for a place
+GET  /health        - dependency health check (PostGIS, NATS, Redis, Ollama)
 GET  /features      - feature flags discovery
 
-Query-string flags shared by search endpoints:
-  vector=true    enable semantic / AI vector search  (requires ENABLE_VECTORS=true)
-  vector=false   disable vector search (text-only)
-  ai=true        enable AI-assisted search (requires ENABLE_AI=true)
-  ai=false       disable AI features
-  describe=true  include AI-generated title + description per result (cached)
-  describe=false (default) omit AI descriptions
-
-Online ranking formula: text_similarity × (offline_rank + geo_decay + popularity) via boost_mode=multiply
-
-Address search
---------------
-  /address?q=123+Main+Street,Cairo           structured forward address lookup
-  /address?q=Main+Street&city=Cairo          field-level restrictor params
-  /address?q=Nile+Corniche&postcode=11511    postcode filter
-
-/reverse now also returns ``nearest_address`` – the closest building-level
-address point stored in the osm_addresses PostGIS table.
+Online ranking formula: text_similarity × (1 + offline_rank×2 + log(1+popularity))
 """
 
 import asyncio
@@ -45,7 +31,6 @@ import json
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from elasticsearch import AsyncElasticsearch
 import asyncpg
 import nats
 import redis.asyncio as aioredis
@@ -59,8 +44,6 @@ _logger.addHandler(_handler)
 _logger.propagate = False
 
 from shared.config import (
-    ELASTICSEARCH_URL,
-    EMBEDDING_DIM,
     ENABLE_VECTORS,
     ENABLE_AI,
     POSTGRES_HOST,
@@ -77,13 +60,6 @@ from shared.config import (
 )
 from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
-from shared.autocomplete import (
-    query as ac_query,
-    index_entry as ac_index_entry,
-    update_score as ac_update_score,
-    warm_from_es as ac_warm_from_es,
-)
-from shared.embeddings import embed_texts
 from shared.address import (
     extract_address_components,
     build_full_address,
@@ -91,8 +67,7 @@ from shared.address import (
     parse_address_query,
     normalize_address_text,
 )
-
-INDEX = "osm_places"
+import shared.pg_search as pgsearch
 
 
 def _normalize_confidence(score: float, max_score: float) -> float:
@@ -132,258 +107,10 @@ def _distance_confidence(distance_m: float) -> float:
         return 0.4
     return 0.2
 
-# ── Elasticsearch index mapping ───────────────────────────────────────────
-# NOTE: This must stay in sync with es_inserter.py MAPPING.
-ES_MAPPING = {
-    "settings": {
-        "index": {"number_of_replicas": 0},
-        "analysis": {
-            "char_filter": {
-                "arabic_normalize_char": {
-                    "type": "pattern_replace",
-                    "pattern": "[\u0640]",
-                    "replacement": "",
-                },
-            },
-            "filter": {
-                "street_synonyms_en": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "st, street",
-                        "rd, road",
-                        "ave, av, avenue",
-                        "blvd, bvd, boulevard",
-                        "ln, lane",
-                        "dr, drive",
-                        "pl, place",
-                        "ct, court",
-                        "sq, square",
-                        "hwy, highway",
-                        "cres, crescent",
-                        "terr, terrace",
-                        "pkwy, parkway",
-                    ],
-                },
-                "street_synonyms_ar": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "ش, شارع",
-                        "ط, طريق",
-                        "م, ميدان",
-                    ],
-                },
-                # French street-type synonyms
-                "street_synonyms_fr": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "r, rue",
-                        "av, ave, avenue",
-                        "bd, blvd, boulevard",
-                        "pl, place",
-                        "ch, chemin",
-                        "imp, impasse",
-                        "all, allée",
-                        "crs, cours",
-                        "rte, route",
-                        "pass, passage",
-                    ],
-                },
-                "edge_ngram_filter": {
-                    "type": "edge_ngram",
-                    "min_gram": 2,
-                    "max_gram": 15,
-                },
-                "arabic_normalization": {
-                    "type": "arabic_normalization",
-                },
-            },
-            "normalizer": {
-                "lowercase": {
-                    "type": "custom",
-                    "filter": ["lowercase"],
-                },
-            },
-            "analyzer": {
-                "address_standard": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                "address_autocomplete": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                        "edge_ngram_filter",
-                    ],
-                },
-                "address_search": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                "arabic_name": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                    ],
-                },
-            },
-        },
-    },
-    "mappings": {
-        "properties": {
-            "osm_id": {"type": "keyword"},
-            "osm_type": {"type": "keyword"},
-            "name": {
-                "type": "text",
-                "analyzer": "arabic_name",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_en": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_fr": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "tags_text": {
-                "type": "text",
-                "analyzer": "arabic_name",
-            },
-            "tags": {"type": "object", "enabled": False},
-            "geom": {"type": "geo_shape"},
-            "centroid": {"type": "geo_point"},
-            "admin_level": {"type": "integer"},
-            "area_km2": {"type": "float"},
-            "offline_rank": {"type": "float"},
-            "popularity": {"type": "float"},
-            "name_vector": {
-                "type": "dense_vector",
-                "dims": EMBEDDING_DIM,
-                "index": True,
-                "similarity": "cosine",
-            },
-            # ── address fields ────────────────────────────────────────────
-            "addr_housenumber": {
-                "type": "keyword",
-                "normalizer": "lowercase",
-            },
-            "addr_street": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_city": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_postcode": {"type": "keyword"},
-            "addr_country":  {"type": "keyword"},
-            "addr_suburb": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_state": {
-                "type": "text",
-                "analyzer": "address_standard",
-            },
-            "full_address": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "has_address": {"type": "boolean"},
-            # ── AI-generated place description (cached) ───────────────────
-            "ai_description": {"type": "object", "enabled": False},
-        }
-    },
-}
-
-es: AsyncElasticsearch = None  # type: ignore[assignment]
 pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
 nc = None  # type: ignore[assignment]
 js = None  # type: ignore[assignment]
 redis_pool: aioredis.Redis = None  # type: ignore[assignment]
-
-
-async def _warm_autocomplete():
-    """No-op — autocomplete now uses Elasticsearch directly."""
-    pass
 
 
 async def _warm_ollama():
@@ -397,27 +124,12 @@ async def _warm_ollama():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, pg_pool, nc, js, redis_pool
+    global pg_pool, nc, js, redis_pool
 
-    # Retry logic for connecting to dependencies
     max_retries = 10
     retry_delay = 2
-    
-    # Connect to Elasticsearch
-    for attempt in range(max_retries):
-        try:
-            es = AsyncElasticsearch(ELASTICSEARCH_URL)
-            await es.ping()
-            print(f"[geocoder] Successfully connected to Elasticsearch")
-            break
-        except Exception as e:
-            print(f"[geocoder] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay)
-            else:
-                raise
 
-    # Connect to PostGIS
+    # Connect to PostGIS (primary data store — replaces Elasticsearch)
     for attempt in range(max_retries):
         try:
             pg_pool = await asyncpg.create_pool(
@@ -452,20 +164,7 @@ async def lifespan(app: FastAPI):
             else:
                 raise
 
-    # ensure ES index exists
-    try:
-        if not await es.indices.exists(index=INDEX):
-            await es.indices.create(index=INDEX, **ES_MAPPING)
-            print(f"[geocoder] Created ES index {INDEX}")
-    except Exception as e:
-        print(f"[geocoder] Error checking/creating ES index: {e}")
-        try:
-            await es.indices.create(index=INDEX, **ES_MAPPING)
-            print(f"[geocoder] Created ES index {INDEX} (fallback)")
-        except Exception as e2:
-            print(f"[geocoder] Failed to create ES index: {e2}")
-
-    # Connect to Redis and warm autocomplete index
+    # Connect to Redis (optional — used for caching, not autocomplete)
     try:
         redis_pool = aioredis.Redis(
             host=REDIS_HOST,
@@ -475,19 +174,14 @@ async def lifespan(app: FastAPI):
         )
         await redis_pool.ping()
         print(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
-
-        # Warm autocomplete index from ES in background
-        asyncio.create_task(_warm_autocomplete())
     except Exception as e:
         print(f"[geocoder] Redis connection failed: {e}")
-        print(f"[geocoder] Autocomplete will fall back to Elasticsearch")
         redis_pool = None  # type: ignore[assignment]
 
-    # Warm up Ollama model so the first /describe request doesn't pay cold-start cost
+    # Warm up Ollama model
     asyncio.create_task(_warm_ollama())
 
     yield
-    await es.close()
     await pg_pool.close()
     await nc.close()
     if redis_pool:
@@ -612,27 +306,23 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     all_ids = list(set(line_ids + parent_ids))
     if not all_ids:
         address = {"nearest_street": None, "parents": []}
-        # Cache even empty results to avoid repeated lookups
         try:
-            await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
+            await pgsearch.cache_address(pg_pool, osm_id, address)
         except Exception:
             pass
         return address
 
-    # Batch-fetch metadata from ES
-    es_data: dict[str, dict] = {}
+    # Batch-fetch metadata from PostgreSQL
+    pg_data: dict[str, dict] = {}
     try:
-        resp = await es.mget(index=INDEX, ids=all_ids, request_timeout=5)
-        for doc in resp["docs"]:
-            if doc.get("found"):
-                es_data[doc["_id"]] = doc["_source"]
+        pg_data = await pgsearch.mget_places(pg_pool, all_ids)
     except Exception as e:
-        print(f"[geocoder] Error fetching address data from ES: {e}")
+        print(f"[geocoder] Error fetching address data from PG: {e}")
 
     # Find nearest street: first line in distance order that has a name
     nearest_street = None
     for row in nearest_lines:
-        src = es_data.get(row["osm_id"])
+        src = pg_data.get(row["osm_id"])
         if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
             nearest_street = {
                 "osm_id": row["osm_id"],
@@ -649,7 +339,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
         if row_id in seen:
             continue
         seen.add(row_id)
-        src = es_data.get(row_id)
+        src = pg_data.get(row_id)
         if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
             parents.append({
                 "osm_id": row_id,
@@ -658,14 +348,13 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
                 "name_fr": src.get("name_fr", ""),
                 "admin_level": src.get("admin_level", 0),
             })
-    # Sort parents by admin_level descending (most specific first: suburb→city→state→country)
     parents.sort(key=lambda p: p["admin_level"], reverse=True)
 
     address = {"nearest_street": nearest_street, "parents": parents}
 
-    # Cache the address data in ES
+    # Cache the address data in PostgreSQL
     try:
-        await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
+        await pgsearch.cache_address(pg_pool, osm_id, address)
     except Exception as e:
         print(f"[geocoder] Error caching address for {osm_id}: {e}")
 
@@ -693,21 +382,12 @@ async def health():
     """
     checks: dict[str, dict] = {}
 
-    # Elasticsearch (critical)
-    try:
-        info = await es.info()
-        checks["elasticsearch"] = {
-            "status": "ok",
-            "version": info["version"]["number"],
-        }
-    except Exception as e:
-        checks["elasticsearch"] = {"status": "error", "detail": str(e)}
-
-    # PostGIS (critical)
+    # PostGIS (critical — primary data store)
     try:
         async with pg_pool.acquire() as conn:
             version = await conn.fetchval("SELECT version()")
-        checks["postgis"] = {"status": "ok", "version": version}
+            place_count = await conn.fetchval("SELECT count(*) FROM osm_places")
+        checks["postgis"] = {"status": "ok", "version": version, "places": place_count}
     except Exception as e:
         checks["postgis"] = {"status": "error", "detail": str(e)}
 
@@ -720,25 +400,18 @@ async def health():
     except Exception as e:
         checks["nats"] = {"status": "error", "detail": str(e)}
 
-    # Redis (non-critical — powers autocomplete + watcher node cache)
+    # Redis (non-critical)
     try:
         if redis_pool is not None:
             await redis_pool.ping()
-            ac_keys = await redis_pool.dbsize()
-            checks["redis"] = {"status": "ok", "autocomplete_keys": ac_keys}
+            checks["redis"] = {"status": "ok"}
         else:
-            r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
-            await r.ping()
-            checks["redis"] = {"status": "ok", "autocomplete": "not_initialised"}
-            await r.aclose()
+            checks["redis"] = {"status": "error", "detail": "not connected"}
     except Exception as e:
         checks["redis"] = {"status": "error", "detail": str(e)}
 
     # Overall status: fail only if critical services are down
-    critical_ok = all(
-        checks[svc]["status"] == "ok"
-        for svc in ("elasticsearch", "postgis")
-    )
+    critical_ok = checks.get("postgis", {}).get("status") == "ok"
     overall = "healthy" if critical_ok else "degraded"
     status_code = 200 if critical_ok else 503
 
@@ -805,39 +478,37 @@ async def _get_or_generate_description(
 
     Returns the description dict or None.
     """
-    # 1. Check ES cache
+    # 1. Check PG cache
     try:
-        doc = await es.get(index=INDEX, id=osm_id, _source_includes=[
-            "ai_description", "name", "name_en", "name_fr", "tags", "centroid",
-            "full_address", "addr_housenumber", "addr_street", "addr_city",
-            "addr_suburb", "addr_state", "addr_postcode", "addr_country",
-            "admin_level",
-        ])
-        src = doc["_source"]
-        cached = src.get("ai_description")
+        cached = await pgsearch.get_description(pg_pool, osm_id)
         if cached:
             return cached
+    except Exception:
+        pass
+
+    # 2. Fetch place data for generation
+    try:
+        src = await pgsearch.get_place(pg_pool, osm_id)
+        if not src:
+            return None
     except Exception:
         return None
 
     if not wait:
-        # Fire background generation — caller gets None for now
         asyncio.create_task(_generate_and_cache(osm_id, src))
         return None
 
-    # Synchronous path: generate, cache, return
     return await _generate_and_cache(osm_id, src)
 
 
 async def _generate_and_cache(osm_id: str, place_data: dict) -> dict[str, str] | None:
-    """Call Ollama, cache the result in ES, return the description."""
+    """Call Ollama, cache the result in PG, return the description."""
     desc = await generate_description(place_data)
     if desc is None:
         return None
 
-    # Cache in ES
     try:
-        await es.update(index=INDEX, id=osm_id, body={"doc": {"ai_description": desc}})
+        await pgsearch.cache_description(pg_pool, osm_id, desc)
     except Exception as e:
         print(f"[geocoder] Failed to cache ai_description for {osm_id}: {e}")
 
@@ -852,22 +523,14 @@ async def _attach_descriptions(results: list[dict]) -> None:
         if not osm_id:
             continue
         try:
-            doc = await es.get(
-                index=INDEX, id=osm_id,
-                _source_includes=["ai_description", "name", "name_en", "name_fr",
-                                  "tags", "centroid", "full_address",
-                                  "addr_housenumber", "addr_street",
-                                  "addr_city", "addr_suburb", "addr_state",
-                                  "addr_postcode", "addr_country",
-                                  "admin_level"],
-            )
-            src = doc["_source"]
-            cached = src.get("ai_description")
+            cached = await pgsearch.get_description(pg_pool, osm_id)
             if cached:
                 result["ai_description"] = cached
             else:
                 result["ai_description"] = None
-                asyncio.create_task(_generate_and_cache(osm_id, src))
+                src = await pgsearch.get_place(pg_pool, osm_id)
+                if src:
+                    asyncio.create_task(_generate_and_cache(osm_id, src))
         except Exception:
             result["ai_description"] = None
 
@@ -887,9 +550,9 @@ async def describe(
     return {"osm_id": osm_id, **desc}
 
 
-# ── geocode (Elasticsearch) ──────────────────────────────────────────────
+# ── geocode (PostgreSQL) ──────────────────────────────────────────────────
 @app.get("/geocode")
-async def geocode(
+async def geocode_endpoint(
     request: Request,
     q: str = Query(..., min_length=1),
     lat: float | None = Query(None),
@@ -897,349 +560,41 @@ async def geocode(
     limit: int = Query(10, ge=1, le=50),
     vector: bool = Query(True, description="Enable semantic vector search"),
     ai: bool = Query(True, description="Enable AI-assisted search"),
-    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    describe: bool = Query(False, description="Include AI-generated descriptions"),
 ):
-    """Full geocoding search.
+    """Full geocoding search backed by PostgreSQL.
 
-    Online ranking = text_similarity × function_score(offline_rank, geo, popularity).
-    Uses boost_mode=multiply so text relevance gates ranking — a high-importance
-    element with a weak text match cannot outscore a lower-rank exact match.
-
-    Text similarity searches across name, name_en, name_fr, and tags_text (all tags)
-    with phrase and exact-match boosting for multi-word queries.
-    vector=true adds KNN cosine similarity re-ranking (requires ENABLE_VECTORS).
-    ai=true enables AI-assisted query expansion (requires ENABLE_AI).
+    Uses pg_trgm for fuzzy/prefix matching, tsvector for full-text search,
+    and PostGIS for geo-distance scoring.  Ranking mirrors the ES
+    function_score formula: text_similarity × (offline_rank + geo + popularity).
     """
     use_vectors = vector and ENABLE_VECTORS
     use_ai = ai and ENABLE_AI
 
-    loop = asyncio.get_running_loop()
-
-    # ---- function_score query ----
-    # final_score = text_score × (baseline + offline_rank_boost + geo_decay + popularity)
-    functions: list[dict] = []
-
-    # baseline: ensures function_score is at least 1.0 (preserves text score)
-    functions.append(
-        {
-            "weight": 1.0,
-        }
-    )
-
-    # offline_rank boost — linear (no log compression) so high-importance
-    # places (cities, countries) clearly outrank minor POIs.
-    # Range 0-10 × weight 2 → contribution 0-20; multiplied by text score
-    # via boost_mode=multiply so irrelevant results are still suppressed.
-    functions.append(
-        {
-            "field_value_factor": {
-                "field": "offline_rank",
-                "modifier": "none",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 2,
-        }
-    )
-
-    # geo-distance decay (closer = higher score)
-    if lat is not None and lon is not None:
-        functions.append(
-            {
-                "gauss": {
-                    "centroid": {
-                        "origin": {"lat": lat, "lon": lon},
-                        "scale": "10km",
-                        "offset": "1km",
-                        "decay": 0.5,
-                    }
-                },
-                "weight": 2,
-            }
-        )
-
-    # popularity boost (feedback-driven, capped at 1000 via /feedback endpoint)
-    functions.append(
-        {
-            "field_value_factor": {
-                "field": "popularity",
-                "modifier": "log1p",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 1,
-        }
-    )
-
-    # Normalize query for better Arabic/abbreviation matching
     q_norm = normalize_address_text(q)
 
-    # ── Auto address detection & decomposition ────────────────────────────
-    # Always attempt to detect and decompose the query into address components.
-    # This drives two things:
-    #   1. Additional address-specific should clauses for scoring
-    #   2. A response field showing the decomposition to the client
+    # Address detection & decomposition
     addr_detected = is_address_query(q)
     parsed_addr: dict = {}
     if addr_detected:
         parsed_addr = parse_address_query(q)
 
-    # text query – multi_match across name/name_en/name_fr using best_fields so that
-    # matching the query in ANY field yields the same score (no double-counting
-    # for places that happen to have the query language in multiple fields).
-    should_clauses: list[dict] = [
-        # fuzzy token matching across all searchable fields (including autocomplete)
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "name^5", "name.autocomplete^2",
-                    "name_en^5", "name_en.autocomplete^2",
-                    "name_fr^5", "name_fr.autocomplete^2",
-                    "tags_text",
-                ],
-                "type": "best_fields",
-                "fuzziness": "AUTO",
-            }
-        },
-        # phrase boost: contiguous phrase (best of name, name_en, or name_fr)
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name", "name_en", "name_fr"],
-                "type": "phrase",
-                "boost": 10,
-            }
-        },
-        # all-tokens-required boost: every query word appears
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name", "name_en", "name_fr"],
-                "type": "best_fields",
-                "operator": "and",
-                "boost": 15,
-            }
-        },
-    ]
+    results = await pgsearch.geocode(
+        pg_pool, q_norm,
+        limit=limit,
+        lat=lat,
+        lon=lon,
+        housenumber=parsed_addr.get("housenumber"),
+        street_query=parsed_addr.get("street"),
+        is_address=addr_detected,
+    )
 
-    # ── Address-specific search layers (active when address detected) ─────
-    if addr_detected:
-        # Layer 1: Cross-field search across ALL address fields simultaneously.
-        # This is the key improvement — "Tahrir Cairo" will match documents where
-        # addr_street contains "Tahrir" AND addr_city contains "Cairo" even though
-        # neither field alone contains both words.
-        should_clauses.append(
-            {
-                "multi_match": {
-                    "query": q_norm,
-                    "fields": [
-                        "addr_street^5",
-                        "addr_street.autocomplete^2",
-                        "addr_city^3",
-                        "addr_city.autocomplete^1.5",
-                        "addr_suburb^2",
-                        "addr_suburb.autocomplete",
-                        "full_address^3",
-                        "full_address.autocomplete^1.5",
-                    ],
-                    "type": "cross_fields",
-                    "operator": "or",
-                    "minimum_should_match": "75%",
-                    "boost": 4,
-                }
-            }
-        )
-
-        # Layer 2: Phrase match on full_address — rewards documents where the
-        # query appears as a contiguous phrase in the stored address string
-        should_clauses.append(
-            {"match_phrase": {"full_address": {"query": q_norm, "boost": 6, "slop": 2}}}
-        )
-
-        # Layer 3: Component-specific targeted matching from the decomposition.
-        # Each parsed component gets its own clause with high precision.
-        if parsed_addr.get("street"):
-            street = parsed_addr["street"]
-            # Phrase match: "شارع التحرير" or "Main Street" as ordered tokens
-            should_clauses.append(
-                {"match_phrase": {"addr_street": {"query": street, "boost": 10, "slop": 1}}}
-            )
-            # Fuzzy token match: tolerates typos in street name
-            should_clauses.append(
-                {"match": {"addr_street": {"query": street, "fuzziness": "AUTO", "boost": 5}}}
-            )
-            # Autocomplete: prefix matching for partial street names
-            should_clauses.append(
-                {"match": {"addr_street.autocomplete": {"query": street, "boost": 3}}}
-            )
-            # Also match street name against the place name field (many streets
-            # are indexed as named ways/linestrings with the street in "name")
-            should_clauses.append(
-                {"match_phrase": {"name": {"query": street, "boost": 4, "slop": 1}}}
-            )
-
-        if parsed_addr.get("housenumber"):
-            hn = parsed_addr["housenumber"].lower()
-            # Exact term match on housenumber (uses lowercase normalizer)
-            should_clauses.append(
-                {"term": {"addr_housenumber": {"value": hn, "boost": 15}}}
-            )
-            # Combined housenumber + street match: strongly boost documents
-            # that match BOTH the street and exact housenumber together
-            if parsed_addr.get("street"):
-                should_clauses.append(
-                    {
-                        "bool": {
-                            "must": [
-                                {"term": {"addr_housenumber": {"value": hn}}},
-                                {"match_phrase": {"addr_street": {"query": parsed_addr["street"], "slop": 1}}},
-                            ],
-                            "boost": 50,
-                        }
-                    }
-                )
-
-        if parsed_addr.get("city"):
-            city_val = parsed_addr["city"]
-            # City match boosts results in the right locality
-            should_clauses.append(
-                {"match": {"addr_city": {"query": city_val, "boost": 3}}}
-            )
-            should_clauses.append(
-                {"match": {"addr_city.autocomplete": {"query": city_val, "boost": 1.5}}}
-            )
-            # Also check name field — cities themselves are named places
-            should_clauses.append(
-                {"match": {"name": {"query": city_val, "boost": 2}}}
-            )
-
-        if parsed_addr.get("suburb"):
-            suburb_val = parsed_addr["suburb"]
-            should_clauses.append(
-                {"match": {"addr_suburb": {"query": suburb_val, "boost": 2}}}
-            )
-            should_clauses.append(
-                {"match": {"addr_suburb.autocomplete": {"query": suburb_val, "boost": 1}}}
-            )
-
-        if parsed_addr.get("postcode"):
-            should_clauses.append(
-                {"term": {"addr_postcode": {"value": parsed_addr["postcode"], "boost": 6}}}
-            )
-
-        if parsed_addr.get("country"):
-            should_clauses.append(
-                {"term": {"addr_country": {"value": parsed_addr["country"], "boost": 4}}}
-            )
-
-        # Layer 4: Boost documents that have address data (they're more likely
-        # to be what the user wants when searching for an address)
-        should_clauses.append(
-            {"term": {"has_address": {"value": True, "boost": 2}}}
-        )
-
-    text_query: dict = {
-        "bool": {
-            "should": should_clauses,
-            "minimum_should_match": 1,
-        }
-    }
-
-    # ── Housenumber proximity boost ───────────────────────────────────────
-    # When the user specifies a housenumber, add a script_score function
-    # that gives higher scores to documents whose housenumber is numerically
-    # closer to the requested one.  This ensures that when an exact match
-    # doesn't exist, the nearest house numbers rank first.
-    if addr_detected and parsed_addr.get("housenumber"):
-        try:
-            requested_hn = int(parsed_addr["housenumber"])
-            functions.append(
-                {
-                    "script_score": {
-                        "script": {
-                            "source": (
-                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
-                                "try { "
-                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
-                                "  double diff = Math.abs(hn - params.requested_hn); "
-                                "  return 1.0 / (1.0 + diff); "
-                                "} catch (NumberFormatException e) { return 0; }"
-                            ),
-                            "params": {"requested_hn": requested_hn},
-                        }
-                    },
-                    "weight": 5,
-                }
-            )
-        except ValueError:
-            pass  # non-numeric housenumber, skip proximity scoring
-
-    body: dict = {
-        "size": limit,
-        "query": {
-            "function_score": {
-                "query": text_query,
-                "functions": functions,
-                "score_mode": "sum",
-                "boost_mode": "multiply",
-            }
-        },
-    }
-
-    # optional vector KNN (when enabled)
-    if use_vectors:
-        vec = (await loop.run_in_executor(None, embed_texts, [q]))[0]
-        body["knn"] = {
-            "field": "name_vector",
-            "query_vector": vec,
-            "k": limit * 2,
-            "num_candidates": 300,
-        }
-
-    resp = await es.search(index=INDEX, **body)
-
-    # Build results and enrich address data where missing
-    max_score = resp["hits"].get("max_score") or 0
-    results = []
+    # Enrich results missing address data
     enrich_tasks = []
+    for idx, result in enumerate(results):
+        if result.get("address") is None:
+            enrich_tasks.append((idx, result["osm_id"], result.get("centroid")))
 
-    for h in resp["hits"]["hits"]:
-        src = h["_source"]
-        result = {
-            "osm_id": src["osm_id"],
-            "osm_type": src.get("osm_type", ""),
-            "name": src.get("name", ""),
-            "name_en": src.get("name_en", ""),
-            "name_fr": src.get("name_fr", ""),
-            "tags": src.get("tags", {}),
-            "tags_text": src.get("tags_text", ""),
-            "geom": src.get("geom"),
-            "centroid": src.get("centroid"),
-            "admin_level": src.get("admin_level", 0),
-            "area_km2": src.get("area_km2", 0),
-            "offline_rank": src.get("offline_rank", 0),
-            "popularity": src.get("popularity", 0),
-            "confidence": _normalize_confidence(h["_score"], max_score),
-            # structured address fields (present when element has addr:* tags)
-            "full_address":      src.get("full_address", ""),
-            "addr_housenumber":  src.get("addr_housenumber", ""),
-            "addr_street":       src.get("addr_street", ""),
-            "addr_city":         src.get("addr_city", ""),
-            "addr_postcode":     src.get("addr_postcode", ""),
-            "addr_country":      src.get("addr_country", ""),
-            "addr_suburb":       src.get("addr_suburb", ""),
-            "addr_state":        src.get("addr_state", ""),
-            # reverse-geocoded address enrichment (computed on demand)
-            "address": src.get("address"),
-        }
-        results.append(result)
-
-        # If address is not cached, schedule enrichment
-        if result["address"] is None:
-            enrich_tasks.append((len(results) - 1, src["osm_id"], src.get("centroid")))
-
-    # Enrich all results that are missing address data concurrently
     if enrich_tasks:
         enrichments = await asyncio.gather(
             *[_enrich_address(osm_id, centroid) for _, osm_id, centroid in enrich_tasks],
@@ -1249,10 +604,7 @@ async def geocode(
             if isinstance(addr, dict):
                 results[idx]["address"] = addr
 
-    # ── Address interpolation fallback ────────────────────────────────────
-    # When the query contained a housenumber but no result matched it
-    # exactly, try to interpolate the position from known addresses on
-    # the same street.
+    # Address interpolation fallback
     interpolated_result = None
     if addr_detected and parsed_addr.get("housenumber"):
         try:
@@ -1274,7 +626,6 @@ async def geocode(
         except (ValueError, TypeError):
             pass
 
-    # Attach AI descriptions when requested
     if describe and ENABLE_AI:
         await _attach_descriptions(results)
 
@@ -1284,7 +635,6 @@ async def geocode(
             "vectors_enabled": use_vectors,
             "ai_enabled": use_ai,
         },
-        # Address decomposition: shows what the system understood from the query
         "address_detected": addr_detected,
         "address_parsed": parsed_addr if addr_detected else None,
         "results": results,
@@ -1301,130 +651,16 @@ async def autocomplete(
     lon: float | None = Query(None, description="Longitude for geo-bias"),
     limit: int = Query(7, ge=1, le=20, description="Max suggestions"),
 ):
-    """Fast prefix-based autocomplete backed by Redis sorted sets.
+    """Fast prefix-based autocomplete backed by PostgreSQL pg_trgm.
 
-    Designed for keystroke-by-keystroke suggestions.  Lookups hit a
-    pre-built Redis prefix index (~1-3 ms) with automatic fallback to
-    Elasticsearch edge-ngram queries if Redis is unavailable.
-
-    Ranking is driven by ``offline_rank`` and ``popularity`` (updated
-    via ``/feedback``).  When ``lat``/``lon`` are provided, geo-local
-    results from the same geohash-4 cell are preferred.
+    Uses trigram similarity + ILIKE prefix matching on name fields,
+    ranked by text similarity × offline_rank × popularity.
     """
-    # ── Elasticsearch edge-ngram autocomplete ───────────────────────────
-    q_norm = normalize_address_text(q)
-
-    should: list[dict] = [
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "name.autocomplete^5",
-                    "name_en.autocomplete^5",
-                    "name_fr.autocomplete^5",
-                    "addr_street.autocomplete^3",
-                    "addr_city.autocomplete^2",
-                    "full_address.autocomplete^2",
-                ],
-                "type": "best_fields",
-            }
-        },
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name^8", "name_en^8", "name_fr^8"],
-                "type": "phrase_prefix",
-            }
-        },
-    ]
-
-    text_query: dict = {
-        "bool": {
-            "should": should,
-            "minimum_should_match": 1,
-        }
-    }
-
-    functions: list[dict] = [
-        {"weight": 1.0},
-        {
-            "field_value_factor": {
-                "field": "offline_rank",
-                "modifier": "none",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 2,
-        },
-        {
-            "field_value_factor": {
-                "field": "popularity",
-                "modifier": "log1p",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 1.5,
-        },
-    ]
-
-    if lat is not None and lon is not None:
-        functions.append(
-            {
-                "gauss": {
-                    "centroid": {
-                        "origin": {"lat": lat, "lon": lon},
-                        "scale": "15km",
-                        "offset": "2km",
-                        "decay": 0.5,
-                    }
-                },
-                "weight": 1.5,
-            }
-        )
-
-    body: dict = {
-        "size": limit,
-        "query": {
-            "function_score": {
-                "query": text_query,
-                "functions": functions,
-                "score_mode": "sum",
-                "boost_mode": "multiply",
-            }
-        },
-        "_source": [
-            "osm_id", "osm_type", "name", "name_en", "name_fr",
-            "centroid", "admin_level", "offline_rank", "popularity",
-            "full_address", "addr_street", "addr_city", "addr_country",
-        ],
-    }
-
-    resp = await es.search(index=INDEX, **body)
-
-    max_score = resp["hits"].get("max_score") or 0
-    results = []
-    for h in resp["hits"]["hits"]:
-        src = h["_source"]
-        name = src.get("name_en") or src.get("name", "")
-        addr = src.get("full_address", "")
-        if addr and addr != name:
-            label = f"{name}, {addr}" if name else addr
-        else:
-            label = name
-
-        results.append({
-            "osm_id": src.get("osm_id"),
-            "label": label,
-            "name": src.get("name", ""),
-            "name_en": src.get("name_en", ""),
-            "name_fr": src.get("name_fr", ""),
-            "centroid": src.get("centroid"),
-            "admin_level": src.get("admin_level", 0),
-            "confidence": _normalize_confidence(h["_score"], max_score),
-        })
-
+    results = await pgsearch.autocomplete(
+        pg_pool, q, limit=limit, lat=lat, lon=lon,
+    )
     request.state.result_count = len(results)
-    return {"source": "elasticsearch", "results": results}
+    return {"source": "postgresql", "results": results}
 
 
 # ── feedback loop ─────────────────────────────────────────────────────────
@@ -1436,42 +672,22 @@ async def feedback(
     osm_id: str = Query(...),
     boost: float = Query(1.0, ge=0.1, le=10.0),
 ):
-    """Increment popularity for an element in Elasticsearch and Redis.
+    """Increment popularity for an element in PostgreSQL.
 
     The boost value is clamped to [0.1, 10.0] and popularity is capped
     at 1000 to prevent unbounded growth or abuse.
-
-    Also updates the Redis autocomplete index so that popular results
-    rank higher in real-time without waiting for a full re-warm.
     """
-
     try:
-        await es.update(
-            index=INDEX,
-            id=osm_id,
-            body={
-                "script": {
-                    "source": "ctx._source.popularity = Math.min(ctx._source.popularity + params.boost, params.max_pop)",
-                    "params": {"boost": boost, "max_pop": _POPULARITY_CAP},
-                }
-            },
-        )
+        await pgsearch.update_popularity(pg_pool, osm_id, boost, _POPULARITY_CAP)
     except Exception:
         pass
-
-    # Update Redis autocomplete score in background
-    if redis_pool is not None:
-        try:
-            await ac_update_score(redis_pool, osm_id, boost=boost)
-        except Exception:
-            pass
 
     return {"status": "ok", "osm_id": osm_id}
 
 
-# ── address search (Elasticsearch) ───────────────────────────────────────────
+# ── address search (PostgreSQL) ───────────────────────────────────────────
 @app.get("/address")
-async def address_search(
+async def address_search_endpoint(
     request: Request,
     q: str = Query(..., min_length=1, description="Address query string"),
     lat: float | None = Query(None, description="Latitude for proximity boost"),
@@ -1480,29 +696,16 @@ async def address_search(
     postcode: str | None = Query(None, description="Restrict results to postal code"),
     city: str | None = Query(None, description="Restrict results to city/town"),
     country: str | None = Query(None, description="Restrict to ISO country code (e.g. EG)"),
-    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    describe: bool = Query(False, description="Include AI-generated descriptions"),
 ):
-    """Structured address search powered by Elasticsearch.
+    """Structured address search powered by PostgreSQL.
 
-    Supports free-form queries like:
-    - ``"123 Tahrir Street, Cairo"``  → parsed into housenumber + street + city
-    - ``"Tahrir Street, Zamalek"``    → street + suburb/city
-    - ``"شارع التحرير, القاهرة"``     → Arabic address
-    - ``"ش التحرير"``                 → abbreviated Arabic
-    - ``"11511"``                     → postcode lookup
-    - ``"Cairo Tower"``               → name fallback (no addr:* required)
-
-    Use the ``postcode``, ``city``, ``country`` query params to add hard filters
-    on top of the free-text query.
-
-    Results are ordered by: text relevance × (offline_rank + geo proximity).
-    Searches addr:* fields first, then falls back to name/full-text if no
-    address-specific results are found.
+    Supports free-form queries, field-level filters (postcode, city, country),
+    and address interpolation fallback.
     """
     q_norm = normalize_address_text(q)
     parsed = parse_address_query(q)
 
-    # Explicit query params override parsed components
     if postcode:
         parsed["postcode"] = postcode
     if city:
@@ -1510,273 +713,19 @@ async def address_search(
     if country:
         parsed["country"] = country.upper()
 
-    must_clauses:   list[dict] = []
-    should_clauses: list[dict] = []
-    filter_clauses: list[dict] = []
-
-    # ── hard filters ─────────────────────────────────────────────────────
-    if parsed.get("postcode"):
-        must_clauses.append({"term": {"addr_postcode": parsed["postcode"]}})
-
-    if parsed.get("country"):
-        filter_clauses.append({"term": {"addr_country": parsed["country"]}})
-
-    # City as hard filter only when supplied as explicit query param
-    if city and parsed.get("city"):
-        filter_clauses.append(
-            {"match": {"addr_city": {"query": parsed["city"], "operator": "and"}}}
-        )
-
-    # ── scored should clauses ────────────────────────────────────────────
-
-    # 1. Cross-field search: the full normalized query across all address fields
-    #    This lets "Tahrir Cairo" match street=Tahrir + city=Cairo
-    should_clauses.append(
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "addr_street^5",
-                    "addr_street.autocomplete^2",
-                    "addr_city^3",
-                    "addr_city.autocomplete",
-                    "addr_suburb^2",
-                    "addr_suburb.autocomplete",
-                    "full_address^2",
-                    "full_address.autocomplete",
-                ],
-                "type": "cross_fields",
-                "operator": "or",
-                "minimum_should_match": "75%",
-            }
-        }
+    results = await pgsearch.address_search(
+        pg_pool, q_norm,
+        limit=limit,
+        lat=lat,
+        lon=lon,
+        housenumber=parsed.get("housenumber"),
+        street=parsed.get("street"),
+        city=parsed.get("city"),
+        postcode=parsed.get("postcode"),
+        country=parsed.get("country"),
     )
 
-    # 2. Phrase match on full_address for exact ordering boost
-    should_clauses.append(
-        {
-            "match_phrase": {
-                "full_address": {"query": q_norm, "boost": 8, "slop": 1}
-            }
-        }
-    )
-
-    # 3. Parsed component-specific boosts (higher precision)
-    if parsed.get("street"):
-        # Exact phrase match on street
-        should_clauses.append(
-            {
-                "match_phrase": {
-                    "addr_street": {"query": parsed["street"], "boost": 10, "slop": 1}
-                }
-            }
-        )
-        # Fuzzy token match on street
-        should_clauses.append(
-            {
-                "match": {
-                    "addr_street": {
-                        "query": parsed["street"],
-                        "fuzziness": "AUTO",
-                        "boost": 4,
-                    }
-                }
-            }
-        )
-        # Autocomplete match on street
-        should_clauses.append(
-            {
-                "match": {
-                    "addr_street.autocomplete": {
-                        "query": parsed["street"],
-                        "boost": 2,
-                    }
-                }
-            }
-        )
-
-    if parsed.get("housenumber"):
-        hn_val = parsed["housenumber"].lower()
-        # Housenumber as case-insensitive term (normalizer handles case)
-        should_clauses.append(
-            {"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}}
-        )
-        # Combined housenumber + street match: strongly boost exact address
-        if parsed.get("street"):
-            should_clauses.append(
-                {
-                    "bool": {
-                        "must": [
-                            {"term": {"addr_housenumber": {"value": hn_val}}},
-                            {"match_phrase": {"addr_street": {"query": parsed["street"], "slop": 1}}},
-                        ],
-                        "boost": 50,
-                    }
-                }
-            )
-
-    # City as boost (when not already a hard filter)
-    if parsed.get("city") and not city:
-        should_clauses.append(
-            {"match": {"addr_city": {"query": parsed["city"], "boost": 3}}}
-        )
-        should_clauses.append(
-            {"match": {"addr_city.autocomplete": {"query": parsed["city"], "boost": 1}}}
-        )
-
-    if parsed.get("suburb"):
-        should_clauses.append(
-            {"match": {"addr_suburb": {"query": parsed["suburb"], "boost": 2}}}
-        )
-
-    # 4. Name fallback — search POI/place names so "Cairo Tower" still works
-    should_clauses.append(
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "name^3", "name.autocomplete^1",
-                    "name_en^3", "name_en.autocomplete^1",
-                    "name_fr^3", "name_fr.autocomplete^1",
-                ],
-                "type": "best_fields",
-                "fuzziness": "AUTO",
-                "boost": 2,
-            }
-        }
-    )
-
-    # 5. Tags-text fallback for broad matching
-    should_clauses.append(
-        {"match": {"tags_text": {"query": q_norm, "boost": 0.5}}}
-    )
-
-    # ── Prefer results with addr:* data but don't exclude others ─────────
-    # Instead of filtering has_address=true, we boost it
-    should_clauses.append(
-        {"term": {"has_address": {"value": True, "boost": 3}}}
-    )
-
-    text_query: dict = {
-        "bool": {
-            "must":   must_clauses,
-            "should": should_clauses,
-            "filter": filter_clauses,
-            "minimum_should_match": 1,
-        }
-    }
-
-    # ── scoring functions ────────────────────────────────────────────────
-    functions: list[dict] = [{"weight": 1.0}]
-
-    # offline_rank: use linear (no log compression) so main streets clearly
-    # outrank minor POIs in address context
-    functions.append(
-        {
-            "field_value_factor": {
-                "field": "offline_rank",
-                "modifier": "none",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 1.5,
-        }
-    )
-
-    # popularity boost
-    functions.append(
-        {
-            "field_value_factor": {
-                "field": "popularity",
-                "modifier": "log1p",
-                "factor": 1,
-                "missing": 0,
-            },
-            "weight": 0.5,
-        }
-    )
-
-    if lat is not None and lon is not None:
-        # Tight geo decay for address search (1 km scale)
-        functions.append(
-            {
-                "gauss": {
-                    "centroid": {
-                        "origin": {"lat": lat, "lon": lon},
-                        "scale": "1km",
-                        "offset": "100m",
-                        "decay": 0.5,
-                    }
-                },
-                "weight": 5,
-            }
-        )
-
-    # ── Housenumber proximity boost ─────────────────────────────────────
-    if parsed.get("housenumber"):
-        try:
-            requested_hn = int(parsed["housenumber"])
-            functions.append(
-                {
-                    "script_score": {
-                        "script": {
-                            "source": (
-                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
-                                "try { "
-                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
-                                "  double diff = Math.abs(hn - params.requested_hn); "
-                                "  return 1.0 / (1.0 + diff); "
-                                "} catch (NumberFormatException e) { return 0; }"
-                            ),
-                            "params": {"requested_hn": requested_hn},
-                        }
-                    },
-                    "weight": 5,
-                }
-            )
-        except ValueError:
-            pass
-
-    body: dict = {
-        "size": limit,
-        "query": {
-            "function_score": {
-                "query": text_query,
-                "functions": functions,
-                "score_mode": "sum",
-                "boost_mode": "multiply",
-            }
-        },
-    }
-
-    resp = await es.search(index=INDEX, **body)
-
-    max_score = resp["hits"].get("max_score") or 0
-    addr_results = resp["hits"]["hits"]
-    results = [
-        {
-            "osm_id":          h["_source"]["osm_id"],
-            "osm_type":        h["_source"].get("osm_type", ""),
-            "name":            h["_source"].get("name", ""),
-            "name_en":         h["_source"].get("name_en", ""),
-            "name_fr":         h["_source"].get("name_fr", ""),
-            "full_address":    h["_source"].get("full_address", ""),
-            "addr_housenumber": h["_source"].get("addr_housenumber", ""),
-            "addr_street":     h["_source"].get("addr_street", ""),
-            "addr_city":       h["_source"].get("addr_city", ""),
-            "addr_postcode":   h["_source"].get("addr_postcode", ""),
-            "addr_country":    h["_source"].get("addr_country", ""),
-            "addr_suburb":     h["_source"].get("addr_suburb", ""),
-            "addr_state":      h["_source"].get("addr_state", ""),
-            "centroid":        h["_source"].get("centroid"),
-            "geom":            h["_source"].get("geom"),
-            "offline_rank":    h["_source"].get("offline_rank", 0),
-            "confidence":      _normalize_confidence(h["_score"], max_score),
-        }
-        for h in addr_results
-    ]
-
-    # ── Address interpolation fallback ────────────────────────────────────
+    # Address interpolation fallback
     if parsed.get("housenumber"):
         try:
             req_hn = int(parsed["housenumber"])
@@ -1953,26 +902,6 @@ async def add_place(place: PlaceCreate):
         
         print(f"[geocoder] Published place {custom_id} to NATS stream")
 
-        # Index into Redis autocomplete immediately (don't wait for ES round-trip)
-        if redis_pool is not None:
-            try:
-                ac_doc = {
-                    "osm_id": custom_id,
-                    "name": place.name,
-                    "name_en": place.name_en or "",
-                    "name_fr": place.name_fr or "",
-                    "centroid": {"lat": place.lat, "lon": place.lon},
-                    "admin_level": place.admin_level,
-                    "offline_rank": 0,
-                    "popularity": 0,
-                    "full_address": "",
-                    "addr_street": place.addr_street or "",
-                    "addr_city": place.addr_city or "",
-                }
-                await ac_index_entry(redis_pool, ac_doc)
-            except Exception:
-                pass  # non-critical
-
         return PlaceResponse(
             osm_id=custom_id,
             osm_type=place.osm_type,
@@ -2044,40 +973,37 @@ async def reverse(
         """
         enclosing_polygons = await conn.fetch(enclosing_query, point_wkt)
 
-    # Collect all osm_ids to fetch from Elasticsearch
+    # Collect all osm_ids to fetch from PostgreSQL
     osm_ids = []
     if nearest_line:
         osm_ids.append(nearest_line["osm_id"])
     osm_ids.extend(row["osm_id"] for row in enclosing_polygons)
 
-    # Fetch data from Elasticsearch for all found osm_ids
-    es_data = {}
+    # Fetch data from PostgreSQL for all found osm_ids
+    pg_data = {}
     if osm_ids:
         try:
-            resp = await es.mget(index=INDEX, ids=osm_ids)
-            for doc in resp["docs"]:
-                if doc.get("found"):
-                    es_data[doc["_id"]] = doc["_source"]
+            pg_data = await pgsearch.mget_places(pg_pool, osm_ids)
         except Exception as e:
-            print(f"[geocoder] Error fetching from Elasticsearch: {e}")
+            print(f"[geocoder] Error fetching from PostgreSQL: {e}")
 
-    # Helper to merge PostGIS and ES data
-    def merge_result(pg_row, es_source):
+    # Helper to merge PostGIS geometry and osm_places metadata
+    def merge_result(pg_row, place_data):
         raw_geom = pg_row["geom"]
         result = {
             "osm_id": pg_row["osm_id"],
             "osm_type": pg_row["osm_type"],
             "geom": json.loads(raw_geom) if isinstance(raw_geom, str) else raw_geom,
         }
-        if es_source:
-            result["name"] = es_source.get("name", "")
-            result["name_en"] = es_source.get("name_en", "")
-            result["name_fr"] = es_source.get("name_fr", "")
-            result["tags"] = es_source.get("tags", {})
-            result["admin_level"] = es_source.get("admin_level", 0)
-            result["area_km2"] = es_source.get("area_km2", 0)
-            result["offline_rank"] = es_source.get("offline_rank", 0)
-            result["popularity"] = es_source.get("popularity", 0)
+        if place_data:
+            result["name"] = place_data.get("name", "")
+            result["name_en"] = place_data.get("name_en", "")
+            result["name_fr"] = place_data.get("name_fr", "")
+            result["tags"] = place_data.get("tags", {})
+            result["admin_level"] = place_data.get("admin_level", 0)
+            result["area_km2"] = place_data.get("area_km2", 0)
+            result["offline_rank"] = place_data.get("offline_rank", 0)
+            result["popularity"] = place_data.get("popularity", 0)
         return result
 
     result: dict = {
@@ -2128,15 +1054,15 @@ async def reverse(
         _logger.debug("Reverse interpolation failed: %s", e)
 
     if nearest_line:
-        es_source = es_data.get(nearest_line["osm_id"])
-        merged = merge_result(nearest_line, es_source)
+        place_source = pg_data.get(nearest_line["osm_id"])
+        merged = merge_result(nearest_line, place_source)
         line_dist = round(nearest_line["distance_m"], 1)
         merged["distance_m"] = line_dist
         merged["confidence"] = _distance_confidence(line_dist)
         result["nearest_line"] = merged
 
     result["enclosing_polygons"] = [
-        merge_result(row, es_data.get(row["osm_id"]))
+        merge_result(row, pg_data.get(row["osm_id"]))
         for row in enclosing_polygons
     ]
 
