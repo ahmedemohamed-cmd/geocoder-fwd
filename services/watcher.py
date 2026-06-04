@@ -623,6 +623,8 @@ async def publish_file(filepath: str):
     handler = OSMHandler(q, redis_client, progress_tracker=parse_progress,
                          relation_way_ids=relation_way_ids)
 
+    parse_error: list[Exception] = []   # mutable container shared with thread
+
     def _parse():
         try:
             print(f"[watcher] Pass 2: parsing {filepath} ...")
@@ -632,6 +634,7 @@ async def publish_file(filepath: str):
             print(f"[watcher] Error during parsing: {e}")
             import traceback
             traceback.print_exc()
+            parse_error.append(e)
         finally:
             # Free the (potentially large) way-coord cache now that all
             # relations have been processed.
@@ -849,6 +852,10 @@ async def publish_file(filepath: str):
         print(f"[watcher] Error clearing Redis cache: {e}")
     
     await nc.close()
+
+    # Propagate parsing errors so the caller knows the file was NOT fully processed
+    if parse_error:
+        raise parse_error[0]
 
 
 # ---------------------------------------------------------------------------

@@ -131,6 +131,7 @@ services:
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=false
       - TRANSFORMERS_CACHE=/app/models
+      - MAX_CONCURRENT_BATCHES=2
     depends_on:
       nats:
         condition: service_started

@@ -320,6 +320,43 @@ async def ensure_index(es: AsyncElasticsearch):
                         raise
 
 
+async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
+    """Toggle index settings optimised for bulk ingest vs. normal query serving."""
+    if enabled:
+        settings = {
+            "refresh_interval": "60s",
+            "translog.durability": "async",
+            "translog.flush_threshold_size": "1gb",
+            "translog.sync_interval": "30s",
+            # Suppress merges during ingest — tolerate many segments
+            "merge.scheduler.max_thread_count": 1,
+            "merge.scheduler.auto_throttle": False,
+            "merge.policy.segments_per_tier": 50,
+            "merge.policy.max_merged_segment": "50gb",
+            "merge.policy.max_merge_at_once": 2,
+        }
+        label = "BULK"
+    else:
+        settings = {
+            "refresh_interval": "5s",
+            "translog.durability": "request",
+            "translog.flush_threshold_size": "512mb",
+            "translog.sync_interval": "5s",
+            # Restore normal merge behaviour
+            "merge.scheduler.max_thread_count": 1,
+            "merge.scheduler.auto_throttle": True,
+            "merge.policy.segments_per_tier": 10,
+            "merge.policy.max_merged_segment": "5gb",
+            "merge.policy.max_merge_at_once": 10,
+        }
+        label = "NORMAL"
+    try:
+        await es.indices.put_settings(index=INDEX, settings={"index": settings})
+        print(f"[es-inserter] Index mode set to {label}", flush=True)
+    except Exception as e:
+        print(f"[es-inserter] Warning: could not set {label} mode: {e}", flush=True)
+
+
 async def run():
     import time as _time
 
@@ -346,6 +383,7 @@ async def run():
         raise Exception("Failed to connect to Elasticsearch after maximum retries")
     
     await ensure_index(es)
+    await set_bulk_mode(es, enabled=True)
 
     # Pre-load embedding model before starting workers to avoid concurrent download conflicts
     if ENABLE_VECTORS:
@@ -370,8 +408,12 @@ async def run():
     # and cleanly separates I/O (fetch/ack) from CPU-bound work (embed).
     work_queue: asyncio.Queue[list] = asyncio.Queue(maxsize=MAX_CONCURRENT_BATCHES * 2)
 
+    in_bulk_mode = True       # tracks whether we've applied bulk settings
+    consecutive_empty = 0     # number of consecutive empty fetches
+
     async def fetcher():
         """Single fetcher that pulls batches from NATS into the work queue."""
+        nonlocal in_bulk_mode, consecutive_empty
         while True:
             max_fetch_retries = 5
             msgs = None
@@ -407,7 +449,18 @@ async def run():
                         await asyncio.sleep(1)
 
             if not msgs:
+                consecutive_empty += 1
+                # Switch back to normal mode after 3 consecutive empty fetches (~90s idle)
+                if in_bulk_mode and consecutive_empty >= 3:
+                    await set_bulk_mode(es, enabled=False)
+                    in_bulk_mode = False
                 continue
+
+            # Switch to bulk mode when work arrives
+            if not in_bulk_mode:
+                await set_bulk_mode(es, enabled=True)
+                in_bulk_mode = True
+            consecutive_empty = 0
 
             # Place the raw messages on the queue (blocks if queue is full,
             # providing natural back-pressure to the fetcher).

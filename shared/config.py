@@ -72,7 +72,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
 # Performance tuning
 # When vectors are enabled, use smaller batch sizes to avoid timeouts
-_BATCH_SIZE = _safe_int("BATCH_SIZE", 100)
+_BATCH_SIZE = _safe_int("BATCH_SIZE", 500)
 BATCH_SIZE = (_BATCH_SIZE // 2) if ENABLE_VECTORS else _BATCH_SIZE
 
 _DEFAULT_WORKERS = 2 if ENABLE_VECTORS else 4
