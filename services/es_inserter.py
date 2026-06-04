@@ -38,6 +38,114 @@ from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATC
 from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
 from shared.ranking import compute_offline_rank
 from shared.centroid import centroid_latlon
+
+# ---------------------------------------------------------------------------
+# Geometry simplification — prevent Lucene Tessellator from choking on
+# complex polygons with thousands of vertices / holes.
+# ---------------------------------------------------------------------------
+MAX_GEOM_VERTICES = 2000  # keep geometries ≤ this many total vertices
+
+
+def _count_ring(ring):
+    return len(ring) if ring else 0
+
+
+def _count_vertices(geom):
+    """Count total coordinate vertices in a GeoJSON geometry."""
+    gtype = geom.get("type", "")
+    coords = geom.get("coordinates")
+    if not coords:
+        # GeometryCollection
+        return sum(_count_vertices(g) for g in geom.get("geometries", []))
+    if gtype == "Point":
+        return 1
+    if gtype in ("LineString", "MultiPoint"):
+        return len(coords)
+    if gtype == "Polygon":
+        return sum(_count_ring(r) for r in coords)
+    if gtype == "MultiLineString":
+        return sum(len(ls) for ls in coords)
+    if gtype == "MultiPolygon":
+        return sum(sum(_count_ring(r) for r in poly) for poly in coords)
+    return 0
+
+
+def _thin_ring(ring, keep_every):
+    """Keep every Nth coordinate, always preserving first and last."""
+    if len(ring) <= 4:
+        return ring
+    thinned = [ring[i] for i in range(0, len(ring) - 1, keep_every)]
+    # Close the ring
+    if thinned[-1] != ring[-1]:
+        thinned.append(ring[-1])
+    # Polygons need at least 4 coordinates
+    if len(thinned) < 4:
+        return ring[:3] + [ring[-1]]
+    return thinned
+
+
+def simplify_geometry(geom):
+    """Simplify a GeoJSON geometry if it has too many vertices.
+
+    Uses uniform vertex thinning (keep every Nth point) rather than a
+    full Visvalingam / Douglas-Peucker algorithm to avoid adding a
+    dependency.  Good enough for search/display purposes.
+    """
+    if not geom:
+        return geom
+
+    total = _count_vertices(geom)
+    if total <= MAX_GEOM_VERTICES:
+        return geom
+
+    keep_every = max(2, total // MAX_GEOM_VERTICES + 1)
+    gtype = geom.get("type", "")
+    coords = geom.get("coordinates")
+
+    if gtype == "Polygon" and coords:
+        new_coords = [_thin_ring(r, keep_every) for r in coords]
+        # Drop holes that became degenerate (< 4 pts)
+        outer = new_coords[0]
+        holes = [h for h in new_coords[1:] if len(h) >= 4]
+        return {"type": "Polygon", "coordinates": [outer] + holes}
+
+    if gtype == "MultiPolygon" and coords:
+        new_polys = []
+        for poly in coords:
+            new_rings = [_thin_ring(r, keep_every) for r in poly]
+            outer = new_rings[0]
+            holes = [h for h in new_rings[1:] if len(h) >= 4]
+            new_polys.append([outer] + holes)
+        return {"type": "MultiPolygon", "coordinates": new_polys}
+
+    if gtype in ("LineString",) and coords and len(coords) > MAX_GEOM_VERTICES:
+        thinned = [coords[i] for i in range(0, len(coords), keep_every)]
+        if thinned[-1] != coords[-1]:
+            thinned.append(coords[-1])
+        return {"type": "LineString", "coordinates": thinned}
+
+    if gtype == "MultiLineString" and coords:
+        new_lines = []
+        for ls in coords:
+            if len(ls) > MAX_GEOM_VERTICES:
+                thinned = [ls[i] for i in range(0, len(ls), keep_every)]
+                if thinned[-1] != ls[-1]:
+                    thinned.append(ls[-1])
+                new_lines.append(thinned)
+            else:
+                new_lines.append(ls)
+        return {"type": "MultiLineString", "coordinates": new_lines}
+
+    # GeometryCollection — simplify each sub-geometry
+    if gtype == "GeometryCollection":
+        return {
+            "type": "GeometryCollection",
+            "geometries": [simplify_geometry(g) for g in geom.get("geometries", [])],
+        }
+
+    return geom
+
+
 from shared.address import extract_address_components, build_full_address, has_address, normalize_address_text
 
 INDEX = "osm_places"
@@ -321,19 +429,26 @@ async def ensure_index(es: AsyncElasticsearch):
 
 
 async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
-    """Toggle index settings optimised for bulk ingest vs. normal query serving."""
+    """Toggle index settings optimised for bulk ingest vs. normal query serving.
+
+    BULK mode: 60s refresh, async translog, but merges still run (1 thread)
+    so segments don't pile up unbounded.
+    NORMAL mode: 5s refresh, sync translog, normal merge policy.  When
+    switching to NORMAL we also trigger a background force-merge if the
+    segment count is too high.
+    """
     if enabled:
         settings = {
             "refresh_interval": "60s",
             "translog.durability": "async",
             "translog.flush_threshold_size": "1gb",
             "translog.sync_interval": "30s",
-            # Suppress merges during ingest — tolerate many segments
+            # Allow merges but limit to 1 thread so they don't starve ingest
             "merge.scheduler.max_thread_count": 1,
-            "merge.scheduler.auto_throttle": False,
-            "merge.policy.segments_per_tier": 50,
-            "merge.policy.max_merged_segment": "50gb",
-            "merge.policy.max_merge_at_once": 2,
+            "merge.scheduler.auto_throttle": True,
+            "merge.policy.segments_per_tier": 10,
+            "merge.policy.max_merged_segment": "5gb",
+            "merge.policy.max_merge_at_once": 10,
         }
         label = "BULK"
     else:
@@ -342,7 +457,6 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
             "translog.durability": "request",
             "translog.flush_threshold_size": "512mb",
             "translog.sync_interval": "5s",
-            # Restore normal merge behaviour
             "merge.scheduler.max_thread_count": 1,
             "merge.scheduler.auto_throttle": True,
             "merge.policy.segments_per_tier": 10,
@@ -355,6 +469,20 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
         print(f"[es-inserter] Index mode set to {label}", flush=True)
     except Exception as e:
         print(f"[es-inserter] Warning: could not set {label} mode: {e}", flush=True)
+
+    # When leaving bulk mode, kick off a background force-merge if needed
+    if not enabled:
+        try:
+            stats = await es.indices.stats(index=INDEX, metric="segments")
+            seg_count = stats["indices"][INDEX]["primaries"]["segments"]["count"]
+            if seg_count > 10:
+                print(f"[es-inserter] {seg_count} segments detected, starting background force-merge to 5", flush=True)
+                await es.indices.forcemerge(
+                    index=INDEX, max_num_segments=5,
+                    wait_for_completion=False, flush=True,
+                )
+        except Exception as e:
+            print(f"[es-inserter] Warning: force-merge request failed: {e}", flush=True)
 
 
 async def run():
@@ -450,8 +578,8 @@ async def run():
 
             if not msgs:
                 consecutive_empty += 1
-                # Switch back to normal mode after 3 consecutive empty fetches (~90s idle)
-                if in_bulk_mode and consecutive_empty >= 3:
+                # Switch back to normal mode after 10 consecutive empty fetches (~5 min idle)
+                if in_bulk_mode and consecutive_empty >= 10:
                     await set_bulk_mode(es, enabled=False)
                     in_bulk_mode = False
                 continue
@@ -535,7 +663,7 @@ async def run():
                     "addr_state":       addr.get("state", ""),
                 }
                 if elem.get("geom"):
-                    doc["geom"] = elem["geom"]
+                    doc["geom"] = simplify_geometry(elem["geom"])
                     c = centroid_latlon(elem["geom"])
                     if c:
                         doc["centroid"] = c
