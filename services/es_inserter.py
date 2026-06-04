@@ -26,10 +26,13 @@ Stored per element:
 
 import asyncio
 import json
+import time as _time
 
 import nats.errors
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk
+from elastic_transport import ConnectionTimeout
+from elasticsearch import ApiError
 
 from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
 from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
@@ -455,7 +458,27 @@ async def run():
                     doc["name_vector"] = vec
                 actions.append(doc)
 
-            await async_bulk(es, actions, raise_on_error=False)
+            # Bulk index with retry on transient ES errors (timeout, circuit breaker, etc.)
+            max_bulk_retries = 5
+            for bulk_attempt in range(max_bulk_retries):
+                try:
+                    await async_bulk(es, actions, raise_on_error=False)
+                    break
+                except ApiError as e:
+                    if e.status_code == 429 and bulk_attempt < max_bulk_retries - 1:
+                        delay = 2 ** (bulk_attempt + 1)
+                        print(f"[es-inserter] Worker {worker_id}: ES overloaded (429), backing off {delay}s (attempt {bulk_attempt + 1}/{max_bulk_retries})", flush=True)
+                        await asyncio.sleep(delay)
+                    else:
+                        raise
+                except (ConnectionTimeout, ConnectionError, OSError) as e:
+                    if bulk_attempt < max_bulk_retries - 1:
+                        delay = 2 ** bulk_attempt
+                        print(f"[es-inserter] Worker {worker_id}: Bulk index failed ({type(e).__name__}), retrying in {delay}s (attempt {bulk_attempt + 1}/{max_bulk_retries})", flush=True)
+                        await asyncio.sleep(delay)
+                    else:
+                        print(f"[es-inserter] Worker {worker_id}: Bulk index failed after {max_bulk_retries} attempts: {e}", flush=True)
+                        raise
 
             # Ack messages only after successful indexing
             for msg in msgs:
