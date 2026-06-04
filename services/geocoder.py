@@ -382,20 +382,8 @@ redis_pool: aioredis.Redis = None  # type: ignore[assignment]
 
 
 async def _warm_autocomplete():
-    """Background task: populate Redis autocomplete from ES.
-
-    Runs once at startup, then re-warms every 10 minutes so that
-    newly-indexed data becomes searchable via autocomplete without
-    a geocoder restart.
-    """
-    REWARM_INTERVAL = 600  # seconds
-    while True:
-        try:
-            count = await ac_warm_from_es(redis_pool, es, INDEX)
-            print(f"[geocoder] Autocomplete warm-up done: {count} entries")
-        except Exception as e:
-            print(f"[geocoder] Autocomplete warm-up failed: {e}")
-        await asyncio.sleep(REWARM_INTERVAL)
+    """No-op — autocomplete now uses Elasticsearch directly."""
+    pass
 
 
 async def _warm_ollama():
@@ -1323,18 +1311,7 @@ async def autocomplete(
     via ``/feedback``).  When ``lat``/``lon`` are provided, geo-local
     results from the same geohash-4 cell are preferred.
     """
-    # ── Primary path: Redis sorted-set lookup ─────────────────────────
-    if redis_pool is not None:
-        try:
-            results = await ac_query(
-                redis_pool, q, limit=limit, lat=lat, lon=lon,
-            )
-            request.state.result_count = len(results)
-            return {"source": "redis", "results": results}
-        except Exception as e:
-            _logger.debug("Redis autocomplete failed, falling back to ES: %s", e)
-
-    # ── Fallback: Elasticsearch edge-ngram query ──────────────────────
+    # ── Elasticsearch edge-ngram autocomplete ───────────────────────────
     q_norm = normalize_address_text(q)
 
     should: list[dict] = [
