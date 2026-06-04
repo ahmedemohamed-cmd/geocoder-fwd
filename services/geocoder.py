@@ -382,12 +382,20 @@ redis_pool: aioredis.Redis = None  # type: ignore[assignment]
 
 
 async def _warm_autocomplete():
-    """Background task: populate Redis autocomplete from ES."""
-    try:
-        count = await ac_warm_from_es(redis_pool, es, INDEX)
-        print(f"[geocoder] Autocomplete warm-up done: {count} entries")
-    except Exception as e:
-        print(f"[geocoder] Autocomplete warm-up failed: {e}")
+    """Background task: populate Redis autocomplete from ES.
+
+    Runs once at startup, then re-warms every 10 minutes so that
+    newly-indexed data becomes searchable via autocomplete without
+    a geocoder restart.
+    """
+    REWARM_INTERVAL = 600  # seconds
+    while True:
+        try:
+            count = await ac_warm_from_es(redis_pool, es, INDEX)
+            print(f"[geocoder] Autocomplete warm-up done: {count} entries")
+        except Exception as e:
+            print(f"[geocoder] Autocomplete warm-up failed: {e}")
+        await asyncio.sleep(REWARM_INTERVAL)
 
 
 async def _warm_ollama():
