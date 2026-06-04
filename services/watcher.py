@@ -150,6 +150,15 @@ class ProgressTracker:
         print(f"[{self.description}] Completed in {elapsed:.1f} seconds")
 
 
+def _safe_admin_level(tags: dict) -> int:
+    """Parse admin_level from tags, returning 0 for non-numeric values."""
+    raw = tags.get("admin_level", 0) or 0
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _has_identifiable_tags(tags: dict) -> bool:
     """Check if element has identifiable tags like name, address, reference, etc."""
     if not tags:
@@ -405,7 +414,7 @@ class OSMHandler(osmium.SimpleHandler):
                     "type": "Point",
                     "coordinates": [n.location.lon, n.location.lat],
                 },
-                "admin_level": int(tags.get("admin_level", 0) or 0),
+                "admin_level": _safe_admin_level(tags),
                 "area_km2": 0.0,
             }
         )
@@ -467,7 +476,7 @@ class OSMHandler(osmium.SimpleHandler):
                 "osm_type": "way",
                 "tags": tags,
                 "geom": geom,
-                "admin_level": int(tags.get("admin_level", 0) or 0),
+                "admin_level": _safe_admin_level(tags),
                 "area_km2": area,
             }
         )
@@ -523,7 +532,7 @@ class OSMHandler(osmium.SimpleHandler):
                 "osm_type": "relation",
                 "tags": tags,
                 "geom": geom,
-                "admin_level": int(tags.get("admin_level", 0) or 0),
+                "admin_level": _safe_admin_level(tags),
                 "area_km2": area,
             }
         )

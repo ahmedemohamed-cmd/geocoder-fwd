@@ -148,6 +148,8 @@ GET {{baseUrl}}/describe?osm_id=w888001
 ### Basic city search
 GET {{baseUrl}}/geocode?q=9 pentland cres
 ### Basic city search
+GET {{baseUrl}}/geocode?q=pentland cres
+### Basic city search
 GET {{baseUrl}}/geocode?q=farm boy3
 ###
 

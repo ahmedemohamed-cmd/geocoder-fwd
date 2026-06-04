@@ -137,8 +137,8 @@ async def subscribe(js, consumer_name):
                     stream=NATS_STREAM,
                     config=ConsumerConfig(
                         max_waiting=10,
-                        max_deliver=5,
-                        ack_wait=120,
+                        max_deliver=-1,   # unlimited redelivery
+                        ack_wait=300,     # 5 min to allow slow bulk inserts
                     ),
                 )
             except Exception as e2:
