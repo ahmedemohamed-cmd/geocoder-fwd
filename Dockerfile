@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy only necessary application directories
 COPY services/ /app/services/
 COPY shared/ /app/shared/
+COPY sql/ /app/sql/
+COPY scripts/ /app/scripts/
 COPY run.py /app/
 
 # Create data directory
