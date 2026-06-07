@@ -360,9 +360,12 @@ async def warm_from_es(
     body: dict[str, Any] = {
         "size": batch_size,
         "query": {"match_all": {}},
-        # _id tiebreaker ensures every sort position is unique so search_after
-        # can paginate past groups of docs that share offline_rank=0/popularity=0.
-        "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}, {"_id": "asc"}],
+        # osm_id (an indexed keyword) is the search_after tiebreaker so every
+        # sort position is unique, letting us paginate past large groups of docs
+        # that share offline_rank=0/popularity=0. NOTE: do NOT sort on `_id` here
+        # — ES 8 disallows fielddata on the _id field, which aborts the scroll
+        # (the warm-up would index 0 docs and autocomplete falls back to ES).
+        "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}, {"osm_id": "asc"}],
         "_source": [
             "osm_id", "name", "name_en", "name_fr", "centroid",
             "admin_level", "offline_rank", "popularity",
