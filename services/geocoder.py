@@ -379,11 +379,36 @@ pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
 nc = None  # type: ignore[assignment]
 js = None  # type: ignore[assignment]
 redis_pool: aioredis.Redis = None  # type: ignore[assignment]
+_ac_task: asyncio.Task | None = None  # strong reference to prevent GC
+
+
+_AC_MAX_DOCS = 100_000   # top-ranked docs to keep in Redis
+_AC_BATCH_SIZE = 2_000  # ES fetch size per round-trip
+_AC_REWARM_SECS = 600   # re-warm interval (10 minutes)
 
 
 async def _warm_autocomplete():
-    """No-op — autocomplete now uses Elasticsearch directly."""
-    pass
+    """Populate and periodically refresh the Redis autocomplete index from ES.
+
+    Only indexes the top _AC_MAX_DOCS documents by offline_rank so the
+    warm-up completes in seconds rather than minutes on large datasets.
+    """
+    if redis_pool is None:
+        return
+    while True:
+        try:
+            count = await ac_warm_from_es(
+                redis_pool, es, INDEX,
+                batch_size=_AC_BATCH_SIZE,
+                max_docs=_AC_MAX_DOCS,
+            )
+            print(f"[geocoder] Autocomplete warm-up complete: {count} docs indexed")
+        except asyncio.CancelledError:
+            print("[geocoder] Autocomplete warm-up task cancelled")
+            raise
+        except Exception as e:
+            print(f"[geocoder] Autocomplete warm-up failed: {e}")
+        await asyncio.sleep(_AC_REWARM_SECS)
 
 
 async def _warm_ollama():
@@ -397,7 +422,7 @@ async def _warm_ollama():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, pg_pool, nc, js, redis_pool
+    global es, pg_pool, nc, js, redis_pool, _ac_task
 
     # Retry logic for connecting to dependencies
     max_retries = 10
@@ -476,8 +501,8 @@ async def lifespan(app: FastAPI):
         await redis_pool.ping()
         print(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
 
-        # Warm autocomplete index from ES in background
-        asyncio.create_task(_warm_autocomplete())
+        # Warm autocomplete index from ES in background (store ref to prevent GC)
+        _ac_task = asyncio.create_task(_warm_autocomplete())
     except Exception as e:
         print(f"[geocoder] Redis connection failed: {e}")
         print(f"[geocoder] Autocomplete will fall back to Elasticsearch")
@@ -487,6 +512,12 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_warm_ollama())
 
     yield
+    if _ac_task and not _ac_task.done():
+        _ac_task.cancel()
+        try:
+            await _ac_task
+        except asyncio.CancelledError:
+            pass
     await es.close()
     await pg_pool.close()
     await nc.close()
@@ -1311,7 +1342,17 @@ async def autocomplete(
     via ``/feedback``).  When ``lat``/``lon`` are provided, geo-local
     results from the same geohash-4 cell are preferred.
     """
-    # ── Elasticsearch edge-ngram autocomplete ───────────────────────────
+    # ── Redis autocomplete (primary path) ──────────────────────────────
+    if redis_pool is not None:
+        try:
+            redis_hits = await ac_query(redis_pool, q, limit=limit, lat=lat, lon=lon)
+            if redis_hits:
+                request.state.result_count = len(redis_hits)
+                return {"source": "redis", "results": redis_hits}
+        except Exception as e:
+            print(f"[geocoder] Redis autocomplete error, falling back to ES: {e}")
+
+    # ── Elasticsearch edge-ngram autocomplete (fallback) ────────────────
     q_norm = normalize_address_text(q)
 
     should: list[dict] = [
