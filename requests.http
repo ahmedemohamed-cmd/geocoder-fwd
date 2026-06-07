@@ -1,44 +1,40 @@
 ### Geocoding Service API Examples
-### Base URL: http://dev-fwd.cec.delllabs.net:8000
+### Base URL: http://dev-fwd.cec.delllabs.net:8000 (using localhost below)
 ###
 ### Endpoints
-###   GET  /features          – which optional features are enabled
-###   GET  /health            – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
-###   GET  /autocomplete      – fast prefix-based suggestions (Redis sorted sets, ~1-3ms)
-###   GET  /geocode           – full-text + vector + geo search (with address interpolation fallback)
-###   GET  /address           – structured address search (with address interpolation fallback)
-###   GET  /reverse           – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
-###   GET  /describe          – AI-generated title + description for a place
-###   POST /feedback          – popularity feedback loop
-###   POST /places            – add a custom place
-###   POST /insert            – insert raw OSM element via NATS
+###   GET  /features      – which optional features are enabled
+###   GET  /health        – dependency health check (ES, PostGIS, NATS, Redis, Ollama)
+###   GET  /autocomplete  – fast prefix-based suggestions (Redis sorted sets, ~1-3ms)
+###   GET  /geocode       – full-text + vector + geo search (with address interpolation fallback)
+###   GET  /address       – structured address search (with address interpolation fallback)
+###   GET  /reverse       – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
+###   GET  /describe      – AI-generated title + description for a place
+###   POST /feedback      – popularity feedback loop
+###   POST /places        – add a custom place
+###   POST /insert        – insert raw OSM element via NATS
 ###
-### Shared query flags for search endpoints:
+### Shared query flags for the search endpoints:
 ###   vector=true|false   – enable/disable semantic vector re-ranking
 ###   ai=true|false       – enable/disable AI-assisted expansion
 ###   describe=true|false – include AI-generated title + description (cached)
-###
-### Debugging helpers at the bottom:
-###   Elasticsearch direct queries
-###   PostGIS direct queries (REST is not available, see SQL section comments)
 
 @baseUrl = http://localhost:8000
 
 # ============================================================================
-# Feature Flags
+# /features  –  Feature flags
 # ============================================================================
 
-### Check which features are enabled (vectors, AI)
+### Report which optional features (vectors, AI) are enabled on this instance
 GET {{baseUrl}}/features
 
 ###
 
 # ============================================================================
-# Health Check
+# /health  –  Dependency health check
 # ============================================================================
 
-### Check all dependencies: ES, PostGIS, NATS, Redis, Ollama
-### Returns 200 (healthy) or 503 (degraded) with per-service status
+### Check all backend dependencies: ES, PostGIS, NATS, Redis, Ollama.
+### Returns 200 (healthy) or 503 (degraded) with per-service status.
 GET {{baseUrl}}/health
 
 ###
@@ -46,38 +42,23 @@ GET {{baseUrl}}/health
 # ============================================================================
 # /autocomplete  –  Fast prefix-based suggestions (Redis sorted sets)
 #
-# Designed for keystroke-by-keystroke dropdown suggestions.
-# Primary path: Redis sorted-set lookup (~1-3ms).
-# Fallback: ES edge-ngram query if Redis is unavailable.
-#
-# Architecture:
-#   - At startup, the geocoder warms the Redis index from ES
-#     (scroll by offline_rank desc, index all prefixes 2-6 chars)
-#   - Each prefix key is a sorted set scored by:
-#     offline_rank * 10 + log1p(popularity) * 5
-#   - /feedback updates both ES popularity AND Redis scores in real-time
-#   - /places indexes new entries into Redis immediately
-#   - Geo-bias uses geohash-4 partitioned keys (~20km cells)
+# Designed for keystroke-by-keystroke dropdown suggestions. The primary path
+# is a Redis sorted-set lookup (~1-3 ms); if Redis is unavailable it falls
+# back to an Elasticsearch edge-ngram query. The response carries a
+# "source": "redis"|"elasticsearch" field so you can see which path served it.
 #
 # Params:
-#   q      (required) – partial query text (min 1 char)
+#   q       (required) – partial query text (min 1 char)
 #   lat/lon            – geo-bias: prefer results near this location
 #   limit              – max suggestions (1–20, default 7)
-#
-# Response includes "source": "redis"|"elasticsearch" so you can
-# verify which backend served the request.
-#
-# Response fields per suggestion:
-#   osm_id, label (display string), name, name_en, centroid,
-#   admin_level
 # ============================================================================
 
-### Basic autocomplete – first few characters
+### First few characters
 GET {{baseUrl}}/autocomplete?q=cai
 
 ###
 
-### Longer prefix narrows results
+### Longer prefix narrows the suggestions
 GET {{baseUrl}}/autocomplete?q=cairo
 
 ###
@@ -87,12 +68,12 @@ GET {{baseUrl}}/autocomplete?q=القاه
 
 ###
 
-### Street name prefix
+### Street-name prefix
 GET {{baseUrl}}/autocomplete?q=tahrir
 
 ###
 
-### With geo-bias (near downtown Cairo — prefers local results)
+### Geo-biased – prefer suggestions near downtown Cairo
 GET {{baseUrl}}/autocomplete?q=corn&lat=30.0444&lon=31.2357
 
 ###
@@ -102,12 +83,12 @@ GET {{baseUrl}}/autocomplete?q=tahrir street cai&lat=30.0444&lon=31.2357
 
 ###
 
-### Short prefix with geo-bias (restaurants nearby)
+### Short prefix with geo-bias, raised limit (nearby restaurants)
 GET {{baseUrl}}/autocomplete?q=rest&lat=30.0444&lon=31.2357&limit=10
 
 ###
 
-### Single character (min allowed)
+### Single character (minimum allowed)
 GET {{baseUrl}}/autocomplete?q=a&limit=5
 
 ###
@@ -115,71 +96,72 @@ GET {{baseUrl}}/autocomplete?q=a&limit=5
 # ============================================================================
 # /describe  –  AI-generated title + description for a place
 #
+# Returns a bilingual (Arabic + English) title and description. The first call
+# blocks until generation completes, then the result is cached. Requires
+# Ollama to be running with the configured model.
+#
 # Params:
 #   osm_id  (required) – OSM ID of the place to describe
-#
-# Returns bilingual (Arabic + English) title and description.
-# Blocks until generation completes on first call; cached in ES after that.
-# Requires Ollama to be running with the configured model.
 # ============================================================================
 
-### Generate description for a specific place (blocks until ready)
+### Describe a node (blocks until ready on first call)
 GET {{baseUrl}}/describe?osm_id=n271613766
 
 ###
 
-### Generate description for a way
+### Describe a way
 GET {{baseUrl}}/describe?osm_id=w888001
 
 ###
 
 # ============================================================================
-# /geocode  –  Full-text + vector + geo-decay search (Elasticsearch)
+# /geocode  –  Full-text + vector + geo-decay search
 #
 # Params:
-#   q      (required) – free-text query
+#   q       (required) – free-text query
 #   lat/lon            – bias results toward this location
-#   limit              – max results (1–50, default 10)
+#   limit              – max results per page (1–50, default 10)
+#   offset             – result offset for paging/scrolling (0–9950, default 0;
+#                        offset + limit must stay ≤ 10000)
 #   vector=true|false  – enable/disable semantic vector re-ranking
 #   ai=true|false      – enable/disable AI-assisted expansion
 #   describe=true|false – include AI descriptions (cached where available)
+#
+# The response carries a `pagination` block: { limit, offset, total, has_more }.
+# To scroll, re-request with offset += limit until has_more is false.
 # ============================================================================
 
-### Basic city search
-GET {{baseUrl}}/geocode?q=9 pentland cres
-### Basic city search
-GET {{baseUrl}}/geocode?q=pentland cres
-### Basic city search
-GET {{baseUrl}}/geocode?q=cfc
+### Basic name search
+GET {{baseUrl}}/geocode?q=makaram
+
 ###
 
-### Search with geo-distance bias (near the Pyramids)
+### Geo-biased search near the Giza Pyramids
 GET {{baseUrl}}/geocode?q=pyramids&lat=29.9792&lon=31.1342&limit=5
 
 ###
 
-### Tahrir Square with Cairo location bias
+### Multi-word search with Cairo location bias
 GET {{baseUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10
 
 ###
 
-### Text-only search, no vector re-ranking (faster)
+### Text-only search, vector re-ranking disabled (faster)
 GET {{baseUrl}}/geocode?q=alexandria&limit=10&vector=false
 
 ###
 
-### Fuzzy / typo-tolerant search
+### Fuzzy / typo-tolerant search ("kahira" → "Cairo")
 GET {{baseUrl}}/geocode?q=kahira&lat=30.0444&lon=31.2357&limit=5
 
 ###
 
-### Search for a venue type near Cairo
+### Venue-type search near Cairo
 GET {{baseUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=15
 
 ###
 
-### Address-like query auto-detected and blended into /geocode
-### (housenumber + street clauses added automatically)
+### Address-like query: housenumber + street clauses are added automatically
 GET {{baseUrl}}/geocode?q=10 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
 
 ###
@@ -189,46 +171,48 @@ GET {{baseUrl}}/geocode?q=القاهرة&limit=10
 
 ###
 
-### Search with AI descriptions included (cached where available, null otherwise)
+### Include AI descriptions (cached where available, null otherwise)
 GET {{baseUrl}}/geocode?q=cairo tower&lat=30.0459&lon=31.2243&limit=5&describe=true
 
 ###
 
-### Venue search with descriptions
-GET {{baseUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=5&describe=true
-
-###
-
-### Address interpolation – search for a housenumber that may not exist
-### If 15 Tahrir Street is not in the DB, the system interpolates its
-### position from nearby addresses (e.g. #10 and #20) on the same street.
-### The interpolated result appears first with match_type: "interpolated",
-### side: "odd", and bracket_low/bracket_high showing the reference addresses.
+### Address interpolation – housenumber that may not exist in the DB.
+### If "15 Tahrir Street" is missing, its position is interpolated from nearby
+### addresses (e.g. #10 and #20). The interpolated result appears first with
+### match_type "interpolated", a side ("odd"/"even"), and bracket_low/high.
 GET {{baseUrl}}/geocode?q=15 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
 
 ###
 
-### Odd/even detection – search for an even housenumber
-### The system separates addresses by parity (odd side vs even side of
-### the street) and interpolates along the correct side.
+### Odd/even detection – addresses are split by street side (parity) and
+### interpolated along the correct side.
 GET {{baseUrl}}/geocode?q=22 Kasr El Aini Street, Cairo&lat=30.0380&lon=31.2336&limit=5
 
 ###
 
+### Scroll / paginate – page 1 (first 10). Check pagination.has_more in the response.
+GET {{baseUrl}}/geocode?q=makaram&limit=10&offset=0
+
+###
+
+### Scroll / paginate – page 2 (next 10). Re-request with offset += limit.
+GET {{baseUrl}}/geocode?q=makaram&limit=10&offset=10
+
+###
+
 # ============================================================================
-# /address  –  Structured address search (Elasticsearch)
+# /address  –  Structured address search
 #
 # Params:
 #   q        (required) – free-form or structured address string
-#   lat/lon              – proximity boost (500 m scale, weight=4)
-#   limit                – max results (1–50, default 10)
-#   postcode             – hard filter: restrict to this postal code
-#   city                 – hard filter: restrict to this city
-#   country              – hard filter: restrict to ISO country code (e.g. EG)
-#   describe=true|false  – include AI descriptions (cached where available)
+#   lat/lon             – proximity boost (tight 1 km decay)
+#   limit               – max results (1–50, default 10)
+#   postcode            – hard filter: restrict to this postal code
+#   city                – hard filter: restrict to this city
+#   country             – hard filter: restrict to ISO country code (e.g. EG)
+#   describe=true|false – include AI descriptions (cached where available)
 #
-# Only elements with at least one addr:* tag are returned.
-# The response includes a `parsed` field showing how the query was interpreted.
+# The response includes a `parsed` field showing how the query was decomposed.
 # ============================================================================
 
 ### Full address: housenumber + street + city (auto-parsed)
@@ -241,7 +225,7 @@ GET {{baseUrl}}/address?q=Tahrir Street, Cairo&limit=10
 
 ###
 
-### Street only with explicit city filter param
+### Street with city supplied as an explicit filter param
 GET {{baseUrl}}/address?q=Corniche El Nil&city=Cairo&limit=10
 
 ###
@@ -251,22 +235,22 @@ GET {{baseUrl}}/address?q=Nile Street&country=EG&limit=10
 
 ###
 
-### Postcode lookup – find all addresses in a postal district
+### Postcode lookup – all addresses in a postal district
 GET {{baseUrl}}/address?q=11511
 
 ###
 
-### Postcode as hard filter combined with street query
+### Postcode as a hard filter combined with a street query
 GET {{baseUrl}}/address?q=Tahrir Street&postcode=11511
 
 ###
 
-### With proximity bias (near Tahrir Square)
+### Proximity bias near Tahrir Square
 GET {{baseUrl}}/address?q=Tahrir Street&lat=30.0444&lon=31.2357&limit=10
 
 ###
 
-### Building number + street + city with proximity and country filter
+### Housenumber + street + city, with proximity and country filter
 GET {{baseUrl}}/address?q=15 Kasr El Aini Street, Cairo&lat=30.0380&lon=31.2336&country=EG&limit=5
 
 ###
@@ -276,12 +260,12 @@ GET {{baseUrl}}/address?q=شارع التحرير, القاهرة
 
 ###
 
-### Arabic full address with housenumber
+### Arabic full address with housenumber and proximity
 GET {{baseUrl}}/address?q=10 شارع التحرير, القاهرة&lat=30.0444&lon=31.2357
 
 ###
 
-### Suburb / neighbourhood search via address endpoint
+### Suburb / neighbourhood search
 GET {{baseUrl}}/address?q=Zamalek, Cairo&lat=30.0614&lon=31.2208&limit=10
 
 ###
@@ -291,7 +275,7 @@ GET {{baseUrl}}/address?q=Corniche Road, Alexandria&lat=31.2088&lon=29.9183&limi
 
 ###
 
-### Minimal – single street name, result capped to 5
+### Minimal – single street name, capped to 5 results
 GET {{baseUrl}}/address?q=El Galaa Street&limit=5
 
 ###
@@ -301,9 +285,7 @@ GET {{baseUrl}}/address?q=10 Tahrir Street, Cairo&describe=true
 
 ###
 
-### Address interpolation on /address endpoint
-### Same fallback as /geocode: if no exact housenumber match, interpolates
-### from known addresses on the same street with odd/even side detection.
+### Address interpolation – same odd/even fallback as /geocode
 GET {{baseUrl}}/address?q=17 Corniche El Nil&city=Cairo&limit=5
 
 ###
@@ -322,69 +304,65 @@ GET {{baseUrl}}/address?q=33 El Galaa Street&country=EG&limit=5
 #   describe=true|false – include AI descriptions on nearest_line / polygons
 #
 # Returns:
-#   nearest_address       – closest building/address point from osm_addresses table
-#                           fields: housenumber, street, city, postcode, country,
-#                                   full_address, geom, distance_m, confidence
-#   interpolated_address  – estimated address at the query point, interpolated from
-#                           nearby addresses on the same street with odd/even detection
-#                           fields: housenumber, street, city, postcode, country,
-#                                   lat, lon, match_type ("interpolated"), confidence,
-#                                   side ("odd"|"even"), bracket_low, bracket_high
-#                           null if fewer than 2 addresses nearby
-#   nearest_line          – closest LineString (road/path) with ES metadata
-#                           fields: osm_id, osm_type, name, name_en, tags,
-#                                   admin_level, area_km2, offline_rank, geom,
-#                                   distance_m, confidence
-#   enclosing_polygons    – all polygons/multipolygons containing the point
-#                           (admin boundaries, landuse areas, etc.) sorted by
-#                           admin_level descending (most specific first)
-#                           same fields as nearest_line
+#   nearest_address      – closest building/address point (housenumber, street,
+#                          city, postcode, country, full_address, distance_m, …)
+#   interpolated_address – estimated address at the query point, interpolated
+#                          from nearby same-street addresses with odd/even
+#                          detection; null if fewer than 2 addresses nearby
+#   nearest_line         – closest road/path (LineString) with ES metadata
+#   enclosing_polygons   – all polygons containing the point (admin boundaries,
+#                          landuse, …) sorted by admin_level (most specific first)
 # ============================================================================
 
-### Reverse geocode Tahrir Square, Cairo
+### Tahrir Square, Cairo
 GET {{baseUrl}}/reverse?lat=30.0444&lon=31.2357
 
 ###
 
-### Reverse geocode near the Giza Pyramids
+### Near the Giza Pyramids
 GET {{baseUrl}}/reverse?lat=29.9792&lon=31.1342
 
 ###
 
-### Reverse geocode in downtown Alexandria
+### Downtown Alexandria
 GET {{baseUrl}}/reverse?lat=31.2088&lon=29.9183
 
 ###
 
-### Reverse geocode in Zamalek (Cairo island district)
+### Zamalek (Cairo island district)
 GET {{baseUrl}}/reverse?lat=30.0614&lon=31.2208
 
 ###
 
-### Reverse geocode near the Nile in Cairo
+### Near the Nile in Cairo
 GET {{baseUrl}}/reverse?lat=30.0500&lon=31.2336
 
 ###
 
-### Reverse geocode in Heliopolis (northeast Cairo)
+### Heliopolis (northeast Cairo)
 GET {{baseUrl}}/reverse?lat=30.0928&lon=31.3201
 
 ###
 
-### Reverse geocode in Aswan (southern Egypt)
+### Aswan (southern Egypt)
 GET {{baseUrl}}/reverse?lat=24.0889&lon=32.8998
 
 ###
 
-### Reverse geocode with AI descriptions on streets/polygons
+### With AI descriptions on streets/polygons
 GET {{baseUrl}}/reverse?lat=30.0444&lon=31.2357&describe=true
 
 ###
 
 # ============================================================================
 # /feedback  –  Popularity feedback loop
-# Increments the popularity field in Elasticsearch for a given osm_id.
-# Higher popularity → higher ranking in future /geocode results.
+#
+# Increments the popularity field for an osm_id (in ES and Redis). Higher
+# popularity raises the element's ranking in future /geocode results.
+#
+# Params:
+#   osm_id  (required) – OSM ID to boost
+#   boost              – increment, clamped to [0.1, 10.0] (default 1.0)
 # ============================================================================
 
 ### Default boost (+1.0)
@@ -392,16 +370,17 @@ POST {{baseUrl}}/feedback?osm_id=n271613766&boost=1.0
 
 ###
 
-### Stronger boost for a highly-clicked result
+### Stronger boost for a frequently-clicked result
 POST {{baseUrl}}/feedback?osm_id=n271613766&boost=5.0
 
 ###
 
 # ============================================================================
 # /places  –  Add a custom place
-# Publishes to NATS stream; picked up by es-inserter and postgis-inserter.
-# New address fields: addr_housenumber, addr_street, addr_city,
-#                     addr_postcode, addr_country, addr_suburb, addr_state
+#
+# Publishes to the NATS stream; picked up by es-inserter and postgis-inserter.
+# Address fields: addr_housenumber, addr_street, addr_city, addr_postcode,
+#                 addr_country, addr_suburb, addr_state.
 # ============================================================================
 
 ### Minimal – name + coordinates
@@ -441,7 +420,7 @@ Content-Type: application/json
 
 ###
 
-### Building with full address (will appear in /address and /reverse results)
+### Building with a full address (appears in /address and /reverse results)
 POST {{baseUrl}}/places
 Content-Type: application/json
 
@@ -485,10 +464,11 @@ Content-Type: application/json
 
 # ============================================================================
 # /insert  –  Raw OSM element insertion (matches watcher.py message format)
+#
 # Useful for injecting test data or replaying elements.
 # ============================================================================
 
-### Node with address tags (will be indexed as an address point)
+### Node with address tags (indexed as an address point)
 POST {{baseUrl}}/insert
 Content-Type: application/json
 
@@ -514,7 +494,7 @@ Content-Type: application/json
 
 ###
 
-### Way (road/LineString) – becomes nearest_line candidate in /reverse
+### Way (road/LineString) – becomes a nearest_line candidate in /reverse
 POST {{baseUrl}}/insert
 Content-Type: application/json
 
@@ -541,7 +521,7 @@ Content-Type: application/json
 
 ###
 
-### Administrative boundary polygon – becomes enclosing_polygon in /reverse
+### Administrative boundary polygon – becomes an enclosing_polygon in /reverse
 POST {{baseUrl}}/insert
 Content-Type: application/json
 
@@ -569,115 +549,3 @@ Content-Type: application/json
 }
 
 ###
-
-# ============================================================================
-# Elasticsearch Debug  –  direct index access
-# ============================================================================
-
-### Document count
-GET http://dev-fwd.cec.delllabs.net:9200/osm_places/_count
-
-###
-
-### Index mapping (shows all fields including addr_*)
-GET http://dev-fwd.cec.delllabs.net:9200/osm_places/_mapping
-
-###
-
-### Count documents that have address data
-POST http://dev-fwd.cec.delllabs.net:9200/osm_places/_count
-Content-Type: application/json
-
-{
-  "query": { "term": { "has_address": true } }
-}
-
-###
-
-### Sample 5 address-bearing documents
-POST http://dev-fwd.cec.delllabs.net:9200/osm_places/_search
-Content-Type: application/json
-
-{
-  "query": { "term": { "has_address": true } },
-  "size": 5,
-  "_source": ["osm_id", "name", "full_address", "addr_street", "addr_city", "addr_postcode", "centroid"]
-}
-
-###
-
-### Direct address field search on Elasticsearch
-POST http://dev-fwd.cec.delllabs.net:9200/osm_places/_search
-Content-Type: application/json
-
-{
-  "query": {
-    "bool": {
-      "must": [
-        { "term":  { "addr_housenumber": "10" } },
-        { "match": { "addr_street": "Tahrir Street" } }
-      ],
-      "filter": [
-        { "term": { "has_address": true } }
-      ]
-    }
-  },
-  "size": 5,
-  "_source": ["osm_id", "name", "full_address", "addr_housenumber", "addr_street", "addr_city", "centroid"]
-}
-
-###
-
-### Full-text address search
-POST http://dev-fwd.cec.delllabs.net:9200/osm_places/_search
-Content-Type: application/json
-
-{
-  "query": {
-    "match": { "full_address": "Tahrir Street Cairo" }
-  },
-  "size": 10,
-  "_source": ["osm_id", "name", "full_address", "centroid"]
-}
-
-###
-
-### Geocode directly (raw function_score query)
-POST http://dev-fwd.cec.delllabs.net:9200/osm_places/_search
-Content-Type: application/json
-
-{
-  "query": {
-    "match": { "name": "cairo" }
-  },
-  "size": 5
-}
-
-###
-GET http://dev-fwd.cec.delllabs.net:9200/osm_places/_search
-Content-Type: application/json
-
-{
-  "size": 50,
-  "query": {
-    "match_phrase": {
-      "addr_street": "Pentland Crescent"
-    }
-  },
-  "_source": [
-    "addr_housenumber",
-    "addr_street",
-    "addr_city",
-    "osm_id"
-  ],
-  "sort": [
-    {
-      "addr_housenumber": {
-        "order": "asc"
-      }
-    }
-  ]
-}
-###
-
-GET http://84.8.122.218:9200/pelias/_mapping?pretty

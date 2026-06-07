@@ -711,6 +711,7 @@ async def geocode(
     lat: float | None = Query(None),
     lon: float | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=9950, description="Result offset for pagination/scrolling (from + size must stay ≤ 10000)"),
     vector: bool = Query(True, description="Enable semantic vector search"),
     ai: bool = Query(True, description="Enable AI-assisted search"),
     describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
@@ -742,19 +743,21 @@ async def geocode(
         }
     )
 
-    # offline_rank boost — linear (no log compression) so high-importance
-    # places (cities, countries) clearly outrank minor POIs.
-    # Range 0-10 × weight 2 → contribution 0-20; multiplied by text score
-    # via boost_mode=multiply so irrelevant results are still suppressed.
+    # offline_rank boost — log-compressed so importance acts as a TIE-BREAKER
+    # between comparable text matches rather than a dominant term.  With
+    # boost_mode=multiply, a linear factor let a high-importance suburb
+    # (rank ~2.0 → ×5.0) outscore a better-matching POI (rank ~1.0 → ×3.0),
+    # flipping relevance on its head.  log1p keeps the spread tight
+    # (rank 2.0 → ×~1.7, rank 1.0 → ×~1.4) so text relevance leads.
     functions.append(
         {
             "field_value_factor": {
                 "field": "offline_rank",
-                "modifier": "none",
+                "modifier": "log1p",
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 2,
+            "weight": 1.5,
         }
     )
 
@@ -803,8 +806,16 @@ async def geocode(
     # text query – multi_match across name/name_en/name_fr using best_fields so that
     # matching the query in ANY field yields the same score (no double-counting
     # for places that happen to have the query language in multiple fields).
+    # Layered text matching with a closeness gradient so that, for typo /
+    # transliteration queries, a near-exact match (e.g. "makaram"→"makram",
+    # 1 edit) clearly outranks loose fuzzy noise (2 edits).  Lucene fuzzy is
+    # constant-score, so we recover edit-distance sensitivity by stacking
+    # separate clauses per fuzziness level:
+    #   exact (0)  >  near-exact (≤1)  >  broad fuzzy (≤AUTO/2 recall)
     should_clauses: list[dict] = [
-        # fuzzy token matching across all searchable fields (including autocomplete)
+        # broad fuzzy recall across all searchable fields (including autocomplete).
+        # No boost — this only guarantees recall; ordering comes from the
+        # tighter clauses below.
         {
             "multi_match": {
                 "query": q_norm,
@@ -818,6 +829,18 @@ async def geocode(
                 "fuzziness": "AUTO",
             }
         },
+        # near-exact boost (edit distance ≤1, first char must match): rewards
+        # genuinely close matches over loose fuzzy hits that share no real token.
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "fuzziness": 1,
+                "prefix_length": 1,
+                "boost": 10,
+            }
+        },
         # phrase boost: contiguous phrase (best of name, name_en, or name_fr)
         {
             "multi_match": {
@@ -827,7 +850,7 @@ async def geocode(
                 "boost": 10,
             }
         },
-        # all-tokens-required boost: every query word appears
+        # exact all-tokens boost: every query word appears verbatim (distance 0)
         {
             "multi_match": {
                 "query": q_norm,
@@ -835,6 +858,21 @@ async def geocode(
                 "type": "best_fields",
                 "operator": "and",
                 "boost": 15,
+            }
+        },
+        # fuzzy all-tokens boost: every query word fuzzy-matches.  Unlike the
+        # exact clause above this still fires for misspelled / transliterated
+        # multi-word queries, so true matches keep a precision boost instead of
+        # collapsing onto the unboosted recall clause.
+        {
+            "multi_match": {
+                "query": q_norm,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "operator": "and",
+                "fuzziness": "AUTO",
+                "prefix_length": 1,
+                "boost": 8,
             }
         },
     ]
@@ -993,6 +1031,7 @@ async def geocode(
 
     body: dict = {
         "size": limit,
+        "from": offset,
         "query": {
             "function_score": {
                 "query": text_query,
@@ -1017,6 +1056,7 @@ async def geocode(
 
     # Build results and enrich address data where missing
     max_score = resp["hits"].get("max_score") or 0
+    total_hits = resp["hits"].get("total", {}).get("value", 0)
     results = []
     enrich_tasks = []
 
@@ -1069,8 +1109,10 @@ async def geocode(
     # When the query contained a housenumber but no result matched it
     # exactly, try to interpolate the position from known addresses on
     # the same street.
+    # Only attempt interpolation on the first page — it synthesises a single
+    # top result, which is meaningless when the client is scrolling deeper.
     interpolated_result = None
-    if addr_detected and parsed_addr.get("housenumber"):
+    if offset == 0 and addr_detected and parsed_addr.get("housenumber"):
         try:
             req_hn = int(parsed_addr["housenumber"])
             has_exact = any(
@@ -1103,6 +1145,15 @@ async def geocode(
         # Address decomposition: shows what the system understood from the query
         "address_detected": addr_detected,
         "address_parsed": parsed_addr if addr_detected else None,
+        # Pagination/scroll metadata. `total` is ES's match count (may be
+        # approximate above 10k); `has_more` tells the client whether another
+        # page exists.  Scroll by re-querying with offset += limit.
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total_hits,
+            "has_more": offset + len(resp["hits"]["hits"]) < total_hits,
+        },
         "results": results,
     }
 
