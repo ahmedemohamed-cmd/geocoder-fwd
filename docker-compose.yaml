@@ -238,27 +238,38 @@ services:
       - DATA_DIR=/app/data
     restart: "no"
 
-  cleaner:
-    build: .
-    command: python -u -m services.cleaner
-    environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - POSTGRES_HOST=postgis
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - NATS_URL=nats://nats:4222
-      - NATS_STREAM=OSM
-      - NATS_SUBJECT=osm.elements
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-      postgis:
-        condition: service_healthy
-      nats:
-        condition: service_started
-    restart: "no"
+  # ── cleaner (DESTRUCTIVE — DISABLED by default) ──────────────────────────
+  # This service WIPES ALL DATA on start: drops the PostGIS osm_geometries /
+  # osm_addresses tables, deletes the ES osm_places index, and deletes the NATS
+  # OSM stream. It was previously part of the default stack, so every
+  # `docker compose up` silently nuked the dataset. It is commented out so a
+  # normal `up` can never wipe data.
+  #
+  # To run it intentionally (full reset), temporarily uncomment and run:
+  #     docker compose run --rm cleaner
+  # then re-comment it.
+  #
+  # cleaner:
+  #   build: .
+  #   command: python -u -m services.cleaner
+  #   environment:
+  #     - ELASTICSEARCH_URL=http://elasticsearch:9200
+  #     - POSTGRES_HOST=postgis
+  #     - POSTGRES_PORT=5432
+  #     - POSTGRES_DB=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - NATS_URL=nats://nats:4222
+  #     - NATS_STREAM=OSM
+  #     - NATS_SUBJECT=osm.elements
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #     postgis:
+  #       condition: service_healthy
+  #     nats:
+  #       condition: service_started
+  #   restart: "no"
 
 volumes:
   nats-data:

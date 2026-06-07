@@ -18,7 +18,7 @@
 ###   ai=true|false       – enable/disable AI-assisted expansion
 ###   describe=true|false – include AI-generated title + description (cached)
 
-@baseUrl = http://localhost:8000
+@baseUrl = http://84.8.102.106:8000
 
 # ============================================================================
 # /features  –  Feature flags

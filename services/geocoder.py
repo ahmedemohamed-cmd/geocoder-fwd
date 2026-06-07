@@ -169,6 +169,37 @@ js = None  # type: ignore[assignment]
 redis_pool: aioredis.Redis = None  # type: ignore[assignment]
 _ac_task: asyncio.Task | None = None  # strong reference to prevent GC
 
+# Background address-enrichment bookkeeping. Parents/nearest-street are computed
+# at most ONCE per osm_id and cached in Elasticsearch; the search path never
+# blocks on (or fans out) the heavy PostGIS spatial joins. `_enrich_inflight`
+# dedupes concurrent requests for the same doc; `_enrich_bg_tasks` holds strong
+# refs so fire-and-forget tasks aren't garbage-collected mid-flight.
+_enrich_inflight: set[str] = set()
+_enrich_bg_tasks: set[asyncio.Task] = set()
+
+
+def _schedule_enrichment(osm_id: str, centroid: dict | None) -> None:
+    """Enrich + cache a doc's address once, in the background (non-blocking).
+
+    No-op if the doc is already being enriched. The result is persisted to ES by
+    ``_enrich_address`` so subsequent searches read it straight from the index.
+    """
+    if not osm_id or osm_id in _enrich_inflight:
+        return
+    _enrich_inflight.add(osm_id)
+
+    async def _run():
+        try:
+            await _enrich_address(osm_id, centroid)
+        except Exception:
+            pass
+        finally:
+            _enrich_inflight.discard(osm_id)
+
+    task = asyncio.create_task(_run())
+    _enrich_bg_tasks.add(task)
+    task.add_done_callback(_enrich_bg_tasks.discard)
+
 
 _AC_MAX_DOCS = 100_000   # top-ranked docs to keep in Redis
 _AC_BATCH_SIZE = 2_000  # ES fetch size per round-trip
@@ -1093,11 +1124,10 @@ async def geocode(
 
     resp = await es.search(index=INDEX, **body)
 
-    # Build results and enrich address data where missing
+    # Build results; schedule background enrichment for any uncached address.
     max_score = resp["hits"].get("max_score") or 0
     total_hits = resp["hits"].get("total", {}).get("value", 0)
     results = []
-    enrich_tasks = []
 
     for h in resp["hits"]["hits"]:
         src = h["_source"]
@@ -1130,19 +1160,13 @@ async def geocode(
         }
         results.append(result)
 
-        # If address is not cached, schedule enrichment
+        # Parents/nearest-street are computed once and cached in ES. If this doc
+        # isn't cached yet, kick off enrichment in the BACKGROUND (compute-once,
+        # write-back) instead of blocking the response on heavy PostGIS spatial
+        # joins. The value is served from ES on subsequent searches. This keeps
+        # the search hot path free of synchronous spatial-join fan-out.
         if result["address"] is None:
-            enrich_tasks.append((len(results) - 1, src["osm_id"], src.get("centroid")))
-
-    # Enrich all results that are missing address data concurrently
-    if enrich_tasks:
-        enrichments = await asyncio.gather(
-            *[_enrich_address(osm_id, centroid) for _, osm_id, centroid in enrich_tasks],
-            return_exceptions=True,
-        )
-        for (idx, _, _), addr in zip(enrich_tasks, enrichments):
-            if isinstance(addr, dict):
-                results[idx]["address"] = addr
+            _schedule_enrichment(src["osm_id"], src.get("centroid"))
 
     # ── Address interpolation fallback ────────────────────────────────────
     # When the query contained a housenumber but no result matched it

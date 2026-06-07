@@ -118,6 +118,20 @@ async def ensure_table(pool: asyncpg.Pool):
             )
             print(f"[postgis-inserter] Index idx_{TABLE}_geom created")
 
+            # Partial functional GiST index over the polygon built from closed
+            # ways. The enrichment "enclosing closed-line" query filters on
+            # ST_Contains(ST_MakePolygon(geom), pt); without this index the
+            # planner must compute ST_MakePolygon per row and seq-scans the whole
+            # table (~350 ms, parallel workers). Indexing the derived polygon for
+            # just the closed-linestring subset turns it into a ~2 ms index scan.
+            await conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_closedpoly"
+                f" ON {TABLE} USING GIST (ST_MakePolygon(geom))"
+                f" WHERE ST_GeometryType(geom) = 'ST_LineString'"
+                f"   AND ST_IsClosed(geom) AND ST_NPoints(geom) >= 4"
+            )
+            print(f"[postgis-inserter] Index idx_{TABLE}_closedpoly created")
+
             # ── address table ─────────────────────────────────────────────────
             print(f"[postgis-inserter] Creating table {ADDRESS_TABLE}...")
             await conn.execute(
