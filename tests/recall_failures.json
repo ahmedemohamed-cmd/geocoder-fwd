@@ -1,0 +1,238 @@
+{
+ "named_strict_miss": [
+  {
+   "kind": "named",
+   "query": "Al-Obour",
+   "osm_id": "n311994035",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Obour Garden"
+  },
+  {
+   "kind": "named",
+   "query": "Al Zahraa",
+   "osm_id": "w376085481",
+   "strict_rank": null,
+   "lenient_rank": 1,
+   "top": "Al-Zahraa"
+  },
+  {
+   "kind": "named",
+   "query": "Al Mashtal",
+   "osm_id": "w688098793",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Mashtal Street"
+  },
+  {
+   "kind": "named",
+   "query": "Al Tawfiq",
+   "osm_id": "w701533384",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Tawfiq Street"
+  },
+  {
+   "kind": "named",
+   "query": "Area 3",
+   "osm_id": "w755654041",
+   "strict_rank": null,
+   "lenient_rank": 2,
+   "top": "Tabali Zamalek Delivery area 3"
+  },
+  {
+   "kind": "named",
+   "query": "Neighborhood 1",
+   "osm_id": "w772964066",
+   "strict_rank": null,
+   "lenient_rank": 1,
+   "top": "Neighbourhood 1"
+  },
+  {
+   "kind": "named",
+   "query": "Neighborhood 3",
+   "osm_id": "w772964060",
+   "strict_rank": null,
+   "lenient_rank": 1,
+   "top": "Neighborhood 3"
+  },
+  {
+   "kind": "named",
+   "query": "Area R",
+   "osm_id": "w690453101",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "On The Run"
+  },
+  {
+   "kind": "named",
+   "query": "Neighborhood 5",
+   "osm_id": "w719902498",
+   "strict_rank": null,
+   "lenient_rank": 1,
+   "top": "Neighborhood 5"
+  },
+  {
+   "kind": "named",
+   "query": "Al Amal",
+   "osm_id": "w715006293",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Amal Street"
+  }
+ ],
+ "named_lenient_miss": [
+  {
+   "kind": "named",
+   "query": "Al-Obour",
+   "osm_id": "n311994035",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Obour Garden"
+  },
+  {
+   "kind": "named",
+   "query": "Al Mashtal",
+   "osm_id": "w688098793",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Mashtal Street"
+  },
+  {
+   "kind": "named",
+   "query": "Al Tawfiq",
+   "osm_id": "w701533384",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Tawfiq Street"
+  },
+  {
+   "kind": "named",
+   "query": "Area R",
+   "osm_id": "w690453101",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "On The Run"
+  },
+  {
+   "kind": "named",
+   "query": "Al Amal",
+   "osm_id": "w715006293",
+   "strict_rank": null,
+   "lenient_rank": null,
+   "top": "Al Amal Street"
+  }
+ ],
+ "address_street_miss": [
+  {
+   "kind": "address",
+   "query": "8 أ شارع أحمد فخري, Cairo",
+   "osm_id": "n4907015222",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "b215 طريق القاهرة, الاسكندرية الصحراوي الجانبي القريه الذكية, Cairo",
+   "osm_id": "n13732063159",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo, Alexandria Desert Road"
+  },
+  {
+   "kind": "address",
+   "query": "7` شارع النادي, Cairo",
+   "osm_id": "n13539109001",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "b61 شارع 233, Cairo",
+   "osm_id": "n12246167895",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": true,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "13` شارع اللبينى, Cairo",
+   "osm_id": "n6766648981",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  }
+ ],
+ "address_exact_miss": [
+  {
+   "kind": "address",
+   "query": "16 شارع النصر, Cairo",
+   "osm_id": "n11027293553",
+   "exact_rank": null,
+   "street_rank": 1,
+   "interp_ok": false,
+   "top": "16 شارع النصر"
+  },
+  {
+   "kind": "address",
+   "query": "8 أ شارع أحمد فخري, Cairo",
+   "osm_id": "n4907015222",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "b215 طريق القاهرة, الاسكندرية الصحراوي الجانبي القريه الذكية, Cairo",
+   "osm_id": "n13732063159",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo, Alexandria Desert Road"
+  },
+  {
+   "kind": "address",
+   "query": "7` شارع النادي, Cairo",
+   "osm_id": "n13539109001",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "2 شارع عمر بن الخطاب, Cairo",
+   "osm_id": "n6581826591",
+   "exact_rank": null,
+   "street_rank": 1,
+   "interp_ok": false,
+   "top": "2 شارع عمر بن الخطاب, الدقي, 12615, EG"
+  },
+  {
+   "kind": "address",
+   "query": "b61 شارع 233, Cairo",
+   "osm_id": "n12246167895",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": true,
+   "top": "Cairo SSS"
+  },
+  {
+   "kind": "address",
+   "query": "13` شارع اللبينى, Cairo",
+   "osm_id": "n6766648981",
+   "exact_rank": null,
+   "street_rank": null,
+   "interp_ok": false,
+   "top": "Cairo SSS"
+  }
+ ]
+}
