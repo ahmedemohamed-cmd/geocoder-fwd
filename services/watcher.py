@@ -15,6 +15,7 @@ import redis
 
 from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
 from shared import nats_client
+from shared.processed import load_processed, is_processed, record_processed
 
 SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
@@ -873,8 +874,9 @@ async def _scan_and_process() -> int:
 
     Returns the number of files successfully processed this pass.
     """
+    done = load_processed(DATA_DIR)
     existing_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf")))
-    pending = [f for f in existing_files if not os.path.exists(f"{f}.processed")]
+    pending = [f for f in existing_files if not is_processed(DATA_DIR, f, done)]
     if not pending:
         return 0
 
@@ -883,8 +885,7 @@ async def _scan_and_process() -> int:
     for f in pending:
         try:
             await publish_file(f)
-            with open(f"{f}.processed", "w") as lock:
-                lock.write(f"processed: {f}")
+            record_processed(DATA_DIR, f, done)
             print(f"[watcher] Completed {os.path.basename(f)}")
             processed += 1
         except Exception as e:

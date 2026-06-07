@@ -42,6 +42,7 @@ import zipfile
 from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
 from shared.progress import ProgressTracker
+from shared.processed import load_processed, is_processed, record_processed
 
 BATCH_PUBLISH = 50
 MAX_RETRIES = 10
@@ -371,7 +372,8 @@ async def _scan_and_process(js) -> int:
         and not os.path.basename(f).lower().endswith("codes.txt")
     ]
 
-    pending = [f for f in txt_files if not os.path.exists(f"{f}.processed")]
+    done = load_processed(GN_DATA_DIR)
+    pending = [f for f in txt_files if not is_processed(GN_DATA_DIR, f, done)]
     if not pending:
         return 0
 
@@ -382,8 +384,7 @@ async def _scan_and_process(js) -> int:
             count = await publish_tsv(filepath, js)
             # Only mark as processed if we didn't abort early
             if count >= 0:
-                with open(f"{filepath}.processed", "w") as lf:
-                    lf.write(f"processed: {filepath}\ncount: {count}\n")
+                record_processed(GN_DATA_DIR, filepath, done)
                 print(f"[gn-watcher] Completed {os.path.basename(filepath)}", flush=True)
                 processed += 1
             else:

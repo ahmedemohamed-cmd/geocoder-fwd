@@ -35,6 +35,7 @@ import time
 from shared.config import OA_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
 from shared.progress import ProgressTracker
+from shared.processed import load_processed, is_processed, record_processed
 
 BATCH_PUBLISH = 50
 # Maximum retries per message
@@ -406,7 +407,8 @@ async def _scan_and_process(js) -> int:
     all_files = sorted(f for f in csv_files + geojson_files if not f.endswith(".meta"))
 
     # Only act on files we haven't already imported (skip processed quietly).
-    pending = [f for f in all_files if not os.path.exists(f"{f}.processed")]
+    done = load_processed(OA_DATA_DIR)
+    pending = [f for f in all_files if not is_processed(OA_DATA_DIR, f, done)]
     if not pending:
         return 0
 
@@ -424,8 +426,7 @@ async def _scan_and_process(js) -> int:
 
             # Only mark as processed if we didn't abort early
             if count >= 0:
-                with open(f"{filepath}.processed", "w") as lf:
-                    lf.write(f"processed: {filepath}\ncount: {count}\n")
+                record_processed(OA_DATA_DIR, filepath, done)
                 print(f"[oa-watcher] Completed {rel_path}", flush=True)
                 processed += 1
         except Exception as e:
