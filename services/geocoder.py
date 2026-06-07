@@ -80,7 +80,12 @@ from shared.config import (
     ENABLE_DEEP,
 )
 from shared.llm import generate_description, is_ollama_available, warm_up_model
-from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
+from shared.interpolation import (
+    interpolate_address,
+    reverse_interpolate,
+    InterpolatedAddress,
+    _parse_housenumber,
+)
 from shared.autocomplete import (
     query as ac_query,
     index_entry as ac_index_entry,
@@ -627,7 +632,7 @@ async def health():
 def _interpolated_to_result(ia: InterpolatedAddress) -> dict:
     """Convert an InterpolatedAddress to a search-result dict."""
     return {
-        "osm_id": None,
+        "osm_id": ia.osm_id,
         "osm_type": "",
         "name": f"{ia.housenumber} {ia.street}",
         "name_en": "",
@@ -682,24 +687,28 @@ async def _resolve_street_names(
     if not street:
         return names
 
+    # operator "and": every query token must be present, so we resolve the actual
+    # street (cross-language via name/name_en) and don't fuzzy-drift onto an
+    # unrelated nearby street ("التسعين الشمالى" must not match "الرمالي").
     must = [
         {
             "multi_match": {
                 "query": street,
-                "fields": [
-                    "name^3", "name.autocomplete",
-                    "name_en^3", "name_en.autocomplete",
-                    "name_fr^3", "name_fr.autocomplete",
-                ],
+                "fields": ["name^3", "name_en^3", "name_fr^3"],
                 "type": "best_fields",
+                "operator": "and",
                 "fuzziness": "AUTO",
+                "prefix_length": 1,
             }
         }
     ]
     flt: list[dict] = [{"terms": {"osm_type": ["way", "relation"]}}]
     if lat is not None and lon is not None:
+        # Wide metro radius: tight enough to drop same-named streets in other
+        # governorates, loose enough to still resolve far districts (New Cairo,
+        # 6th October) that a downtown-biased query would otherwise miss.
         flt.append(
-            {"geo_distance": {"distance": "8km", "centroid": {"lat": lat, "lon": lon}}}
+            {"geo_distance": {"distance": "60km", "centroid": {"lat": lat, "lon": lon}}}
         )
     body = {
         "size": limit,
@@ -1256,8 +1265,10 @@ async def geocode(
             # An "exact" hit must match the housenumber AND be on the requested
             # street — otherwise "10 Some Other Street" would wrongly suppress
             # interpolation along the street the user actually asked for.
+            # Compare housenumbers by parsed integer ("8 أ", "16A" → 8, 16) so a
+            # real hit with a suffixed number still counts as exact.
             has_exact = any(
-                r.get("addr_housenumber") == str(req_hn)
+                _parse_housenumber(r.get("addr_housenumber")) == req_hn
                 and _street_token_match(req_street, r.get("addr_street", ""))
                 for r in results
             )
@@ -1268,6 +1279,16 @@ async def geocode(
                 # with the user's lat/lon, this disambiguates between the many
                 # same-named streets across the city.
                 street_names = await _resolve_street_names(req_street, lat, lon)
+                # Cross-lingual exact guard: the real address may already be in the
+                # results but tagged in another language (English query vs Arabic
+                # addr_street). If so, don't insert a synthesized result above it.
+                name_set = {n.lower() for n in street_names}
+                has_exact = any(
+                    _parse_housenumber(r.get("addr_housenumber")) == req_hn
+                    and (r.get("addr_street") or "").lower() in name_set
+                    for r in results
+                )
+            if not has_exact:
                 near = (lat, lon) if (lat is not None and lon is not None) else None
                 ia = await interpolate_address(
                     pg_pool,
@@ -1278,8 +1299,14 @@ async def geocode(
                     near=near,
                 )
                 if ia:
-                    interpolated_result = _interpolated_to_result(ia)
-                    results.insert(0, interpolated_result)
+                    # If the gather found the exact address point, it carries a
+                    # real osm_id. Skip insertion when that doc is already in the
+                    # results — don't surface a duplicate or shove the real hit
+                    # down. Genuinely interpolated points (osm_id None) always go in.
+                    existing_ids = {r.get("osm_id") for r in results if r.get("osm_id")}
+                    if not (ia.osm_id and ia.osm_id in existing_ids):
+                        interpolated_result = _interpolated_to_result(ia)
+                        results.insert(0, interpolated_result)
         except (ValueError, TypeError):
             pass
 

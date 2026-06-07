@@ -61,6 +61,10 @@ See [helm/geocoder/README.md](helm/geocoder/README.md) for detailed Helm chart d
 | `EMBEDDING_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | Multilingual sentence transformer model (supports 50+ languages including Arabic) |
 | `ENABLE_VECTORS` | `true` (AI mode) / `false` (standard) | Enable vector embeddings |
 | `ENABLE_AI` | `true` (AI mode) / `false` (standard) | Enable AI-powered features |
+| `ENABLE_DEEP` | `true` | Gate the `/deep/*` Google Maps geocoding endpoints |
+| `GOOGLE_MAPS_API_KEY` | _(empty)_ | API key for `/deep/*` (endpoints return 503 without it) |
+| `OLLAMA_URL` | `http://ollama:11434` | Ollama endpoint for `/describe` AI descriptions |
+| `OLLAMA_MODEL` | `qwen2.5:1.5b` | Ollama model used for descriptions |
 | `BATCH_SIZE` | `50` (AI mode) / `100` (standard) | Messages per batch (reduced in AI mode for GPU efficiency) |
 | `MAX_CONCURRENT_BATCHES` | `2` (AI mode) / `4` (standard) | Concurrent batch processing workers |
 | `osm_url` | Egypt PBF | OSM data source URL |
@@ -89,17 +93,63 @@ Once the geocoder service is running, access the FastAPI documentation at:
 http://localhost:8000/docs
 ```
 
-### Example Endpoints
+### Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /geocode` | Full-text + vector + geo search, with address-interpolation fallback |
+| `GET /address` | Structured address search (housenumber / street / city / postcode) |
+| `GET /autocomplete` | Fast prefix suggestions (Redis sorted sets, ~1–3 ms) |
+| `GET /reverse` | Reverse geocoding (nearest address, interpolated address, street, boundaries) |
+| `GET /deep/forward`, `GET /deep/reverse` | Deep geocoding via Google Maps (maps→OSM tags, indexed back into the stack) |
+| `GET /describe` | AI-generated title + description for a place (Ollama) |
+| `POST /feedback` | Popularity feedback loop (boosts future ranking) |
+| `POST /places`, `POST /insert` | Add a custom place / raw OSM element |
+| `GET /health`, `GET /features` | Dependency health check / feature-flag discovery |
+
+See [requests.http](requests.http) for a full, runnable set of examples.
 
 **Search by name:**
 ```bash
-curl "http://localhost:8000/search?q=Cairo"
+curl "http://localhost:8000/geocode?q=Cairo&limit=5"
 ```
 
 **Reverse geocode:**
 ```bash
 curl "http://localhost:8000/reverse?lat=30.0444&lon=31.2357"
 ```
+
+**Forward address with interpolation (cross-language):**
+```bash
+# Even though the address points are tagged in Arabic (شارع التحرير), an English
+# query resolves the street via Elasticsearch and interpolates the housenumber.
+curl "http://localhost:8000/geocode?q=15%20Tahrir%20Street,%20Cairo&lat=30.0444&lon=31.2357&limit=5"
+```
+
+### Address interpolation
+
+When a query carries a housenumber that has no exact record, the position is
+estimated by linearly interpolating between known addresses on the same street
+(odd/even side aware). The street name is resolved through Elasticsearch first,
+so a query in one language reaches address points tagged in another (e.g. English
+"Tahrir Street" → Arabic شارع التحرير), and `lat`/`lon` disambiguate between
+same-named streets by snapping to the nearest cluster. Interpolated results are
+returned first with `match_type: "interpolated"`, a `side`, and `bracket_low`/`bracket_high`.
+
+### Search quality (recall)
+
+Measured against a 1,000-place Cairo test set (`tests/run_recall.py`,
+`tests/recall_report.md`), queries geo-biased to downtown Cairo:
+
+| metric | @1 | @5 | @10 |
+|---|---|---|---|
+| named place — strict (same osm_id) | 88.7% | 97.5% | 98.7% |
+| named place — lenient (name or ≤150 m) | 96.3% | 99.1% | 99.3% |
+| address — exact (same osm_id) | 90.8% | 95.2% | 97.2% |
+| address — correct street | 96.4% | 97.6% | 98.0% |
+
+Cross-language address interpolation raises the interpolation hit-rate on
+unmatched housenumbers from 9.6% to 25.2%.
 
 ## Model Information
 

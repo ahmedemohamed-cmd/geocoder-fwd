@@ -206,6 +206,11 @@ postgisInserter:
 geocoder:
   enabled: true
   replicas: 3
+  # Deep forward/reverse geocoding via Google Maps (the /deep/* endpoints).
+  # When googleMapsApiKey is empty the endpoints return 503.
+  deep:
+    enabled: true
+    googleMapsApiKey: ""
   service:
     type: ClusterIP
     port: 8000

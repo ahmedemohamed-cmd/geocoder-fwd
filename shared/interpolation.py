@@ -40,6 +40,7 @@ class InterpolatedAddress:
     side: str                # "odd" | "even" | "unknown"
     bracket_low: str | None  # e.g. "10"
     bracket_high: str | None # e.g. "20"
+    osm_id: str | None = None  # real osm_id for an "exact" hit; None when synthesised
 
 
 def _parse_housenumber(hn: str) -> int | None:
@@ -80,6 +81,41 @@ def _interpolation_confidence(gap: int) -> float:
     if gap <= 50:
         return 0.5
     return 0.3
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in metres between two lat/lon points."""
+    import math
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(h))
+
+
+def _nearest_cluster(
+    parsed: list[tuple[int, dict]], near: tuple[float, float], cluster_m: float
+) -> list[tuple[int, dict]]:
+    """Keep only the addresses within ``cluster_m`` of the one closest to ``near``.
+
+    A common street name (e.g. ``شارع التحرير``) maps to several physically
+    separate streets across the city.  Anchoring on the address nearest the
+    reference point and keeping its local cluster ensures bracketing addresses
+    come from a single real street segment, while still resolving a street that
+    happens to be far from the user (its own cluster is simply the nearest one).
+    """
+    nlat, nlon = near
+    anchor = min(
+        parsed,
+        key=lambda hr: _haversine_m(nlat, nlon, hr[1]["lat"], hr[1]["lon"]),
+    )
+    alat, alon = anchor[1]["lat"], anchor[1]["lon"]
+    clustered = [
+        hr for hr in parsed
+        if _haversine_m(alat, alon, hr[1]["lat"], hr[1]["lon"]) <= cluster_m
+    ]
+    return clustered or parsed
 
 
 def _lerp(lat1: float, lon1: float, lat2: float, lon2: float, t: float) -> tuple[float, float]:
@@ -143,7 +179,7 @@ async def interpolate_address(
     city: str | None = None,
     street_names: list[str] | None = None,
     near: tuple[float, float] | None = None,
-    radius_m: float = 3000.0,
+    radius_m: float = 25000.0,
 ) -> InterpolatedAddress | None:
     """Interpolate an address position from known addresses on the same street.
 
@@ -163,11 +199,14 @@ async def interpolate_address(
         matched by exact (case-insensitive) ``street`` against this list, so an
         English query reaches Arabic-tagged address points.
     near : (lat, lon) or None
-        The query's reference point.  When given, addresses are restricted to
-        ``radius_m`` around it, disambiguating between same-named streets in
-        different parts of the city (there are many ``شارع التحرير`` in Cairo).
+        The query's reference point.  Used as a *soft* disambiguator, not a hard
+        gate: addresses are gathered within a wide metro radius (``radius_m``),
+        then narrowed to the cluster nearest ``near``.  This keeps a unique
+        street resolvable even when it is far from the user, while a common name
+        (the many ``شارع التحرير`` in Cairo) still snaps to the nearest cluster.
     radius_m : float
-        Proximity radius in metres for ``near`` (default 3 km).
+        Wide metro gather radius in metres around ``near`` (default 25 km) — broad
+        enough to keep recall, narrow enough to exclude other governorates.
 
     Returns
     -------
@@ -179,9 +218,8 @@ async def interpolate_address(
         return None
 
     # ── Step 1: Fetch known addresses on this street ──────────────────────
-    # Match by exact street name (cross-lingual via the resolved name list) and,
-    # when a reference point is given, restrict to a radius around it so a common
-    # street name doesn't pull addresses from a same-named street across the city.
+    # Match by exact street name (cross-lingual via the resolved name list),
+    # gathered within a wide metro radius of the reference point.
     rows = await _gather_addresses(pg_pool, names, near, radius_m, city)
 
     if not rows:
@@ -196,6 +234,12 @@ async def interpolate_address(
 
     if not parsed:
         return None
+
+    # Same-named streets recur across the city. When we have a reference point,
+    # narrow to the cluster nearest it so brackets come from one physical street,
+    # not a mix — without hard-excluding far streets when that's all there is.
+    if near is not None and len(parsed) > 1:
+        parsed = _nearest_cluster(parsed, near, cluster_m=2000.0)
 
     # Check for exact match first
     for hn_int, row in parsed:
@@ -213,6 +257,7 @@ async def interpolate_address(
                 side=_parity(requested_hn),
                 bracket_low=None,
                 bracket_high=None,
+                osm_id=row.get("osm_id"),
             )
 
     # Separate by parity
@@ -501,7 +546,7 @@ async def _gather_addresses(
 
     params: list = [names]
     query = """
-        SELECT housenumber, street, city, postcode, country,
+        SELECT osm_id, housenumber, street, city, postcode, country,
                ST_Y(geom) AS lat, ST_X(geom) AS lon
         FROM osm_addresses
         WHERE lower(street) = ANY($1::text[])

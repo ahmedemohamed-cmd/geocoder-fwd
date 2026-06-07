@@ -1,5 +1,4 @@
 ### Geocoding Service API Examples
-### Base URL: http://dev-fwd.cec.delllabs.net:8000 (using localhost below)
 ###
 ### Endpoints
 ###   GET  /features      – which optional features are enabled
@@ -192,6 +191,11 @@ GET {{baseUrl}}/geocode?q=cairo tower&lat=30.0459&lon=31.2243&limit=5&describe=t
 ### If "15 Tahrir Street" is missing, its position is interpolated from nearby
 ### addresses (e.g. #10 and #20). The interpolated result appears first with
 ### match_type "interpolated", a side ("odd"/"even"), and bracket_low/high.
+###
+### Cross-language: the street name is resolved through Elasticsearch first, so an
+### English query ("Tahrir Street") reaches the Arabic-tagged address points on
+### شارع التحرير. lat/lon disambiguates between same-named streets across the city
+### (many شارع التحرير in Cairo) by snapping to the nearest cluster.
 GET {{baseUrl}}/geocode?q=15 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
 
 ###

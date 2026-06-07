@@ -58,6 +58,10 @@ services:
     deploy:
       resources:
         limits:
+          # Cap ES CPU so bulk indexing / query bursts can't monopolise the host.
+          # Heap is fixed at 4g (ES_JAVA_OPTS); tune `cpus` to leave headroom for
+          # the other services. Honoured by `docker compose up` (Compose v2).
+          cpus: "6"
           memory: 8G
 
   postgis:

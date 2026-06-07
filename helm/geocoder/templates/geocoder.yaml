@@ -59,6 +59,10 @@ spec:
             {{- include "geocoder.embeddingEnv" . | nindent 12 }}
             - name: ENABLE_AI
               value: {{ ternary "true" "false" .Values.global.aiEnabled | quote }}
+            - name: ENABLE_DEEP
+              value: {{ .Values.geocoder.deep.enabled | quote }}
+            - name: GOOGLE_MAPS_API_KEY
+              value: {{ .Values.geocoder.deep.googleMapsApiKey | quote }}
           {{- if .Values.global.aiEnabled }}
           volumeMounts:
             {{- include "geocoder.modelVolumeMount" . | nindent 12 }}

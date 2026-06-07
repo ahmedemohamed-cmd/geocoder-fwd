@@ -157,7 +157,7 @@
    "osm_id": "n12246167895",
    "exact_rank": null,
    "street_rank": null,
-   "interp_ok": true,
+   "interp_ok": false,
    "top": "Cairo SSS"
   },
   {
@@ -222,7 +222,7 @@
    "osm_id": "n12246167895",
    "exact_rank": null,
    "street_rank": null,
-   "interp_ok": true,
+   "interp_ok": false,
    "top": "Cairo SSS"
   },
   {
