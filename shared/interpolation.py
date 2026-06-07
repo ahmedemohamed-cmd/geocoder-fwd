@@ -141,7 +141,9 @@ async def interpolate_address(
     requested_hn: int,
     street: str,
     city: str | None = None,
-    street_osm_ids: list[str] | None = None,
+    street_names: list[str] | None = None,
+    near: tuple[float, float] | None = None,
+    radius_m: float = 3000.0,
 ) -> InterpolatedAddress | None:
     """Interpolate an address position from known addresses on the same street.
 
@@ -151,49 +153,36 @@ async def interpolate_address(
     requested_hn : int
         The housenumber to estimate.
     street : str
-        The street name to search on.
+        The street name from the query (used as a fallback name).
     city : str or None
-        Optional city filter for disambiguation.
-    street_osm_ids : list[str] or None
-        osm_ids of the street LineString(s) the query resolved to (via ES, which
-        matches across languages — e.g. "Tahrir Street" → "Al Tahrir Street" →
-        ``شارع التحرير``).  When given, addresses are gathered *spatially* along
-        those lines, so an English query still finds Arabic-tagged address points
-        that an exact ``street`` string match would miss.
+        Optional city filter for disambiguation (only used in the name-only path).
+    street_names : list[str] or None
+        Candidate street-name strings the data may store for this street, as
+        resolved cross-lingually from ES (e.g. English "Tahrir Street" →
+        ``["Tahrir Street", "شارع التحرير", "Al Tahrir Street"]``).  Addresses are
+        matched by exact (case-insensitive) ``street`` against this list, so an
+        English query reaches Arabic-tagged address points.
+    near : (lat, lon) or None
+        The query's reference point.  When given, addresses are restricted to
+        ``radius_m`` around it, disambiguating between same-named streets in
+        different parts of the city (there are many ``شارع التحرير`` in Cairo).
+    radius_m : float
+        Proximity radius in metres for ``near`` (default 3 km).
 
     Returns
     -------
     InterpolatedAddress or None
         The interpolated result, or None if interpolation is not possible.
     """
-    if not street and not street_osm_ids:
+    names = [n for n in (street_names or ([street] if street else [])) if n]
+    if not names:
         return None
 
-    # ── Step 1: Fetch all known addresses on this street ──────────────────
-    # Preferred path: gather addresses spatially along the resolved street
-    # geometry.  This is language-independent — it matches on location, not on
-    # the street-name string — so cross-language queries work.
-    rows = []
-    if street_osm_ids:
-        rows = await _addresses_along_streets(pg_pool, street_osm_ids)
-
-    # Fallback: exact street-name match (same-language) when no geometry was
-    # resolved or no address point lies along it.
-    if not rows and street:
-        query = """
-            SELECT housenumber, street, city, postcode, country,
-                   ST_Y(geom) AS lat, ST_X(geom) AS lon
-            FROM osm_addresses
-            WHERE lower(street) = lower($1)
-        """
-        params: list = [street]
-
-        if city:
-            query += " AND lower(city) = lower($2)"
-            params.append(city)
-
-        async with pg_pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+    # ── Step 1: Fetch known addresses on this street ──────────────────────
+    # Match by exact street name (cross-lingual via the resolved name list) and,
+    # when a reference point is given, restrict to a radius around it so a common
+    # street name doesn't pull addresses from a same-named street across the city.
+    rows = await _gather_addresses(pg_pool, names, near, radius_m, city)
 
     if not rows:
         return None
@@ -490,35 +479,51 @@ async def reverse_interpolate(
     )
 
 
-async def _addresses_along_streets(
-    pg_pool, street_osm_ids: list[str], buffer_deg: float = 0.0007
+async def _gather_addresses(
+    pg_pool,
+    street_names: list[str],
+    near: tuple[float, float] | None,
+    radius_m: float,
+    city: str | None = None,
 ) -> list:
-    """Fetch address points lying within ``buffer_deg`` of the given street lines.
+    """Fetch address points on a street, matched by exact (case-insensitive) name.
 
-    ``buffer_deg`` ≈ 0.0007° ≈ ~75 m, wide enough to catch address points tagged
-    a little off the carriageway but tight enough to exclude parallel streets.
-
-    Matching is purely spatial (ST_DWithin against the street LineString), so it
-    is independent of the language the address's ``street`` tag is stored in —
-    this is what lets an English query resolve to Arabic-tagged addresses.
+    ``street_names`` is the cross-lingual candidate list (query + ES-resolved
+    names), so an English query reaches Arabic-tagged addresses.  When ``near``
+    is given the result is restricted to ``radius_m`` around that point so a
+    common street name (e.g. ``شارع التحرير``, which recurs across Cairo) only
+    yields the cluster the user is actually near.  Without ``near`` it falls back
+    to a name-only match, optionally narrowed by ``city``.
     """
-    if not street_osm_ids:
+    names = [n.lower() for n in street_names if n]
+    if not names:
         return []
+
+    params: list = [names]
     query = """
-        SELECT DISTINCT a.osm_id, a.housenumber, a.street, a.city,
-               a.postcode, a.country,
-               ST_Y(a.geom) AS lat, ST_X(a.geom) AS lon
-        FROM osm_addresses a
-        JOIN osm_geometries g ON g.osm_id = ANY($1::text[])
-        WHERE ST_GeometryType(g.geom) = 'ST_LineString'
-          AND ST_DWithin(a.geom, g.geom, $2)
+        SELECT housenumber, street, city, postcode, country,
+               ST_Y(geom) AS lat, ST_X(geom) AS lon
+        FROM osm_addresses
+        WHERE lower(street) = ANY($1::text[])
     """
+    if near is not None:
+        lat, lon = near
+        params.append(f"POINT({lon} {lat})")
+        params.append(radius_m)
+        query += (
+            " AND ST_DWithin(geom::geography,"
+            " ST_GeomFromText($2, 4326)::geography, $3)"
+        )
+    elif city:
+        params.append(city)
+        query += " AND lower(city) = lower($2)"
+
     try:
         async with pg_pool.acquire() as conn:
             await conn.execute("SET LOCAL statement_timeout = '3000'")
-            return await conn.fetch(query, list(street_osm_ids), buffer_deg)
+            return await conn.fetch(query, *params)
     except Exception as e:
-        logger.debug("Spatial address gather failed: %s", e)
+        logger.debug("Address gather failed: %s", e)
         return []
 
 
