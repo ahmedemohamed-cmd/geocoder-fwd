@@ -14,6 +14,14 @@
 ###   POST /places        – add a custom place
 ###   POST /insert        – insert raw OSM element via NATS
 ###
+### Routing (Valhalla, on {{routeUrl}} — host port 8001):
+###   GET  /status            – engine/tileset status & loaded actions
+###   POST /route             – turn-by-turn directions (multi-stop supported)
+###   POST /optimized_route   – reorders stops for the shortest tour (TSP)
+###   POST /sources_to_targets – time/distance matrix (many → many)
+###   POST /isochrone         – reachability polygons (e.g. 10/20 min by car)
+###   POST /locate            – snap input coords to the road network
+###
 ### Shared query flags for the search endpoints:
 ###   vector=true|false   – enable/disable semantic vector re-ranking
 ###   ai=true|false       – enable/disable AI-assisted expansion
@@ -21,6 +29,10 @@
 
 #@baseUrl = http://84.8.102.106:8000
 @baseUrl = http://localhost:8000
+
+# Valhalla routing engine (turn-by-turn directions, matrices, isochrones).
+#@routeUrl = http://84.8.102.106:8001
+@routeUrl = http://localhost:8001
 
 # ============================================================================
 # /features  –  Feature flags
@@ -613,6 +625,219 @@ Content-Type: application/json
   },
   "admin_level": 4,
   "area_km2": 3085.0
+}
+
+###
+
+# ============================================================================
+# ROUTING  –  Valhalla routing engine  ({{routeUrl}}, host port 8001)
+#
+# Valhalla is built from data/egypt-latest.osm.pbf at first container start
+# (the graph build can take several minutes — watch `docker compose logs -f
+# valhalla` and wait for /status to return 200 before sending route requests).
+#
+# All routing requests are POSTs with a JSON body. Coordinates are {lat, lon}.
+# `costing` selects the travel profile: auto | bicycle | pedestrian | bus |
+# truck | motor_scooter | taxi. See https://valhalla.github.io/valhalla/api/
+# ============================================================================
+
+### Status – engine version, loaded tileset bbox, available actions.
+### Use this to confirm the graph finished building before routing.
+GET {{routeUrl}}/status
+
+###
+
+### Driving directions – Cairo (Tahrir Sq.) → Alexandria, turn-by-turn.
+### `narrative` maneuvers + total time/distance come back under trip.legs.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357, "type": "break" },
+    { "lat": 31.2001, "lon": 29.9187, "type": "break" }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers", "language": "en-US" }
+}
+
+###
+
+### Driving directions in Arabic narrative (language=ar) – Tahrir → Giza Pyramids
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers", "language": "ar-SA" }
+}
+
+###
+
+### Multi-destination route (several stops in order) – a single trip that
+### visits Tahrir → Zamalek → Heliopolis → Giza Pyramids. Intermediate stops
+### are "through" points (no stop) here; use "break" to force a stop/leg split.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357, "type": "break" },
+    { "lat": 30.0614, "lon": 31.2208, "type": "through" },
+    { "lat": 30.0928, "lon": 31.3201, "type": "through" },
+    { "lat": 29.9792, "lon": 31.1342, "type": "break" }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Optimized route (TSP) – same stops, but Valhalla reorders the middle
+### waypoints to minimise total drive time. First & last locations are fixed.
+POST {{routeUrl}}/optimized_route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0928, "lon": 31.3201 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Time/distance matrix (multi-destination) – drive time & distance from one
+### origin (Tahrir) to several destinations at once. Response: sources_to_targets
+### with `time` (s) and `distance` (km/mi) for each source→target pair.
+POST {{routeUrl}}/sources_to_targets
+Content-Type: application/json
+
+{
+  "sources": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "targets": [
+    { "lat": 31.2001, "lon": 29.9187 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 30.0928, "lon": 31.3201 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "auto",
+  "units": "kilometers"
+}
+
+###
+
+### Full many-to-many matrix – every origin to every destination (e.g. for a
+### fleet/dispatch grid). Here 3 sources × 3 targets = 9 cost cells.
+POST {{routeUrl}}/sources_to_targets
+Content-Type: application/json
+
+{
+  "sources": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0614, "lon": 31.2208 },
+    { "lat": 30.0928, "lon": 31.3201 }
+  ],
+  "targets": [
+    { "lat": 30.0479, "lon": 31.2355 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 31.2001, "lon": 29.9187 }
+  ],
+  "costing": "auto",
+  "units": "kilometers"
+}
+
+###
+
+### Bicycle directions – Tahrir → Zamalek on the bicycle profile.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "bicycle",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Walking directions – short pedestrian route, Tahrir Sq. → Egyptian Museum.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0479, "lon": 31.2355 }
+  ],
+  "costing": "pedestrian",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Truck directions with avoidance – auto-truck profile, avoid tolls.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 31.2001, "lon": 29.9187 }
+  ],
+  "costing": "truck",
+  "costing_options": {
+    "truck": { "use_tolls": 0.0 }
+  },
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Isochrone – how far can you drive from Tahrir Sq. in 10 / 20 / 30 minutes?
+### Returns GeoJSON reachability polygons (one per contour).
+POST {{routeUrl}}/isochrone
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "costing": "auto",
+  "contours": [
+    { "time": 10, "color": "ff0000" },
+    { "time": 20, "color": "00ff00" },
+    { "time": 30, "color": "0000ff" }
+  ],
+  "polygons": true
+}
+
+###
+
+### Locate – snap raw coordinates onto the routing graph (nearest edges/nodes).
+### Useful for debugging "why won't this point route?" and verbose edge info.
+POST {{routeUrl}}/locate
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "costing": "auto",
+  "verbose": true
 }
 
 ###

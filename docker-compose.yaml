@@ -197,6 +197,9 @@ services:
       - OLLAMA_MODEL=qwen2.5:1.5b
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # uvicorn worker processes per container (the geocoder is stateless, so it
+      # also scales horizontally via replicas). Tune to leave CPU for ES.
+      - GEOCODER_WORKERS=${GEOCODER_WORKERS:-4}
       # Deep forward/reverse geocoding via Google Maps. Set GOOGLE_MAPS_API_KEY
       # in your environment or .env; ENABLE_DEEP gates the /deep/* endpoints.
       - ENABLE_DEEP=${ENABLE_DEEP:-true}
@@ -213,6 +216,53 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  # Valhalla routing engine.
+  #
+  # Uses the gis-ops "docker-valhalla" image, which on first start scans
+  # /custom_files for *.osm.pbf, builds the routing graph (tiles), then serves
+  # the routing API. We bind the existing data/egypt-latest.osm.pbf read-only
+  # into /custom_files and keep the built tiles + config in a named volume, so
+  # the build only happens once and survives restarts (force_rebuild=False).
+  #
+  # The routing API listens on 8002 inside the container; we publish it on the
+  # host as 8001 (the geocoder is on 8000). Endpoints: /route, /optimized_route,
+  # /sources_to_targets (matrix), /isochrone, /locate, /status.
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    ports:
+      - "8001:8002"
+    volumes:
+      - valhalla-tiles:/custom_files
+      - ./data/egypt-latest.osm.pbf:/custom_files/egypt-latest.osm.pbf:ro
+    environment:
+      # Build the graph from the bundled PBF rather than downloading tiles.
+      - use_tiles_ignore_pbf=False
+      - tile_urls=
+      # Don't rebuild on every start; reuse tiles already in the named volume.
+      - force_rebuild=False
+      - force_rebuild_elevation=False
+      # Admin + time-zone DBs improve country-crossing, turn rules and ETAs.
+      - build_admins=True
+      - build_time_zones=True
+      # Elevation/transit pull large extra datasets; off by default.
+      - build_elevation=False
+      - build_transit=False
+      - serve_tiles=True
+      - server_threads=4
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8002/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      # First boot builds the graph from the PBF, which can take several
+      # minutes; don't mark unhealthy while that initial build is running.
+      start_period: 600s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
 
   oa-watcher:
     build: .
@@ -295,3 +345,4 @@ volumes:
   elasticsearch-data:
   postgis-data:
   ollama-data:
+  valhalla-tiles:

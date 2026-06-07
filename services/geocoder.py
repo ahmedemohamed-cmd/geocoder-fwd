@@ -37,7 +37,9 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 import math
+import os
 import re
+import socket
 import sys
 import time
 import uuid
@@ -229,17 +231,38 @@ async def _warm_autocomplete():
     """
     if redis_pool is None:
         return
+    warmer_id = f"{socket.gethostname()}:{os.getpid()}"
     while True:
+        sleep_secs = 60
         try:
-            count = await ac_warm_from_es(
-                redis_pool, es, INDEX,
-                batch_size=_AC_BATCH_SIZE,
-                max_docs=_AC_MAX_DOCS,
-            )
-            print(f"[geocoder] Autocomplete warm-up complete: {count} docs indexed")
-            # If ES returned nothing (e.g. not ready at startup), retry quickly
-            # instead of waiting the full re-warm interval.
-            sleep_secs = _AC_REWARM_SECS if count > 0 else 30
+            # Fleet-wide coordination so N workers/replicas don't each rescan ES:
+            #  * cadence  — a shared "last_warm" timestamp gates *when* a warm is due
+            #  * exclusion — a short "warming" lease lets exactly ONE instance warm
+            # The lease TTL is short (not the whole 10-min cycle), so a crashed
+            # holder frees it within ~3 min instead of stalling warm-up post-deploy.
+            last = await redis_pool.get("geocoder:ac:last_warm")
+            due = last is None or (time.time() - float(last)) >= _AC_REWARM_SECS
+            if due:
+                got = await redis_pool.set(
+                    "geocoder:ac:warming", warmer_id, nx=True, ex=180,
+                )
+                if got:
+                    try:
+                        count = await ac_warm_from_es(
+                            redis_pool, es, INDEX,
+                            batch_size=_AC_BATCH_SIZE,
+                            max_docs=_AC_MAX_DOCS,
+                        )
+                        # Only advance the cadence clock once ES actually returned
+                        # docs, so a not-yet-ready ES retries soon instead of in 10m.
+                        if count > 0:
+                            await redis_pool.set("geocoder:ac:last_warm", repr(time.time()))
+                            sleep_secs = _AC_REWARM_SECS
+                        else:
+                            sleep_secs = 30
+                        print(f"[geocoder] Autocomplete warm-up complete: {count} docs indexed")
+                    finally:
+                        await redis_pool.delete("geocoder:ac:warming")
         except asyncio.CancelledError:
             print("[geocoder] Autocomplete warm-up task cancelled")
             raise
@@ -2436,4 +2459,13 @@ async def deep_reverse(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # The geocoder is stateless (all state in ES/PostGIS/Redis/NATS), so it scales
+    # vertically via uvicorn workers and horizontally via replicas. With >1 worker
+    # uvicorn needs an import string to fork; the per-worker warm-up is guarded by
+    # a fleet-wide Redis lock so workers/replicas don't all rescan ES.
+    workers = int(os.getenv("GEOCODER_WORKERS", "1"))
+    if workers > 1:
+        uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000,
+                    workers=workers)
+    else:
+        uvicorn.run(app, host="0.0.0.0", port=8000)

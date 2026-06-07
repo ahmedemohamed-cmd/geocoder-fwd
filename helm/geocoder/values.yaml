@@ -206,6 +206,10 @@ postgisInserter:
 geocoder:
   enabled: true
   replicas: 3
+  # uvicorn worker processes per pod. The geocoder is stateless, so in Kubernetes
+  # prefer scaling horizontally via `replicas` (and an HPA) over many workers per
+  # pod; keep this at 1 for clean per-pod autoscaling, raise only for big pods.
+  workers: 1
   # Deep forward/reverse geocoding via Google Maps (the /deep/* endpoints).
   # When googleMapsApiKey is empty the endpoints return 503.
   deep:

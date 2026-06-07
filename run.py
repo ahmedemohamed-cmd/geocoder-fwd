@@ -57,10 +57,20 @@ def main():
         asyncio.run(run())
 
     elif service == "geocoder":
+        import os
         import uvicorn
-        from services.geocoder import app
 
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        # The geocoder is stateless (all state lives in ES/PostGIS/Redis/NATS), so
+        # it scales out both vertically (uvicorn workers, one per core) and
+        # horizontally (multiple replicas). GEOCODER_WORKERS controls per-process
+        # workers; with >1 uvicorn needs an import string to fork.
+        workers = int(os.getenv("GEOCODER_WORKERS", "1"))
+        if workers > 1:
+            uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000,
+                        workers=workers)
+        else:
+            from services.geocoder import app
+            uvicorn.run(app, host="0.0.0.0", port=8000)
 
     elif service == "cleaner":
         from services.cleaner import clean
