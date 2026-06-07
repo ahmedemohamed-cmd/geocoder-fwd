@@ -70,6 +70,16 @@ ENABLE_AI = _safe_bool("ENABLE_AI", True)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
+# Google Maps (deep forward/reverse geocoding via an external provider)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_MAPS_GEOCODE_URL = os.getenv(
+    "GOOGLE_MAPS_GEOCODE_URL", "https://maps.googleapis.com/maps/api/geocode/json"
+)
+# Note: result language is a mandatory per-request query param on /deep/*,
+# not an env default.
+# ENABLE_DEEP gates the /deep/* endpoints; they also require an API key.
+ENABLE_DEEP = _safe_bool("ENABLE_DEEP", True)
+
 # Performance tuning
 # When vectors are enabled, use smaller batch sizes to avoid timeouts
 _BATCH_SIZE = _safe_int("BATCH_SIZE", 500)

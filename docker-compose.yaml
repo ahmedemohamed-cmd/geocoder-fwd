@@ -183,6 +183,10 @@ services:
       - OLLAMA_MODEL=qwen2.5:1.5b
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Deep forward/reverse geocoding via Google Maps. Set GOOGLE_MAPS_API_KEY
+      # in your environment or .env; ENABLE_DEEP gates the /deep/* endpoints.
+      - ENABLE_DEEP=${ENABLE_DEEP:-true}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
     depends_on:
       elasticsearch:
         condition: service_healthy

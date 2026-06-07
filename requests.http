@@ -8,6 +8,8 @@
 ###   GET  /geocode       – full-text + vector + geo search (with address interpolation fallback)
 ###   GET  /address       – structured address search (with address interpolation fallback)
 ###   GET  /reverse       – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
+###   GET  /deep/forward  – deep forward geocoding via Google Maps (maps→OSM tags, publishes to NATS, geocode-shaped)
+###   GET  /deep/reverse  – deep reverse geocoding via Google Maps (maps→OSM tags, publishes to NATS, reverse-shaped)
 ###   GET  /describe      – AI-generated title + description for a place
 ###   POST /feedback      – popularity feedback loop
 ###   POST /places        – add a custom place
@@ -360,6 +362,57 @@ GET {{baseUrl}}/reverse?lat=24.0889&lon=32.8998
 
 ### With AI descriptions on streets/polygons
 GET {{baseUrl}}/reverse?lat=30.0444&lon=31.2357&describe=true
+
+###
+
+# ============================================================================
+# /deep/forward  &  /deep/reverse  –  Deep geocoding via Google Maps
+#
+# These call the Google Maps Geocoding API, MAP each result into OSM tags
+# (addr:* + feature tags like amenity/shop/tourism + name + source=google),
+# PUBLISH the mapped element to NATS so the inserters index it, then RETURN the
+# data enriched and shaped exactly like /geocode and /reverse.
+#
+# Requires GOOGLE_MAPS_API_KEY to be set (and ENABLE_DEEP=true). Without a key
+# the endpoints return 503. The response adds "source":"google" and
+# "published": <count of elements pushed to NATS for indexing>.
+#
+# The same place requested in different languages maps to the SAME document
+# (osm_id is a hash of the Google place_id); the indexer MERGES the names so the
+# doc accumulates name:en / name:ar / … like a multilingual OSM element.
+#
+# /deep/forward params:
+#   q        (required) – free-text place/address query
+#   language (required) – result language: en, ar, fr, …
+#   limit               – max results (1–25, default 10)
+#   region              – ccTLD region bias, e.g. eg
+#   publish=true|false  – publish mapped results to NATS (default true)
+#   enrich=true|false   – attach parent/nearest-street enrichment (default true)
+#
+# /deep/reverse params:
+#   lat, lon (required) – coordinates to resolve
+#   language (required) – result language: en, ar, fr, …
+#   publish=true|false  – publish mapped results to NATS (default true)
+#   describe=true|false – AI descriptions on local geometry context
+# ============================================================================
+
+### Deep forward (English) – resolve a place via Google, index it, return geocode-shaped
+GET {{baseUrl}}/deep/forward?q=Cairo Tower&language=en&region=eg&limit=5
+
+###
+
+### Deep forward (Arabic) – SAME place, different language → merged onto the same doc
+GET {{baseUrl}}/deep/forward?q=Cairo Tower&language=ar&region=eg&limit=5
+
+###
+
+### Deep forward without publishing (just resolve + return, don't index)
+GET {{baseUrl}}/deep/forward?q=15 Tahrir Street, Cairo&language=en&publish=false
+
+###
+
+### Deep reverse – resolve an address for a point via Google, index it, return reverse-shaped
+GET {{baseUrl}}/deep/reverse?lat=30.0444&lon=31.2357&language=en
 
 ###
 

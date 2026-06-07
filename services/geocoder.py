@@ -36,6 +36,7 @@ address point stored in the osm_addresses PostGIS table.
 import asyncio
 from contextlib import asynccontextmanager
 import logging
+import math
 import re
 import sys
 import time
@@ -75,6 +76,8 @@ from shared.config import (
     REDIS_PORT,
     OLLAMA_URL,
     OLLAMA_MODEL,
+    GOOGLE_MAPS_API_KEY,
+    ENABLE_DEEP,
 )
 from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.interpolation import interpolate_address, reverse_interpolate, InterpolatedAddress
@@ -84,7 +87,14 @@ from shared.autocomplete import (
     update_score as ac_update_score,
     warm_from_es as ac_warm_from_es,
 )
-from shared.embeddings import embed_texts
+from shared.embeddings import embed_texts, build_text
+from shared.ranking import compute_offline_rank
+from shared.google_maps import (
+    forward_geocode as gmaps_forward,
+    reverse_geocode as gmaps_reverse,
+    map_result_to_element,
+    GoogleMapsError,
+)
 from shared.address import (
     extract_address_components,
     build_full_address,
@@ -2106,6 +2116,220 @@ async def reverse(
         if desc_targets:
             await _attach_descriptions(desc_targets)
 
+    return result
+
+
+# ── deep geocoding via Google Maps (external provider) ─────────────────────
+# /deep/forward and /deep/reverse query the Google Maps Geocoding API, map each
+# result into the OSM-element NATS format (so the inserters index it just like
+# native OSM data), publish it for indexing, then return the data to the caller
+# enriched and shaped exactly like /geocode and /reverse respectively.
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _deep_guard() -> None:
+    if not ENABLE_DEEP:
+        raise HTTPException(status_code=503, detail="Deep endpoints are disabled (ENABLE_DEEP=false)")
+    if not GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=503, detail="GOOGLE_MAPS_API_KEY is not configured")
+
+
+async def _publish_element(message: dict) -> bool:
+    """Publish a mapped OSM-element message to NATS for the inserters. Best-effort."""
+    if js is None:
+        return False
+    try:
+        await js.publish(NATS_SUBJECT, json.dumps(message).encode(), timeout=10)
+        return True
+    except Exception as e:
+        print(f"[geocoder] deep: failed to publish {message.get('osm_id')} to NATS: {e}")
+        return False
+
+
+def _element_to_geocode_result(extra: dict) -> dict:
+    """Shape a mapped Google element exactly like a /geocode result row."""
+    msg = extra["message"]
+    tags = msg["tags"]
+    admin_level = msg.get("admin_level", 0)
+    area_km2 = msg.get("area_km2", 0.0)
+    addr = extract_address_components(tags)
+    full_addr = normalize_address_text(build_full_address(tags))
+    return {
+        "osm_id": msg["osm_id"],
+        "osm_type": msg.get("osm_type", ""),
+        "name": tags.get("name", ""),
+        "name_en": tags.get("name:en", ""),
+        "name_fr": tags.get("name:fr", ""),
+        "tags": tags,
+        "tags_text": build_text(tags),
+        "geom": msg.get("geom"),
+        "centroid": extra.get("centroid"),
+        "admin_level": admin_level,
+        "area_km2": area_km2,
+        "offline_rank": compute_offline_rank(tags, admin_level, area_km2),
+        "popularity": 0.0,
+        "confidence": extra.get("confidence", 0.6),
+        "full_address": full_addr,
+        "addr_housenumber": addr.get("housenumber", ""),
+        "addr_street":      addr.get("street", ""),
+        "addr_city":        addr.get("city", ""),
+        "addr_postcode":    addr.get("postcode", ""),
+        "addr_country":     addr.get("country", ""),
+        "addr_suburb":      addr.get("suburb", ""),
+        "addr_state":       addr.get("state", ""),
+        "address": None,
+    }
+
+
+@app.get("/deep/forward")
+async def deep_forward(
+    request: Request,
+    q: str = Query(..., min_length=1, description="Free-text place/address query"),
+    language: str = Query(..., min_length=2, max_length=10,
+                          description="Result language (mandatory), e.g. en, ar, fr"),
+    limit: int = Query(10, ge=1, le=25),
+    region: str | None = Query(None, description="ccTLD region bias, e.g. 'eg'"),
+    publish: bool = Query(True, description="Publish mapped results to NATS for indexing"),
+    enrich: bool = Query(True, description="Attach parent/nearest-street enrichment from local data"),
+):
+    """Deep forward geocoding via Google Maps.
+
+    Calls Google in the requested ``language``, maps each result to OSM tags
+    (with a ``name:<language>`` tag), publishes it to NATS for the inserters to
+    index/merge, then returns results in the same shape as /geocode (with address
+    enrichment from local PostGIS where available).
+    """
+    _deep_guard()
+    try:
+        raw = await gmaps_forward(q, language, region=region)
+    except GoogleMapsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    mapped = []
+    for r in raw[:limit]:
+        try:
+            mapped.append(map_result_to_element(r, language))
+        except Exception as e:
+            print(f"[geocoder] deep/forward: skipped a result ({e})")
+
+    published = 0
+    if publish:
+        for extra in mapped:
+            published += int(await _publish_element(extra["message"]))
+
+    results = [_element_to_geocode_result(extra) for extra in mapped]
+
+    # Enrich parents/nearest-street from local geometry (synchronous: deep calls
+    # are low-volume and the caller explicitly asked for enriched data).
+    if enrich and results:
+        enrichments = await asyncio.gather(
+            *[_enrich_address(r["osm_id"], r["centroid"]) for r in results],
+            return_exceptions=True,
+        )
+        for r, addr in zip(results, enrichments):
+            if isinstance(addr, dict):
+                r["address"] = addr
+
+    addr_detected = is_address_query(q)
+    parsed_addr = parse_address_query(q) if addr_detected else {}
+    request.state.result_count = len(results)
+    return {
+        "features": {"vectors_enabled": False, "ai_enabled": False},
+        "source": "google",
+        "published": published,
+        "address_detected": addr_detected,
+        "address_parsed": parsed_addr if addr_detected else None,
+        "pagination": {"limit": limit, "offset": 0, "total": len(results), "has_more": False},
+        "results": results,
+    }
+
+
+@app.get("/deep/reverse")
+async def deep_reverse(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    language: str = Query(..., min_length=2, max_length=10,
+                          description="Result language (mandatory), e.g. en, ar, fr"),
+    publish: bool = Query(True, description="Publish mapped results to NATS for indexing"),
+    describe: bool = Query(False, description="Include AI descriptions on local geometry context"),
+):
+    """Deep reverse geocoding via Google Maps.
+
+    Resolves the point's address with Google in the requested ``language``, maps +
+    publishes it to NATS, and returns the same structure as /reverse:
+    ``nearest_address`` comes from Google (the freshly resolved address) while
+    ``nearest_line``, ``enclosing_polygons`` and ``interpolated_address`` are
+    enriched from local PostGIS data.
+    """
+    _deep_guard()
+    try:
+        raw = await gmaps_reverse(lat, lon, language)
+    except GoogleMapsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    mapped = []
+    for r in raw:
+        try:
+            mapped.append(map_result_to_element(r, language))
+        except Exception as e:
+            print(f"[geocoder] deep/reverse: skipped a result ({e})")
+
+    published = 0
+    if publish:
+        for extra in mapped:
+            published += int(await _publish_element(extra["message"]))
+
+    # Local geometry context + interpolation (best-effort; empty if no local data)
+    try:
+        result = await reverse(lat=lat, lon=lon, describe=describe)
+    except Exception as e:
+        print(f"[geocoder] deep/reverse: local reverse failed ({e})")
+        result = {
+            "nearest_address": None,
+            "interpolated_address": None,
+            "nearest_line": None,
+            "enclosing_polygons": [],
+        }
+
+    # Prefer a Google result that carries a full street address as nearest_address.
+    best = None
+    for extra in mapped:
+        t = extra["message"]["tags"]
+        if t.get("addr:housenumber") and t.get("addr:street"):
+            best = extra
+            break
+    if best is None and mapped:
+        best = mapped[0]
+
+    if best:
+        t = best["message"]["tags"]
+        c = best["centroid"]
+        dist = round(_haversine_m(lat, lon, c["lat"], c["lon"]), 1)
+        result["nearest_address"] = {
+            "osm_id":       best["message"]["osm_id"],
+            "osm_type":     "node",
+            "housenumber":  t.get("addr:housenumber", ""),
+            "street":       t.get("addr:street", ""),
+            "city":         t.get("addr:city", ""),
+            "postcode":     t.get("addr:postcode", ""),
+            "country":      t.get("addr:country", ""),
+            "full_address": best.get("formatted_address", ""),
+            "geom":         best["message"]["geom"],
+            "distance_m":   dist,
+            "confidence":   best.get("confidence", _distance_confidence(dist)),
+            "source":       "google",
+        }
+
+    result["source"] = "google"
+    result["published"] = published
     return result
 
 

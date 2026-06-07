@@ -152,6 +152,33 @@ from shared.es_mapping import MAPPING
 
 INDEX = "osm_places"
 
+# Painless merge script for provider docs (e.g. Google deep search) that may be
+# ingested repeatedly in different languages. Instead of overwriting the doc, it
+# MERGES the incoming tags into the existing ones so multilingual name tags
+# (name:en, name:ar, …) accumulate on a single document — exactly as if the place
+# had been imported from OSM with multiple name:* tags. name/name_en/name_fr and
+# tags_text are recomputed from the merged tags; remaining scalar/derived fields
+# (geom, centroid, offline_rank, addr_*, …) are taken from the latest request.
+_MERGE_TAGS_SCRIPT = """
+if (ctx._source.tags == null) { ctx._source.tags = [:]; }
+for (def e : params.tags.entrySet()) { ctx._source.tags[e.getKey()] = e.getValue(); }
+def t = ctx._source.tags;
+if (t.containsKey('name'))    { ctx._source.name = t['name']; }
+if (t.containsKey('name:en')) { ctx._source.name_en = t['name:en']; }
+if (t.containsKey('name:fr')) { ctx._source.name_fr = t['name:fr']; }
+def parts = new ArrayList();
+if (t.containsKey('name') && t['name'] instanceof String && t['name'].length() > 0) { parts.add(t['name']); }
+for (def e : t.entrySet()) {
+  def k = e.getKey();
+  if (k == 'name' || k == 'source' || k.startsWith('ref:')) { continue; }
+  def v = e.getValue();
+  if (v instanceof String && v.length() > 0) { parts.add(v); }
+}
+ctx._source.tags_text = String.join(' ', parts);
+for (def e : params.fields.entrySet()) { ctx._source[e.getKey()] = e.getValue(); }
+if (ctx._source.popularity == null) { ctx._source.popularity = 0.0; }
+"""
+
 
 async def ensure_index(es: AsyncElasticsearch):
     max_retries = 5
@@ -424,15 +451,38 @@ async def run():
                 if vec is not None:
                     fields["name_vector"] = vec
 
-                # update+upsert: re-ingesting an existing doc does NOT reset the
-                # popularity accumulated via /feedback.  First insert initialises it to 0.
-                doc = {
-                    "_index": INDEX,
-                    "_id": elem["osm_id"],
-                    "_op_type": "update",
-                    "doc": fields,
-                    "upsert": {**fields, "popularity": 0.0},
-                }
+                # Provider docs (e.g. Google deep search) may be ingested
+                # repeatedly in different languages. MERGE their tags so name:*
+                # variants accumulate on one document (recomputing name/name_en/
+                # name_fr/tags_text from the merged tags). Native OSM docs are
+                # self-contained, so they keep the faster doc-overwrite path.
+                if tags.get("source") == "google":
+                    scalar_fields = {
+                        k: v for k, v in fields.items()
+                        if k not in ("tags", "tags_text", "name", "name_en", "name_fr")
+                    }
+                    doc = {
+                        "_index": INDEX,
+                        "_id": elem["osm_id"],
+                        "_op_type": "update",
+                        "scripted_upsert": True,
+                        "script": {
+                            "lang": "painless",
+                            "source": _MERGE_TAGS_SCRIPT,
+                            "params": {"tags": tags, "fields": scalar_fields},
+                        },
+                        "upsert": {},
+                    }
+                else:
+                    # update+upsert: re-ingesting an existing doc does NOT reset the
+                    # popularity accumulated via /feedback.  First insert initialises it to 0.
+                    doc = {
+                        "_index": INDEX,
+                        "_id": elem["osm_id"],
+                        "_op_type": "update",
+                        "doc": fields,
+                        "upsert": {**fields, "popularity": 0.0},
+                    }
                 actions.append(doc)
 
             # Bulk index with retry on transient ES errors (timeout, circuit breaker, etc.)
