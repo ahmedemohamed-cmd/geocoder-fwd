@@ -762,15 +762,24 @@ async def publish_file(filepath: str):
         # Continue with cleanup even if publishing failed
 
     # flush anything left
+    consecutive_failures = 0  # reset: don't carry over failures from the main loop
     while True:
         try:
             item = q.get_nowait()
             if item is SENTINEL:
                 break
-            max_retries = 500
+            # Apply the same geometry simplification as the main publish loop
+            msg = json.dumps(item).encode()
+            if len(msg) > _NATS_TARGET_BYTES and item.get("geom"):
+                simplified = _simplify_geom(item["geom"], item.get("osm_id", "?"))
+                if simplified is None:
+                    print(f"[watcher] Flush: {item.get('osm_id', '?')} too large after simplification — skipping", flush=True)
+                    continue
+                msg = json.dumps({**item, "geom": simplified}).encode()
+            max_retries = 300
             for attempt in range(max_retries):
                 try:
-                    ack = await js.publish(NATS_SUBJECT, json.dumps(item).encode(), timeout=120)
+                    ack = await js.publish(NATS_SUBJECT, msg, timeout=120)
                     if ack:
                         published += 1
                         consecutive_failures = 0  # Reset on success

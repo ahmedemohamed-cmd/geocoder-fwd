@@ -148,256 +148,9 @@ def simplify_geometry(geom):
 
 from shared.address import extract_address_components, build_full_address, has_address, normalize_address_text
 
-INDEX = "osm_places"
+from shared.es_mapping import MAPPING
 
-MAPPING = {
-    "settings": {
-        "index": {"number_of_replicas": 0},
-        "analysis": {
-            "char_filter": {
-                # Normalize Arabic characters at char level before tokenization
-                "arabic_normalize_char": {
-                    "type": "pattern_replace",
-                    "pattern": "[\u0640]",  # tatweel
-                    "replacement": "",
-                },
-            },
-            "filter": {
-                # English street-type synonyms (bidirectional)
-                "street_synonyms_en": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "st, street",
-                        "rd, road",
-                        "ave, av, avenue",
-                        "blvd, bvd, boulevard",
-                        "ln, lane",
-                        "dr, drive",
-                        "pl, place",
-                        "ct, court",
-                        "sq, square",
-                        "hwy, highway",
-                        "cres, crescent",
-                        "terr, terrace",
-                        "pkwy, parkway",
-                    ],
-                },
-                # Arabic street-type synonyms
-                "street_synonyms_ar": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "ش, شارع",
-                        "ط, طريق",
-                        "م, ميدان",
-                    ],
-                },
-                # French street-type synonyms
-                "street_synonyms_fr": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "r, rue",
-                        "av, ave, avenue",
-                        "bd, blvd, boulevard",
-                        "pl, place",
-                        "ch, chemin",
-                        "imp, impasse",
-                        "all, allée",
-                        "crs, cours",
-                        "rte, route",
-                        "pass, passage",
-                    ],
-                },
-                # Edge n-gram for autocomplete / prefix matching
-                "edge_ngram_filter": {
-                    "type": "edge_ngram",
-                    "min_gram": 2,
-                    "max_gram": 15,
-                },
-                # Arabic normalization (alef, taa marbuta, etc.)
-                "arabic_normalization": {
-                    "type": "arabic_normalization",
-                },
-            },
-            "normalizer": {
-                "lowercase": {
-                    "type": "custom",
-                    "filter": ["lowercase"],
-                },
-            },
-            "analyzer": {
-                # Primary address analyzer: synonyms + lowercase
-                "address_standard": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                # Edge n-gram analyzer for autocomplete (index-time only)
-                "address_autocomplete": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                        "edge_ngram_filter",
-                    ],
-                },
-                # Search analyzer: same as address_standard but NO edge n-gram
-                "address_search": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                # Arabic-optimized analyzer for name fields
-                "arabic_name": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                    ],
-                },
-            },
-        },
-    },
-    "mappings": {
-        "properties": {
-            "osm_id": {"type": "keyword"},
-            "osm_type": {"type": "keyword"},
-            "name": {
-                "type": "text",
-                "analyzer": "arabic_name",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_en": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_fr": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "tags_text": {
-                "type": "text",
-                "analyzer": "arabic_name",
-            },
-            "tags": {"type": "object", "enabled": False},
-            "geom": {"type": "geo_shape"},
-            "centroid": {"type": "geo_point"},
-            "admin_level": {"type": "integer"},
-            "area_km2": {"type": "float"},
-            "offline_rank": {"type": "float"},
-            "popularity": {"type": "float"},
-            "name_vector": {
-                "type": "dense_vector",
-                "dims": EMBEDDING_DIM,
-                "index": True,
-                "similarity": "cosine",
-            },
-            # ── address fields ────────────────────────────────────────────
-            "addr_housenumber": {
-                "type": "keyword",
-                "normalizer": "lowercase",
-            },
-            "addr_street": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_city": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_postcode": {"type": "keyword"},
-            "addr_country":  {"type": "keyword"},
-            "addr_suburb": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_state": {
-                "type": "text",
-                "analyzer": "address_standard",
-            },
-            "full_address": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "has_address": {"type": "boolean"},
-            # AI-generated place description (cached, not indexed)
-            "ai_description": {"type": "object", "enabled": False},
-        }
-    },
-}
+INDEX = "osm_places"
 
 
 async def ensure_index(es: AsyncElasticsearch):
@@ -637,9 +390,8 @@ async def run():
                 addr = extract_address_components(tags)
                 full_addr = normalize_address_text(build_full_address(tags))
 
-                doc = {
-                    "_index": INDEX,
-                    "_id": elem["osm_id"],
+                # Fields updated on every ingest (excludes popularity — preserved across re-ingests)
+                fields = {
                     "osm_id": elem["osm_id"],
                     "osm_type": elem.get("osm_type", ""),
                     "name": tags.get("name", ""),
@@ -650,7 +402,6 @@ async def run():
                     "admin_level": admin_level,
                     "area_km2": area_km2,
                     "offline_rank": rank,
-                    "popularity": 0.0,
                     # address
                     "has_address": bool(full_addr),
                     "full_address": full_addr,
@@ -663,12 +414,25 @@ async def run():
                     "addr_state":       addr.get("state", ""),
                 }
                 if elem.get("geom"):
-                    doc["geom"] = simplify_geometry(elem["geom"])
-                    c = centroid_latlon(elem["geom"])
+                    simplified_geom = simplify_geometry(elem["geom"])
+                    fields["geom"] = simplified_geom
+                    # Use the simplified geometry for the centroid so the geo_point
+                    # stays consistent with the stored geo_shape.
+                    c = centroid_latlon(simplified_geom)
                     if c:
-                        doc["centroid"] = c
+                        fields["centroid"] = c
                 if vec is not None:
-                    doc["name_vector"] = vec
+                    fields["name_vector"] = vec
+
+                # update+upsert: re-ingesting an existing doc does NOT reset the
+                # popularity accumulated via /feedback.  First insert initialises it to 0.
+                doc = {
+                    "_index": INDEX,
+                    "_id": elem["osm_id"],
+                    "_op_type": "update",
+                    "doc": fields,
+                    "upsert": {**fields, "popularity": 0.0},
+                }
                 actions.append(doc)
 
             # Bulk index with retry on transient ES errors (timeout, circuit breaker, etc.)
@@ -676,7 +440,11 @@ async def run():
             max_bulk_retries = 20
             for bulk_attempt in range(max_bulk_retries):
                 try:
-                    await async_bulk(es, actions, raise_on_error=False)
+                    _, errors = await async_bulk(es, actions, raise_on_error=False)
+                    if errors:
+                        print(f"[es-inserter] Worker {worker_id}: {len(errors)} docs rejected by ES (non-transient)", flush=True)
+                        for err in errors[:3]:
+                            print(f"[es-inserter] Worker {worker_id}: Doc error: {err}", flush=True)
                     break
                 except ApiError as e:
                     if e.status_code == 429 and bulk_attempt < max_bulk_retries - 1:

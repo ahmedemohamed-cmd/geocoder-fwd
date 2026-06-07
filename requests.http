@@ -22,7 +22,7 @@
 ###   Elasticsearch direct queries
 ###   PostGIS direct queries (REST is not available, see SQL section comments)
 
-@baseUrl = http://dev-fwd.cec.delllabs.net:8000
+@baseUrl = http://localhost:8000
 
 # ============================================================================
 # Feature Flags
@@ -150,7 +150,7 @@ GET {{baseUrl}}/geocode?q=9 pentland cres
 ### Basic city search
 GET {{baseUrl}}/geocode?q=pentland cres
 ### Basic city search
-GET {{baseUrl}}/geocode?q=farm boy3
+GET {{baseUrl}}/geocode?q=cfc
 ###
 
 ### Search with geo-distance bias (near the Pyramids)
@@ -679,3 +679,5 @@ Content-Type: application/json
   ]
 }
 ###
+
+GET http://84.8.122.218:9200/pelias/_mapping?pretty

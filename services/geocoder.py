@@ -132,247 +132,7 @@ def _distance_confidence(distance_m: float) -> float:
         return 0.4
     return 0.2
 
-# ── Elasticsearch index mapping ───────────────────────────────────────────
-# NOTE: This must stay in sync with es_inserter.py MAPPING.
-ES_MAPPING = {
-    "settings": {
-        "index": {"number_of_replicas": 0},
-        "analysis": {
-            "char_filter": {
-                "arabic_normalize_char": {
-                    "type": "pattern_replace",
-                    "pattern": "[\u0640]",
-                    "replacement": "",
-                },
-            },
-            "filter": {
-                "street_synonyms_en": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "st, street",
-                        "rd, road",
-                        "ave, av, avenue",
-                        "blvd, bvd, boulevard",
-                        "ln, lane",
-                        "dr, drive",
-                        "pl, place",
-                        "ct, court",
-                        "sq, square",
-                        "hwy, highway",
-                        "cres, crescent",
-                        "terr, terrace",
-                        "pkwy, parkway",
-                    ],
-                },
-                "street_synonyms_ar": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "ش, شارع",
-                        "ط, طريق",
-                        "م, ميدان",
-                    ],
-                },
-                # French street-type synonyms
-                "street_synonyms_fr": {
-                    "type": "synonym",
-                    "synonyms": [
-                        "r, rue",
-                        "av, ave, avenue",
-                        "bd, blvd, boulevard",
-                        "pl, place",
-                        "ch, chemin",
-                        "imp, impasse",
-                        "all, allée",
-                        "crs, cours",
-                        "rte, route",
-                        "pass, passage",
-                    ],
-                },
-                "edge_ngram_filter": {
-                    "type": "edge_ngram",
-                    "min_gram": 2,
-                    "max_gram": 15,
-                },
-                "arabic_normalization": {
-                    "type": "arabic_normalization",
-                },
-            },
-            "normalizer": {
-                "lowercase": {
-                    "type": "custom",
-                    "filter": ["lowercase"],
-                },
-            },
-            "analyzer": {
-                "address_standard": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                "address_autocomplete": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                        "edge_ngram_filter",
-                    ],
-                },
-                "address_search": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                        "street_synonyms_en",
-                        "street_synonyms_ar",
-                        "street_synonyms_fr",
-                    ],
-                },
-                "arabic_name": {
-                    "type": "custom",
-                    "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
-                    "filter": [
-                        "lowercase",
-                        "arabic_normalization",
-                    ],
-                },
-            },
-        },
-    },
-    "mappings": {
-        "properties": {
-            "osm_id": {"type": "keyword"},
-            "osm_type": {"type": "keyword"},
-            "name": {
-                "type": "text",
-                "analyzer": "arabic_name",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_en": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "name_fr": {
-                "type": "text",
-                "analyzer": "standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "tags_text": {
-                "type": "text",
-                "analyzer": "arabic_name",
-            },
-            "tags": {"type": "object", "enabled": False},
-            "geom": {"type": "geo_shape"},
-            "centroid": {"type": "geo_point"},
-            "admin_level": {"type": "integer"},
-            "area_km2": {"type": "float"},
-            "offline_rank": {"type": "float"},
-            "popularity": {"type": "float"},
-            "name_vector": {
-                "type": "dense_vector",
-                "dims": EMBEDDING_DIM,
-                "index": True,
-                "similarity": "cosine",
-            },
-            # ── address fields ────────────────────────────────────────────
-            "addr_housenumber": {
-                "type": "keyword",
-                "normalizer": "lowercase",
-            },
-            "addr_street": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_city": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "keyword": {"type": "keyword"},
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_postcode": {"type": "keyword"},
-            "addr_country":  {"type": "keyword"},
-            "addr_suburb": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "addr_state": {
-                "type": "text",
-                "analyzer": "address_standard",
-            },
-            "full_address": {
-                "type": "text",
-                "analyzer": "address_standard",
-                "fields": {
-                    "autocomplete": {
-                        "type": "text",
-                        "analyzer": "address_autocomplete",
-                        "search_analyzer": "address_search",
-                    },
-                },
-            },
-            "has_address": {"type": "boolean"},
-            # ── AI-generated place description (cached) ───────────────────
-            "ai_description": {"type": "object", "enabled": False},
-        }
-    },
-}
+from shared.es_mapping import MAPPING as ES_MAPPING
 
 es: AsyncElasticsearch = None  # type: ignore[assignment]
 pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
@@ -403,12 +163,16 @@ async def _warm_autocomplete():
                 max_docs=_AC_MAX_DOCS,
             )
             print(f"[geocoder] Autocomplete warm-up complete: {count} docs indexed")
+            # If ES returned nothing (e.g. not ready at startup), retry quickly
+            # instead of waiting the full re-warm interval.
+            sleep_secs = _AC_REWARM_SECS if count > 0 else 30
         except asyncio.CancelledError:
             print("[geocoder] Autocomplete warm-up task cancelled")
             raise
         except Exception as e:
             print(f"[geocoder] Autocomplete warm-up failed: {e}")
-        await asyncio.sleep(_AC_REWARM_SECS)
+            sleep_secs = 30
+        await asyncio.sleep(sleep_secs)
 
 
 async def _warm_ollama():
@@ -488,7 +252,9 @@ async def lifespan(app: FastAPI):
             await es.indices.create(index=INDEX, **ES_MAPPING)
             print(f"[geocoder] Created ES index {INDEX} (fallback)")
         except Exception as e2:
-            print(f"[geocoder] Failed to create ES index: {e2}")
+            if "resource_already_exists" not in str(e2).lower():
+                raise
+            print(f"[geocoder] ES index {INDEX} already exists (concurrent create)")
 
     # Connect to Redis and warm autocomplete index
     try:
@@ -878,29 +644,48 @@ async def _generate_and_cache(osm_id: str, place_data: dict) -> dict[str, str] |
 async def _attach_descriptions(results: list[dict]) -> None:
     """Attach cached AI descriptions to search results, fire background
     generation for misses.  Mutates ``results`` in place."""
+    ids = [r.get("osm_id") for r in results if r.get("osm_id")]
+    if not ids:
+        return
+
+    _source_fields = [
+        "ai_description", "name", "name_en", "name_fr",
+        "tags", "centroid", "full_address",
+        "addr_housenumber", "addr_street", "addr_city",
+        "addr_suburb", "addr_state", "addr_postcode",
+        "addr_country", "admin_level",
+    ]
+
+    try:
+        resp = await es.mget(
+            index=INDEX,
+            body={"ids": ids},
+            source_includes=_source_fields,
+        )
+        docs_by_id = {
+            d["_id"]: d["_source"]
+            for d in resp["docs"]
+            if d.get("found")
+        }
+    except Exception:
+        for result in results:
+            result["ai_description"] = None
+        return
+
     for result in results:
         osm_id = result.get("osm_id")
         if not osm_id:
             continue
-        try:
-            doc = await es.get(
-                index=INDEX, id=osm_id,
-                _source_includes=["ai_description", "name", "name_en", "name_fr",
-                                  "tags", "centroid", "full_address",
-                                  "addr_housenumber", "addr_street",
-                                  "addr_city", "addr_suburb", "addr_state",
-                                  "addr_postcode", "addr_country",
-                                  "admin_level"],
-            )
-            src = doc["_source"]
-            cached = src.get("ai_description")
-            if cached:
-                result["ai_description"] = cached
-            else:
-                result["ai_description"] = None
-                asyncio.create_task(_generate_and_cache(osm_id, src))
-        except Exception:
+        src = docs_by_id.get(osm_id)
+        if not src:
             result["ai_description"] = None
+            continue
+        cached = src.get("ai_description")
+        if cached:
+            result["ai_description"] = cached
+        else:
+            result["ai_description"] = None
+            asyncio.create_task(_generate_and_cache(osm_id, src))
 
 
 @app.get("/describe")
@@ -1497,8 +1282,8 @@ async def feedback(
                 }
             },
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[geocoder] Failed to update popularity for {osm_id}: {e}", flush=True)
 
     # Update Redis autocomplete score in background
     if redis_pool is not None:

@@ -112,48 +112,57 @@ async def reconnect(nc, js):
 async def subscribe(js, consumer_name):
     """Create a durable pull subscription for a consumer with retry logic.
 
+    Always attempts to attach with the desired ConsumerConfig so that
+    max_deliver / ack_wait are applied even if the consumer already exists
+    (NATS 2.10+ updates mutable fields; earlier versions accept the attach
+    when config is compatible).  Falls back to a config-free attach with a
+    warning if the server rejects the config — this can happen when the
+    consumer exists with immutable fields that differ from the desired config.
+
     After obtaining the subscription object we verify with ``consumer_info``
-    that the server-side consumer really exists.  Earlier versions silently
-    returned a local subscription even when the server-side consumer creation
-    failed (e.g. due to a concurrent stream update), leading to
-    ``ServiceUnavailableError`` on every ``fetch()``.
+    that the server-side consumer really exists.
     """
     max_retries = 5
     for attempt in range(max_retries):
         sub = None
         try:
-            await js.consumer_info(NATS_STREAM, consumer_name)
-            logger.info("Using existing consumer: %s", consumer_name)
-            sub = await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
+            # Always pass ConsumerConfig so the server creates or updates
+            # max_deliver / ack_wait regardless of whether the consumer exists.
+            sub = await js.pull_subscribe(
+                NATS_SUBJECT,
+                durable=consumer_name,
+                stream=NATS_STREAM,
+                config=ConsumerConfig(
+                    max_waiting=10,
+                    max_deliver=-1,   # unlimited redelivery
+                    ack_wait=300,     # 5 min to allow slow bulk inserts
+                ),
+            )
+            logger.info("Attached to consumer %s with desired config", consumer_name)
         except Exception as e:
-            logger.debug("Consumer %s not found (attempt %d/%d): %s", consumer_name, attempt + 1, max_retries, e)
-
-            # Consumer doesn't exist, create it with proper config
+            logger.debug(
+                "ConsumerConfig attach failed for %s (attempt %d/%d): %s — trying simple attach",
+                consumer_name, attempt + 1, max_retries, e,
+            )
+            # Fall back to a config-free attach (works when consumer already
+            # exists with incompatible immutable fields).  Log a warning so the
+            # operator knows the consumer config may be stale.
             try:
-                logger.info("Creating new consumer: %s", consumer_name)
-                sub = await js.pull_subscribe(
-                    NATS_SUBJECT,
-                    durable=consumer_name,
-                    stream=NATS_STREAM,
-                    config=ConsumerConfig(
-                        max_waiting=10,
-                        max_deliver=-1,   # unlimited redelivery
-                        ack_wait=300,     # 5 min to allow slow bulk inserts
-                    ),
+                sub = await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
+                logger.warning(
+                    "Consumer %s: attached without config update — existing consumer "
+                    "config may have stale max_deliver/ack_wait. "
+                    "Delete the consumer to force recreation with new settings.",
+                    consumer_name,
                 )
             except Exception as e2:
-                # Fallback to simple subscription
-                try:
-                    logger.debug("Trying simple subscription for: %s", consumer_name)
-                    sub = await js.pull_subscribe(NATS_SUBJECT, durable=consumer_name, stream=NATS_STREAM)
-                except Exception as e3:
-                    any_transient = is_transient_error(e) or is_transient_error(e2) or is_transient_error(e3)
-                    if any_transient and attempt < max_retries - 1:
-                        logger.warning("Retrying subscription creation (attempt %d/%d)", attempt + 1, max_retries)
-                        await asyncio.sleep(2 * (attempt + 1))
-                        continue
-                    logger.error("Failed to create subscription after %d attempts: %s", max_retries, e3)
-                    raise
+                any_transient = is_transient_error(e) or is_transient_error(e2)
+                if any_transient and attempt < max_retries - 1:
+                    logger.warning("Retrying subscription creation (attempt %d/%d)", attempt + 1, max_retries)
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                logger.error("Failed to create subscription after %d attempts: %s", max_retries, e2)
+                raise
 
         # Verify the consumer actually exists on the server
         if sub is not None:

@@ -197,10 +197,11 @@ async def index_entry(
 
     p = pipeline or r.pipeline(transaction=False)
 
-    # Store metadata for score updates
+    # Store metadata for score updates (offline_rank needed to recompute score from new popularity)
     meta = json.dumps({
         "member": member,
         "score": score,
+        "offline_rank": offline_rank,
         "prefixes": list(all_prefixes),
         "geohash": geohash,
     }, ensure_ascii=False, separators=(",", ":"))
@@ -251,9 +252,9 @@ async def update_score(
     if boost is not None:
         new_score = old_score + math.log1p(boost) * 5.0
     elif new_popularity is not None:
-        # Recompute: we stored the score but need offline_rank
-        # Approximate: add the delta
-        new_score = old_score + math.log1p(new_popularity) * 0.5
+        # Recompute full score from stored offline_rank and the new absolute popularity.
+        offline_rank = meta.get("offline_rank", 0.0)
+        new_score = compute_score(offline_rank, new_popularity)
     else:
         return
 
@@ -359,7 +360,9 @@ async def warm_from_es(
     body: dict[str, Any] = {
         "size": batch_size,
         "query": {"match_all": {}},
-        "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}],
+        # _id tiebreaker ensures every sort position is unique so search_after
+        # can paginate past groups of docs that share offline_rank=0/popularity=0.
+        "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}, {"_id": "asc"}],
         "_source": [
             "osm_id", "name", "name_en", "name_fr", "centroid",
             "admin_level", "offline_rank", "popularity",
