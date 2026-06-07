@@ -179,8 +179,14 @@ MAPPING = {
                 "analyzer": "arabic_name",
             },
             "tags": {"type": "object", "enabled": False},
-            "geom": {"type": "geo_shape"},
-            "centroid": {"type": "geo_point"},
+            # ignore_malformed: a single bad geometry (e.g. a self-intersecting
+            # polygon from an OSM relation) must NOT reject the whole document.
+            # Without this, such docs — often high-importance admin boundaries /
+            # cities — are dropped entirely, vanishing from search and from the
+            # autocomplete warm-up (which then falls back to ES). With it, the
+            # bad shape is skipped and the doc still indexes (name, tags, centroid).
+            "geom": {"type": "geo_shape", "ignore_malformed": True},
+            "centroid": {"type": "geo_point", "ignore_malformed": True},
             "admin_level": {"type": "integer"},
             "area_km2": {"type": "float"},
             "offline_rank": {"type": "float"},
