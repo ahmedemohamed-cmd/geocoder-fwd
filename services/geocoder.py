@@ -659,6 +659,60 @@ def _interpolated_to_result(ia: InterpolatedAddress) -> dict:
     }
 
 
+async def _resolve_street_ids(
+    street: str,
+    lat: float | None,
+    lon: float | None,
+    limit: int = 12,
+) -> list[str]:
+    """Resolve a (possibly cross-language) street name to street-way osm_ids via ES.
+
+    Elasticsearch matches the query across name/name_en/name_fr, so an English
+    "Tahrir Street" resolves to the way whose name_en is "Al Tahrir Street"
+    (Arabic name ``شارع التحرير``).  The returned osm_ids let interpolation gather
+    the street's address points *spatially*, even though those points store the
+    street name only in Arabic.  Restricted to ways/relations (streets are lines)
+    and, when coordinates are given, geo-biased to avoid same-named streets in
+    other cities.
+    """
+    if not street:
+        return []
+    must = [
+        {
+            "multi_match": {
+                "query": street,
+                "fields": [
+                    "name^3", "name.autocomplete",
+                    "name_en^3", "name_en.autocomplete",
+                    "name_fr^3", "name_fr.autocomplete",
+                ],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+            }
+        }
+    ]
+    flt: list[dict] = [{"terms": {"osm_type": ["way", "relation"]}}]
+    if lat is not None and lon is not None:
+        flt.append(
+            {"geo_distance": {"distance": "30km", "centroid": {"lat": lat, "lon": lon}}}
+        )
+    body = {
+        "size": limit,
+        "query": {"bool": {"must": must, "filter": flt}},
+        "_source": ["osm_id"],
+    }
+    try:
+        resp = await es.search(index=INDEX, **body)
+    except Exception as e:
+        print(f"[geocoder] Street resolution failed for {street!r}: {e}")
+        return []
+    return [
+        h["_source"]["osm_id"]
+        for h in resp["hits"]["hits"]
+        if h["_source"].get("osm_id")
+    ]
+
+
 # ── AI place descriptions ────────────────────────────────────────────────
 async def _get_or_generate_description(
     osm_id: str, *, wait: bool = False
@@ -1198,11 +1252,17 @@ async def geocode(
                 for r in results
             )
             if not has_exact:
+                # Resolve the street name to street-way osm_ids first, so
+                # interpolation can gather address points spatially along the
+                # line.  This bridges the language gap (English query → Arabic-
+                # tagged addresses) that an exact street-name match cannot.
+                street_ids = await _resolve_street_ids(req_street, lat, lon)
                 ia = await interpolate_address(
                     pg_pool,
                     req_hn,
                     street=req_street,
                     city=parsed_addr.get("city"),
+                    street_osm_ids=street_ids,
                 )
                 if ia:
                     interpolated_result = _interpolated_to_result(ia)

@@ -141,6 +141,7 @@ async def interpolate_address(
     requested_hn: int,
     street: str,
     city: str | None = None,
+    street_osm_ids: list[str] | None = None,
 ) -> InterpolatedAddress | None:
     """Interpolate an address position from known addresses on the same street.
 
@@ -153,30 +154,46 @@ async def interpolate_address(
         The street name to search on.
     city : str or None
         Optional city filter for disambiguation.
+    street_osm_ids : list[str] or None
+        osm_ids of the street LineString(s) the query resolved to (via ES, which
+        matches across languages — e.g. "Tahrir Street" → "Al Tahrir Street" →
+        ``شارع التحرير``).  When given, addresses are gathered *spatially* along
+        those lines, so an English query still finds Arabic-tagged address points
+        that an exact ``street`` string match would miss.
 
     Returns
     -------
     InterpolatedAddress or None
         The interpolated result, or None if interpolation is not possible.
     """
-    if not street:
+    if not street and not street_osm_ids:
         return None
 
     # ── Step 1: Fetch all known addresses on this street ──────────────────
-    query = """
-        SELECT housenumber, street, city, postcode, country,
-               ST_Y(geom) AS lat, ST_X(geom) AS lon
-        FROM osm_addresses
-        WHERE lower(street) = lower($1)
-    """
-    params: list = [street]
+    # Preferred path: gather addresses spatially along the resolved street
+    # geometry.  This is language-independent — it matches on location, not on
+    # the street-name string — so cross-language queries work.
+    rows = []
+    if street_osm_ids:
+        rows = await _addresses_along_streets(pg_pool, street_osm_ids)
 
-    if city:
-        query += " AND lower(city) = lower($2)"
-        params.append(city)
+    # Fallback: exact street-name match (same-language) when no geometry was
+    # resolved or no address point lies along it.
+    if not rows and street:
+        query = """
+            SELECT housenumber, street, city, postcode, country,
+                   ST_Y(geom) AS lat, ST_X(geom) AS lon
+            FROM osm_addresses
+            WHERE lower(street) = lower($1)
+        """
+        params: list = [street]
 
-    async with pg_pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
+        if city:
+            query += " AND lower(city) = lower($2)"
+            params.append(city)
+
+        async with pg_pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
 
     if not rows:
         return None
@@ -471,6 +488,38 @@ async def reverse_interpolate(
         bracket_low=str(min(a_hn, b_hn)),
         bracket_high=str(max(a_hn, b_hn)),
     )
+
+
+async def _addresses_along_streets(
+    pg_pool, street_osm_ids: list[str], buffer_deg: float = 0.0007
+) -> list:
+    """Fetch address points lying within ``buffer_deg`` of the given street lines.
+
+    ``buffer_deg`` ≈ 0.0007° ≈ ~75 m, wide enough to catch address points tagged
+    a little off the carriageway but tight enough to exclude parallel streets.
+
+    Matching is purely spatial (ST_DWithin against the street LineString), so it
+    is independent of the language the address's ``street`` tag is stored in —
+    this is what lets an English query resolve to Arabic-tagged addresses.
+    """
+    if not street_osm_ids:
+        return []
+    query = """
+        SELECT DISTINCT a.osm_id, a.housenumber, a.street, a.city,
+               a.postcode, a.country,
+               ST_Y(a.geom) AS lat, ST_X(a.geom) AS lon
+        FROM osm_addresses a
+        JOIN osm_geometries g ON g.osm_id = ANY($1::text[])
+        WHERE ST_GeometryType(g.geom) = 'ST_LineString'
+          AND ST_DWithin(a.geom, g.geom, $2)
+    """
+    try:
+        async with pg_pool.acquire() as conn:
+            await conn.execute("SET LOCAL statement_timeout = '3000'")
+            return await conn.fetch(query, list(street_osm_ids), buffer_deg)
+    except Exception as e:
+        logger.debug("Spatial address gather failed: %s", e)
+        return []
 
 
 async def _find_street_geometry(
