@@ -36,6 +36,7 @@ address point stored in the osm_addresses PostGIS table.
 import asyncio
 from contextlib import asynccontextmanager
 import logging
+import re
 import sys
 import time
 import uuid
@@ -131,6 +132,33 @@ def _distance_confidence(distance_m: float) -> float:
     if distance_m < 5000:
         return 0.4
     return 0.2
+
+
+# Generic street-type tokens stripped before comparing street names, so that
+# "Tahrir Street" vs "Tahrir St" still matches on the meaningful token "tahrir".
+_STREET_GENERIC_TOKENS = {
+    "street", "st", "road", "rd", "ave", "avenue", "alley", "lane", "drive", "dr",
+    "square", "sq", "blvd", "boulevard",
+    "شارع", "ش", "طريق", "حارة", "حاره", "زقاق", "ميدان", "كوبري",
+}
+
+
+def _street_token_match(parsed_street: str, addr_street: str) -> bool:
+    """True if every meaningful token of ``parsed_street`` appears in ``addr_street``.
+
+    Used to decide whether a result is genuinely on the requested street, so a
+    housenumber match on the wrong street isn't treated as an exact address hit.
+    Generic street-type words (Street, شارع, …) are ignored.
+    """
+    if not parsed_street:
+        return True
+    addr_low = (addr_street or "").lower()
+    if not addr_low:
+        return False
+    tokens = [t for t in re.split(r"\W+", parsed_street.lower()) if t]
+    core = [t for t in tokens if t not in _STREET_GENERIC_TOKENS] or tokens
+    return all(t in addr_low for t in core)
+
 
 from shared.es_mapping import MAPPING as ES_MAPPING
 
@@ -935,13 +963,12 @@ async def geocode(
 
         if parsed_addr.get("housenumber"):
             hn = parsed_addr["housenumber"].lower()
-            # Exact term match on housenumber (uses lowercase normalizer)
-            should_clauses.append(
-                {"term": {"addr_housenumber": {"value": hn, "boost": 15}}}
-            )
-            # Combined housenumber + street match: strongly boost documents
-            # that match BOTH the street and exact housenumber together
             if parsed_addr.get("street"):
+                # When a street is also given, a bare housenumber is just a digit
+                # shared by thousands of unrelated addresses — only reward it when
+                # the street matches too, so "10 Wrong Street" can't impersonate a
+                # confident "10 Tahrir Street". A street-only match still scores via
+                # the dedicated street clauses above.
                 should_clauses.append(
                     {
                         "bool": {
@@ -952,6 +979,11 @@ async def geocode(
                             "boost": 50,
                         }
                     }
+                )
+            else:
+                # No street context: a bare housenumber term match is all we have.
+                should_clauses.append(
+                    {"term": {"addr_housenumber": {"value": hn, "boost": 15}}}
                 )
 
         if parsed_addr.get("city"):
@@ -1005,27 +1037,34 @@ async def geocode(
     # that gives higher scores to documents whose housenumber is numerically
     # closer to the requested one.  This ensures that when an exact match
     # doesn't exist, the nearest house numbers rank first.
+    #
+    # When a street is also given, scope this to docs on that street via a
+    # function filter — "nearest number" is only meaningful on the right
+    # street, otherwise #10 on any random street gets a proximity bonus.
     if addr_detected and parsed_addr.get("housenumber"):
         try:
             requested_hn = int(parsed_addr["housenumber"])
-            functions.append(
-                {
-                    "script_score": {
-                        "script": {
-                            "source": (
-                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
-                                "try { "
-                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
-                                "  double diff = Math.abs(hn - params.requested_hn); "
-                                "  return 1.0 / (1.0 + diff); "
-                                "} catch (NumberFormatException e) { return 0; }"
-                            ),
-                            "params": {"requested_hn": requested_hn},
-                        }
-                    },
-                    "weight": 5,
+            proximity_fn = {
+                "script_score": {
+                    "script": {
+                        "source": (
+                            "if (doc['addr_housenumber'].size() == 0) { return 0; } "
+                            "try { "
+                            "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
+                            "  double diff = Math.abs(hn - params.requested_hn); "
+                            "  return 1.0 / (1.0 + diff); "
+                            "} catch (NumberFormatException e) { return 0; }"
+                        ),
+                        "params": {"requested_hn": requested_hn},
+                    }
+                },
+                "weight": 5,
+            }
+            if parsed_addr.get("street"):
+                proximity_fn["filter"] = {
+                    "match_phrase": {"addr_street": {"query": parsed_addr["street"], "slop": 1}}
                 }
-            )
+            functions.append(proximity_fn)
         except ValueError:
             pass  # non-numeric housenumber, skip proximity scoring
 
@@ -1115,15 +1154,20 @@ async def geocode(
     if offset == 0 and addr_detected and parsed_addr.get("housenumber"):
         try:
             req_hn = int(parsed_addr["housenumber"])
+            req_street = parsed_addr.get("street", "")
+            # An "exact" hit must match the housenumber AND be on the requested
+            # street — otherwise "10 Some Other Street" would wrongly suppress
+            # interpolation along the street the user actually asked for.
             has_exact = any(
                 r.get("addr_housenumber") == str(req_hn)
+                and _street_token_match(req_street, r.get("addr_street", ""))
                 for r in results
             )
             if not has_exact:
                 ia = await interpolate_address(
                     pg_pool,
                     req_hn,
-                    street=parsed_addr.get("street", ""),
+                    street=req_street,
                     city=parsed_addr.get("city"),
                 )
                 if ia:
@@ -1474,12 +1518,10 @@ async def address_search(
 
     if parsed.get("housenumber"):
         hn_val = parsed["housenumber"].lower()
-        # Housenumber as case-insensitive term (normalizer handles case)
-        should_clauses.append(
-            {"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}}
-        )
-        # Combined housenumber + street match: strongly boost exact address
         if parsed.get("street"):
+            # With a street in play, only reward the housenumber when the street
+            # matches too — a bare "10" on the wrong street must not look like an
+            # exact address match.
             should_clauses.append(
                 {
                     "bool": {
@@ -1490,6 +1532,11 @@ async def address_search(
                         "boost": 50,
                     }
                 }
+            )
+        else:
+            # No street context: a bare housenumber term match is all we have.
+            should_clauses.append(
+                {"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}}
             )
 
     # City as boost (when not already a hard filter)
@@ -1590,27 +1637,32 @@ async def address_search(
         )
 
     # ── Housenumber proximity boost ─────────────────────────────────────
+    # Scoped to the requested street (when given) so "nearest number" only
+    # applies on the right street, not to #10 on any random street.
     if parsed.get("housenumber"):
         try:
             requested_hn = int(parsed["housenumber"])
-            functions.append(
-                {
-                    "script_score": {
-                        "script": {
-                            "source": (
-                                "if (doc['addr_housenumber'].size() == 0) { return 0; } "
-                                "try { "
-                                "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
-                                "  double diff = Math.abs(hn - params.requested_hn); "
-                                "  return 1.0 / (1.0 + diff); "
-                                "} catch (NumberFormatException e) { return 0; }"
-                            ),
-                            "params": {"requested_hn": requested_hn},
-                        }
-                    },
-                    "weight": 5,
+            proximity_fn = {
+                "script_score": {
+                    "script": {
+                        "source": (
+                            "if (doc['addr_housenumber'].size() == 0) { return 0; } "
+                            "try { "
+                            "  long hn = Long.parseLong(doc['addr_housenumber'].value); "
+                            "  double diff = Math.abs(hn - params.requested_hn); "
+                            "  return 1.0 / (1.0 + diff); "
+                            "} catch (NumberFormatException e) { return 0; }"
+                        ),
+                        "params": {"requested_hn": requested_hn},
+                    }
+                },
+                "weight": 5,
+            }
+            if parsed.get("street"):
+                proximity_fn["filter"] = {
+                    "match_phrase": {"addr_street": {"query": parsed["street"], "slop": 1}}
                 }
-            )
+            functions.append(proximity_fn)
         except ValueError:
             pass
 
@@ -1657,15 +1709,19 @@ async def address_search(
     if parsed.get("housenumber"):
         try:
             req_hn = int(parsed["housenumber"])
+            req_street = parsed.get("street", "")
+            # Exact match requires the housenumber AND the requested street, so a
+            # wrong-street number match doesn't suppress interpolation.
             has_exact = any(
                 r.get("addr_housenumber") == str(req_hn)
+                and _street_token_match(req_street, r.get("addr_street", ""))
                 for r in results
             )
             if not has_exact:
                 ia = await interpolate_address(
                     pg_pool,
                     req_hn,
-                    street=parsed.get("street", ""),
+                    street=req_street,
                     city=parsed.get("city") or city,
                 )
                 if ia:

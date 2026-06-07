@@ -151,7 +151,16 @@ GET {{baseUrl}}/geocode?q=alexandria&limit=10&vector=false
 
 ###
 
-### Fuzzy / typo-tolerant search ("kahira" → "Cairo")
+### Fuzzy / typo-tolerant search (Latin typo of an English name)
+GET {{baseUrl}}/geocode?q=alexandira&lat=31.2001&lon=29.9187&limit=5
+
+###
+
+### Cross-script romanization — NOTE: "kahira" (romanized القاهرة) does NOT
+### currently return the city Cairo. Cairo's name_en is the exonym "Cairo"
+### and its name is Arabic script, so a Latin romanization has nothing to
+### match except buried alt-names in tags_text. Needs a transliteration /
+### dedicated alt-name field to work (see backlog).
 GET {{baseUrl}}/geocode?q=kahira&lat=30.0444&lon=31.2357&limit=5
 
 ###
