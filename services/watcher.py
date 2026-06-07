@@ -12,10 +12,8 @@ import time
 
 import osmium
 import redis
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
-from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT
+from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
 from shared import nats_client
 
 SENTINEL = object()
@@ -868,57 +866,51 @@ async def publish_file(filepath: str):
 
 
 # ---------------------------------------------------------------------------
-# Filesystem watcher (detects new PBF files dropped into data/)
+# Directory scan (picks up new PBF files dropped into data/)
 # ---------------------------------------------------------------------------
-class PBFHandler(FileSystemEventHandler):
-    def __init__(self, loop: asyncio.AbstractEventLoop):
-        self.loop = loop
-        self.processed: set[str] = set()
-        self.processing: set[str] = set()  # Track files currently being processed
+async def _scan_and_process() -> int:
+    """Process any not-yet-processed *.osm.pbf files in DATA_DIR once.
 
-    def on_created(self, event):
-        if event.src_path.endswith(".osm.pbf") and event.src_path not in self.processed and event.src_path not in self.processing:
-            self.processing.add(event.src_path)
-            self.processed.add(event.src_path)
-            asyncio.run_coroutine_threadsafe(self._process_with_cleanup(event.src_path), self.loop)
-    
-    async def _process_with_cleanup(self, filepath: str):
-        try:
-            await publish_file(filepath)
-        finally:
-            self.processing.discard(filepath)
-
-
-async def run():
-    print("[watcher] Starting watcher service...")
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-    # Use lock file to prevent reprocessing
-    lock_file = os.path.join(DATA_DIR, ".watcher.lock")
-    
-    # process existing files first
+    Returns the number of files successfully processed this pass.
+    """
     existing_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf")))
-    print(f"[watcher] Found {len(existing_files)} PBF files to process")
-    for f in existing_files:
-        # Create lock file specific to this PBF file
-        file_lock = f"{f}.processed"
-        if os.path.exists(file_lock):
-            print(f"[watcher] Skipping {os.path.basename(f)} (already processed)")
-            continue
-        
+    pending = [f for f in existing_files if not os.path.exists(f"{f}.processed")]
+    if not pending:
+        return 0
+
+    print(f"[watcher] Found {len(pending)} new PBF file(s) to process")
+    processed = 0
+    for f in pending:
         try:
             await publish_file(f)
-            # Mark as processed
-            with open(file_lock, 'w') as lock:
+            with open(f"{f}.processed", "w") as lock:
                 lock.write(f"processed: {f}")
             print(f"[watcher] Completed {os.path.basename(f)}")
+            processed += 1
         except Exception as e:
             print(f"[watcher] Error processing {os.path.basename(f)}: {e}")
             continue
+    return processed
 
-    print(f"[watcher] Completed processing all existing files. Exiting.")
 
-    # Exit after processing (remove restart policy from docker-compose if needed)
+async def run():
+    """Continuously watch DATA_DIR, importing new *.osm.pbf files as they appear.
+
+    Polls the directory rather than using inotify/watchdog: DATA_DIR is a Docker
+    bind mount and host-side file drops don't reliably emit inotify events into
+    the container.
+    """
+    print("[watcher] Starting watcher service...")
+    os.makedirs(DATA_DIR, exist_ok=True)
+    print(f"[watcher] Watching {DATA_DIR} for *.osm.pbf (re-scan every {WATCH_POLL_INTERVAL}s)")
+
+    first = True
+    while True:
+        n = await _scan_and_process()
+        if first and n == 0:
+            print(f"[watcher] No new PBF files in {DATA_DIR} yet; will keep watching.")
+        first = False
+        await asyncio.sleep(WATCH_POLL_INTERVAL)
 
 
 if __name__ == "__main__":

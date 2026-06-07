@@ -32,7 +32,7 @@ import json
 import os
 import time
 
-from shared.config import OA_DATA_DIR, NATS_SUBJECT
+from shared.config import OA_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
 from shared.progress import ProgressTracker
 
@@ -391,43 +391,29 @@ async def _publish_batch(
 # Entry point
 # ---------------------------------------------------------------------------
 
-async def run():
-    """Scan OA_DATA_DIR for CSV/GeoJSON files and publish them to NATS."""
-    print("[oa-watcher] Starting OpenAddresses watcher service ...", flush=True)
-    os.makedirs(OA_DATA_DIR, exist_ok=True)
+async def _scan_and_process(js) -> int:
+    """Process any not-yet-processed CSV/GeoJSON files in OA_DATA_DIR once.
 
+    Returns the number of files successfully processed this pass.
+    """
     # Scan recursively — OA archives often unzip into nested dirs
     # (e.g. collection-ca/ca/on/york-addresses-county.geojson)
-    csv_files = sorted(glob.glob(os.path.join(OA_DATA_DIR, "**", "*.csv"), recursive=True))
-    geojson_files = sorted(
+    csv_files = glob.glob(os.path.join(OA_DATA_DIR, "**", "*.csv"), recursive=True)
+    geojson_files = (
         glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson"), recursive=True)
         + glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson.gz"), recursive=True)
     )
-    # Filter out .meta files that OpenAddresses ships alongside data files
-    geojson_files = [f for f in geojson_files if not f.endswith(".meta")]
+    all_files = sorted(f for f in csv_files + geojson_files if not f.endswith(".meta"))
 
-    all_files = csv_files + geojson_files
-    if not all_files:
-        print(
-            f"[oa-watcher] No CSV or GeoJSON files found in {OA_DATA_DIR} (scanned recursively). "
-            f"Place OpenAddresses files there and restart.",
-            flush=True,
-        )
-        return
+    # Only act on files we haven't already imported (skip processed quietly).
+    pending = [f for f in all_files if not os.path.exists(f"{f}.processed")]
+    if not pending:
+        return 0
 
-    print(f"[oa-watcher] Found {len(csv_files)} CSV, {len(geojson_files)} GeoJSON files (recursive scan)", flush=True)
-
-    nc, js = await nats_client.connect()
-
-    total_published = 0
-    for filepath in all_files:
-        # Show path relative to OA_DATA_DIR for readability
+    print(f"[oa-watcher] Found {len(pending)} new file(s) to process", flush=True)
+    processed = 0
+    for filepath in pending:
         rel_path = os.path.relpath(filepath, OA_DATA_DIR)
-        lock_file = f"{filepath}.processed"
-        if os.path.exists(lock_file):
-            print(f"[oa-watcher] Skipping {rel_path} (already processed)", flush=True)
-            continue
-
         try:
             if filepath.endswith(".csv"):
                 count = await publish_csv(filepath, js)
@@ -436,21 +422,38 @@ async def run():
             else:
                 continue
 
-            total_published += count
-
             # Only mark as processed if we didn't abort early
             if count >= 0:
-                with open(lock_file, "w") as lf:
+                with open(f"{filepath}.processed", "w") as lf:
                     lf.write(f"processed: {filepath}\ncount: {count}\n")
                 print(f"[oa-watcher] Completed {rel_path}", flush=True)
-
+                processed += 1
         except Exception as e:
             print(f"[oa-watcher] Error processing {rel_path}: {e}", flush=True)
             import traceback
             traceback.print_exc()
 
-    print(f"[oa-watcher] All files processed. Total published: {total_published}", flush=True)
-    await nc.close()
+    return processed
+
+
+async def run():
+    """Continuously watch OA_DATA_DIR, importing new CSV/GeoJSON files as they appear."""
+    print("[oa-watcher] Starting OpenAddresses watcher service ...", flush=True)
+    os.makedirs(OA_DATA_DIR, exist_ok=True)
+
+    nc, js = await nats_client.connect()
+    print(f"[oa-watcher] Watching {OA_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)", flush=True)
+
+    try:
+        first = True
+        while True:
+            n = await _scan_and_process(js)
+            if first and n == 0:
+                print(f"[oa-watcher] No new files in {OA_DATA_DIR} yet; will keep watching.", flush=True)
+            first = False
+            await asyncio.sleep(WATCH_POLL_INTERVAL)
+    finally:
+        await nc.close()
 
 
 if __name__ == "__main__":

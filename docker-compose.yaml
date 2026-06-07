@@ -223,7 +223,7 @@ services:
     depends_on:
       nats:
         condition: service_started
-    restart: "no"
+    restart: unless-stopped
 
   gn-watcher:
     build: .
@@ -238,7 +238,7 @@ services:
     depends_on:
       nats:
         condition: service_started
-    restart: "no"
+    restart: unless-stopped
 
   downloader:
     build: .

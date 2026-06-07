@@ -39,6 +39,12 @@ OA_DATA_DIR = os.getenv("OA_DATA_DIR", str(Path(DATA_DIR) / "openaddresses"))
 # GeoNames data directory (TSV dump files)
 GN_DATA_DIR = os.getenv("GN_DATA_DIR", str(Path(DATA_DIR) / "geonames"))
 
+# How often the file-importing services (watcher, oa-watcher, gn-watcher)
+# re-scan their data dirs for newly-added files, in seconds. They poll rather
+# than rely on inotify/watchdog because the data dirs are Docker bind mounts and
+# host-side file drops don't reliably emit inotify events into the container.
+WATCH_POLL_INTERVAL = _safe_int("WATCH_POLL_INTERVAL", 30)
+
 # NATS
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_STREAM = "OSM"

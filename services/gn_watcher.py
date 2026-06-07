@@ -39,7 +39,7 @@ import os
 import time
 import zipfile
 
-from shared.config import GN_DATA_DIR, NATS_SUBJECT
+from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
 from shared.progress import ProgressTracker
 
@@ -354,17 +354,16 @@ async def _publish_batch(
 # Entry point
 # ---------------------------------------------------------------------------
 
-async def run():
-    """Scan GN_DATA_DIR for GeoNames files and publish them to NATS."""
-    print("[gn-watcher] Starting GeoNames watcher service ...", flush=True)
-    os.makedirs(GN_DATA_DIR, exist_ok=True)
+async def _scan_and_process(js) -> int:
+    """Extract any new zips and process not-yet-processed GeoNames TSVs once.
 
-    # Auto-extract any zip files first
+    Returns the number of files successfully processed this pass.
+    """
+    # Auto-extract any new zip files first (idempotent — uses .extracted markers)
     _extract_zips(GN_DATA_DIR)
 
     # Find GeoNames TSV files (*.txt, excluding readme and metadata)
     txt_files = sorted(glob.glob(os.path.join(GN_DATA_DIR, "*.txt")))
-    # Filter out non-data files
     txt_files = [
         f for f in txt_files
         if not os.path.basename(f).lower().startswith("readme")
@@ -372,47 +371,49 @@ async def run():
         and not os.path.basename(f).lower().endswith("codes.txt")
     ]
 
-    if not txt_files:
-        print(
-            f"[gn-watcher] No GeoNames .txt files found in {GN_DATA_DIR}. "
-            f"Download allCountries.zip or a country file (e.g. CA.zip) from "
-            f"https://download.geonames.org/export/dump/ and place it there.",
-            flush=True,
-        )
-        return
+    pending = [f for f in txt_files if not os.path.exists(f"{f}.processed")]
+    if not pending:
+        return 0
 
-    print(f"[gn-watcher] Found {len(txt_files)} data files", flush=True)
-    for f in txt_files:
-        print(f"[gn-watcher]   {os.path.basename(f)}", flush=True)
-
-    nc, js = await nats_client.connect()
-
-    total_published = 0
-    for filepath in txt_files:
-        lock_file = f"{filepath}.processed"
-        if os.path.exists(lock_file):
-            print(f"[gn-watcher] Skipping {os.path.basename(filepath)} (already processed)", flush=True)
-            continue
-
+    print(f"[gn-watcher] Found {len(pending)} new data file(s) to process", flush=True)
+    processed = 0
+    for filepath in pending:
         try:
             count = await publish_tsv(filepath, js)
-            total_published += max(count, 0)
-
             # Only mark as processed if we didn't abort early
             if count >= 0:
-                with open(lock_file, "w") as lf:
+                with open(f"{filepath}.processed", "w") as lf:
                     lf.write(f"processed: {filepath}\ncount: {count}\n")
                 print(f"[gn-watcher] Completed {os.path.basename(filepath)}", flush=True)
+                processed += 1
             else:
-                print(f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next run", flush=True)
-
+                print(f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next scan", flush=True)
         except Exception as e:
             print(f"[gn-watcher] Error processing {os.path.basename(filepath)}: {e}", flush=True)
             import traceback
             traceback.print_exc()
 
-    print(f"[gn-watcher] All files processed. Total published: {total_published}", flush=True)
-    await nc.close()
+    return processed
+
+
+async def run():
+    """Continuously watch GN_DATA_DIR, importing new GeoNames files as they appear."""
+    print("[gn-watcher] Starting GeoNames watcher service ...", flush=True)
+    os.makedirs(GN_DATA_DIR, exist_ok=True)
+
+    nc, js = await nats_client.connect()
+    print(f"[gn-watcher] Watching {GN_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)", flush=True)
+
+    try:
+        first = True
+        while True:
+            n = await _scan_and_process(js)
+            if first and n == 0:
+                print(f"[gn-watcher] No new files in {GN_DATA_DIR} yet; will keep watching.", flush=True)
+            first = False
+            await asyncio.sleep(WATCH_POLL_INTERVAL)
+    finally:
+        await nc.close()
 
 
 if __name__ == "__main__":
