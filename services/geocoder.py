@@ -117,6 +117,12 @@ from shared.address import (
 
 INDEX = "osm_places"
 
+# Optimized-effort tuning. The rescore window bounds how many top hits the
+# (expensive) function_score is applied to; the timeout bounds the worst-case
+# query so a single pathological request can't pin an ES search thread.
+_RESCORE_WINDOW = 200
+_OPTIMIZED_TIMEOUT = "800ms"
+
 
 def _normalize_confidence(score: float, max_score: float) -> float:
     """Normalize an Elasticsearch score to a 0.0-1.0 confidence value.
@@ -882,6 +888,63 @@ async def describe(
     return {"osm_id": osm_id, **desc}
 
 
+# ── text recall clauses (effort-dependent) ───────────────────────────────
+def _text_should_full(q: str) -> list[dict]:
+    """High-effort text recall.
+
+    Broad fuzzy across all searchable fields (incl. edge-ngram autocomplete and
+    tags_text) plus a closeness gradient — exact (0) > near-exact (≤1) > broad
+    fuzzy — so typo / transliteration queries still rank the near-exact match
+    first.  Lucene fuzzy is constant-score, so edit-distance sensitivity is
+    recovered by stacking separate clauses per fuzziness level.  This matches
+    the most candidates, and is the costlier path for ES to score.
+    """
+    return [
+        # broad fuzzy recall (no boost — guarantees recall; ordering comes below)
+        {"multi_match": {"query": q, "fields": [
+            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
+            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
+            "type": "best_fields", "fuzziness": "AUTO"}},
+        # near-exact boost (edit distance ≤1, first char must match)
+        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
+            "type": "best_fields", "fuzziness": 1, "prefix_length": 1, "boost": 10}},
+        # phrase boost: contiguous phrase
+        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
+            "type": "phrase", "boost": 10}},
+        # exact all-tokens boost: every query word appears verbatim
+        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
+            "type": "best_fields", "operator": "and", "boost": 15}},
+        # fuzzy all-tokens boost: keeps a precision boost for misspelled multiword
+        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
+            "type": "best_fields", "operator": "and", "fuzziness": "AUTO",
+            "prefix_length": 1, "boost": 8}},
+    ]
+
+
+def _text_should_lean(q: str) -> list[dict]:
+    """Optimized-effort text recall.
+
+    Non-fuzzy across all fields (cheap), with fuzzy confined to the analyzed
+    name fields under a tighter automaton (prefix_length 2, capped expansions).
+    Dropping fuzzy from the edge-ngram autocomplete sub-fields and tags_text is
+    what keeps the match set small — fuzzy expansion over those is the main
+    driver of the huge candidate sets that stall the search thread pool.
+    """
+    return [
+        {"multi_match": {"query": q, "fields": [
+            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
+            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
+            "type": "best_fields"}},
+        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
+            "type": "best_fields", "fuzziness": "AUTO", "prefix_length": 2,
+            "max_expansions": 30, "boost": 4}},
+        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
+            "type": "phrase", "boost": 10}},
+        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
+            "type": "best_fields", "operator": "and", "boost": 15}},
+    ]
+
+
 # ── geocode (Elasticsearch) ──────────────────────────────────────────────
 @app.get("/geocode")
 async def geocode(
@@ -894,6 +957,14 @@ async def geocode(
     vector: bool = Query(True, description="Enable semantic vector search"),
     ai: bool = Query(True, description="Enable AI-assisted search"),
     describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    effort: str = Query(
+        "high",
+        pattern="^(high|optimized)$",
+        description="Scoring effort: 'high' (full fuzzy recall + per-doc "
+                    "function_score over all matches) or 'optimized' (lean "
+                    "fuzzy + rescore over top hits + bounded timeout, far "
+                    "cheaper for ES under load).",
+    ),
 ):
     """Full geocoding search.
 
@@ -908,6 +979,7 @@ async def geocode(
     """
     use_vectors = vector and ENABLE_VECTORS
     use_ai = ai and ENABLE_AI
+    optimized = effort == "optimized"
 
     loop = asyncio.get_running_loop()
 
@@ -982,79 +1054,14 @@ async def geocode(
     if addr_detected:
         parsed_addr = parse_address_query(q)
 
-    # text query – multi_match across name/name_en/name_fr using best_fields so that
-    # matching the query in ANY field yields the same score (no double-counting
-    # for places that happen to have the query language in multiple fields).
-    # Layered text matching with a closeness gradient so that, for typo /
-    # transliteration queries, a near-exact match (e.g. "makaram"→"makram",
-    # 1 edit) clearly outranks loose fuzzy noise (2 edits).  Lucene fuzzy is
-    # constant-score, so we recover edit-distance sensitivity by stacking
-    # separate clauses per fuzziness level:
-    #   exact (0)  >  near-exact (≤1)  >  broad fuzzy (≤AUTO/2 recall)
-    should_clauses: list[dict] = [
-        # broad fuzzy recall across all searchable fields (including autocomplete).
-        # No boost — this only guarantees recall; ordering comes from the
-        # tighter clauses below.
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "name^5", "name.autocomplete^2",
-                    "name_en^5", "name_en.autocomplete^2",
-                    "name_fr^5", "name_fr.autocomplete^2",
-                    "tags_text",
-                ],
-                "type": "best_fields",
-                "fuzziness": "AUTO",
-            }
-        },
-        # near-exact boost (edit distance ≤1, first char must match): rewards
-        # genuinely close matches over loose fuzzy hits that share no real token.
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name^5", "name_en^5", "name_fr^5"],
-                "type": "best_fields",
-                "fuzziness": 1,
-                "prefix_length": 1,
-                "boost": 10,
-            }
-        },
-        # phrase boost: contiguous phrase (best of name, name_en, or name_fr)
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name", "name_en", "name_fr"],
-                "type": "phrase",
-                "boost": 10,
-            }
-        },
-        # exact all-tokens boost: every query word appears verbatim (distance 0)
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name", "name_en", "name_fr"],
-                "type": "best_fields",
-                "operator": "and",
-                "boost": 15,
-            }
-        },
-        # fuzzy all-tokens boost: every query word fuzzy-matches.  Unlike the
-        # exact clause above this still fires for misspelled / transliterated
-        # multi-word queries, so true matches keep a precision boost instead of
-        # collapsing onto the unboosted recall clause.
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name^5", "name_en^5", "name_fr^5"],
-                "type": "best_fields",
-                "operator": "and",
-                "fuzziness": "AUTO",
-                "prefix_length": 1,
-                "boost": 8,
-            }
-        },
-    ]
+    # Base text recall clauses. 'high' effort casts a wide fuzzy net across all
+    # fields with a closeness gradient (exact > near-exact > broad fuzzy);
+    # 'optimized' uses a leaner set that keeps the match set — and thus the
+    # per-doc scoring cost — small.  Address-specific clauses are appended to
+    # either base below.
+    should_clauses: list[dict] = (
+        _text_should_lean(q_norm) if optimized else _text_should_full(q_norm)
+    )
 
     # ── Address-specific search layers (active when address detected) ─────
     if addr_detected:
@@ -1219,18 +1226,37 @@ async def geocode(
         except ValueError:
             pass  # non-numeric housenumber, skip proximity scoring
 
-    body: dict = {
-        "size": limit,
-        "from": offset,
-        "query": {
-            "function_score": {
-                "query": text_query,
-                "functions": functions,
-                "score_mode": "sum",
-                "boost_mode": "multiply",
-            }
-        },
+    function_score_query = {
+        "function_score": {
+            "query": text_query,
+            "functions": functions,
+            "score_mode": "sum",
+            "boost_mode": "multiply",
+        }
     }
+
+    body: dict = {"size": limit, "from": offset}
+    if optimized:
+        # Two-phase scoring: phase 1 retrieves on the cheap text bool; phase 2
+        # applies the (expensive) function_score only to the top window rather
+        # than to every matching doc — the main lever against search-pool
+        # stalls. The window is widened to cover the requested page so deep
+        # offsets still get scored.  Exact hit counting is skipped (it forces a
+        # full match-set traversal) and a timeout bounds the worst case so one
+        # pathological query can't pin a search thread.
+        body["query"] = text_query
+        body["rescore"] = {
+            "window_size": max(_RESCORE_WINDOW, offset + limit),
+            "query": {
+                "rescore_query": function_score_query,
+                "query_weight": 0,
+                "rescore_query_weight": 1,
+            },
+        }
+        body["track_total_hits"] = False
+        body["timeout"] = _OPTIMIZED_TIMEOUT
+    else:
+        body["query"] = function_score_query
 
     # optional vector KNN (when enabled)
     if use_vectors:
@@ -1246,7 +1272,9 @@ async def geocode(
 
     # Build results; schedule background enrichment for any uncached address.
     max_score = resp["hits"].get("max_score") or 0
-    total_hits = resp["hits"].get("total", {}).get("value", 0)
+    # In optimized mode track_total_hits=false, so ES omits hits.total entirely.
+    total_obj = resp["hits"].get("total")
+    total_hits = total_obj.get("value") if total_obj else None
     results = []
 
     for h in resp["hits"]["hits"]:
@@ -1356,6 +1384,7 @@ async def geocode(
         "features": {
             "vectors_enabled": use_vectors,
             "ai_enabled": use_ai,
+            "effort": effort,
         },
         # Address decomposition: shows what the system understood from the query
         "address_detected": addr_detected,
@@ -1366,8 +1395,12 @@ async def geocode(
         "pagination": {
             "limit": limit,
             "offset": offset,
+            # total is null in optimized mode (exact counting disabled); fall
+            # back to "a full page came back" to decide has_more.
             "total": total_hits,
-            "has_more": offset + len(resp["hits"]["hits"]) < total_hits,
+            "has_more": (offset + len(resp["hits"]["hits"]) < total_hits)
+            if total_hits is not None
+            else len(resp["hits"]["hits"]) >= limit,
         },
         "results": results,
     }

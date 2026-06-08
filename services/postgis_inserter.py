@@ -26,6 +26,7 @@ osm_addresses
 
 import asyncio
 import json
+import random
 
 import asyncpg
 import nats.errors
@@ -92,6 +93,30 @@ def _geojson_to_wkt(geom: dict, osm_id: str = "") -> str | None:
     except Exception as e:
         print(f"[postgis-inserter] Error converting geometry for {osm_id}: {e}")
         return None
+
+
+async def _executemany_with_retry(pool, sql, data, label, worker_id):
+    """Run an upsert executemany, retrying on deadlock/serialization aborts.
+
+    Concurrent workers upserting overlapping osm_ids can still race even with
+    sorted lock ordering (e.g. a row touched by the address table vs. the geom
+    table, or transient lock-manager ordering). Postgres resolves a deadlock by
+    aborting ONE transaction with DeadlockDetectedError; the correct response is
+    simply to retry it. Backoff is short with jitter to de-synchronise workers.
+    """
+    for attempt in range(5):
+        try:
+            async with pool.acquire() as conn:
+                await conn.executemany(sql, data)
+            return
+        except (asyncpg.exceptions.DeadlockDetectedError,
+                asyncpg.exceptions.SerializationError) as e:
+            if attempt == 4:
+                print(f"[postgis-inserter] Worker {worker_id}: {label} failed after retries: {e}", flush=True)
+                raise
+            delay = 0.1 * (2 ** attempt) + random.uniform(0, 0.1)
+            print(f"[postgis-inserter] Worker {worker_id}: {label} deadlock, retrying in {delay:.2f}s (attempt {attempt + 1}/5)", flush=True)
+            await asyncio.sleep(delay)
 
 
 async def ensure_table(pool: asyncpg.Pool):
@@ -295,40 +320,47 @@ async def run():
                         cwkt,
                     ))
 
+            # Deduplicate (keep last) and sort by osm_id so EVERY worker acquires
+            # row locks in the same order. A consistent global lock ordering is
+            # what prevents the cross-batch upsert deadlocks (worker A locks X→Y
+            # while worker B locks Y→X). Dedup also avoids self-contention from a
+            # batch upserting the same osm_id twice.
             if rows:
-                async with pool.acquire() as conn:
-                    await conn.executemany(
-                        f"""
-                        INSERT INTO {TABLE} (osm_id, osm_type, geom)
-                        VALUES ($1, $2, ST_GeomFromText($3, 4326))
-                        ON CONFLICT (osm_id) DO UPDATE SET
-                            osm_type = EXCLUDED.osm_type,
-                            geom     = EXCLUDED.geom
-                        """,
-                        rows,
-                    )
+                rows = [r for _, r in sorted({r[0]: r for r in rows}.items())]
+                await _executemany_with_retry(
+                    pool,
+                    f"""
+                    INSERT INTO {TABLE} (osm_id, osm_type, geom)
+                    VALUES ($1, $2, ST_GeomFromText($3, 4326))
+                    ON CONFLICT (osm_id) DO UPDATE SET
+                        osm_type = EXCLUDED.osm_type,
+                        geom     = EXCLUDED.geom
+                    """,
+                    rows, "geom upsert", worker_id,
+                )
 
             if addr_rows:
-                async with pool.acquire() as conn:
-                    await conn.executemany(
-                        f"""
-                        INSERT INTO {ADDRESS_TABLE}
-                            (osm_id, osm_type, housenumber, street, city,
-                             postcode, country, full_address, geom)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-                                ST_GeomFromText($9, 4326))
-                        ON CONFLICT (osm_id) DO UPDATE SET
-                            osm_type     = EXCLUDED.osm_type,
-                            housenumber  = EXCLUDED.housenumber,
-                            street       = EXCLUDED.street,
-                            city         = EXCLUDED.city,
-                            postcode     = EXCLUDED.postcode,
-                            country      = EXCLUDED.country,
-                            full_address = EXCLUDED.full_address,
-                            geom         = EXCLUDED.geom
-                        """,
-                        addr_rows,
-                    )
+                addr_rows = [r for _, r in sorted({r[0]: r for r in addr_rows}.items())]
+                await _executemany_with_retry(
+                    pool,
+                    f"""
+                    INSERT INTO {ADDRESS_TABLE}
+                        (osm_id, osm_type, housenumber, street, city,
+                         postcode, country, full_address, geom)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+                            ST_GeomFromText($9, 4326))
+                    ON CONFLICT (osm_id) DO UPDATE SET
+                        osm_type     = EXCLUDED.osm_type,
+                        housenumber  = EXCLUDED.housenumber,
+                        street       = EXCLUDED.street,
+                        city         = EXCLUDED.city,
+                        postcode     = EXCLUDED.postcode,
+                        country      = EXCLUDED.country,
+                        full_address = EXCLUDED.full_address,
+                        geom         = EXCLUDED.geom
+                    """,
+                    addr_rows, "address upsert", worker_id,
+                )
 
             # Ack messages only after successful processing
             for msg in msgs:

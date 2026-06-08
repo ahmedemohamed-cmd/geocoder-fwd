@@ -34,9 +34,9 @@
 @baseUrl = http://localhost:8000
 
 # Valhalla routing engine (turn-by-turn directions, matrices, isochrones).
-#@routeUrl = http://84.8.102.106:8001
-@routeUrl = http://localhost:8001
-
+@routeUrl = http://84.8.102.106:8001
+#@routeUrl = http://localhost:8001
+#
 # ============================================================================
 # /features  –  Feature flags
 # ============================================================================
@@ -143,6 +143,13 @@ GET {{baseUrl}}/describe?osm_id=w888001
 #   vector=true|false  – enable/disable semantic vector re-ranking
 #   ai=true|false      – enable/disable AI-assisted expansion
 #   describe=true|false – include AI descriptions (cached where available)
+#   effort=high|optimized – scoring effort (default high). 'high' = full fuzzy
+#                        recall + per-doc function_score over all matches.
+#                        'optimized' = lean fuzzy + function_score applied via
+#                        rescore over the top hits only + track_total_hits off
+#                        + an 800ms timeout; far cheaper for ES under load
+#                        (use when geocode traffic is stalling Elasticsearch).
+#                        In optimized mode pagination.total is null.
 #
 # The response carries a `pagination` block: { limit, offset, total, has_more }.
 # To scroll, re-request with offset += limit until has_more is false.
@@ -228,6 +235,26 @@ GET {{baseUrl}}/geocode?q=makaram&limit=10&offset=0
 
 ### Scroll / paginate – page 2 (next 10). Re-request with offset += limit.
 GET {{baseUrl}}/geocode?q=makaram&limit=10&offset=10
+
+###
+
+### Effort: high (default) – full fuzzy recall, function_score over all matches.
+### features.effort echoes the mode; pagination.total carries the exact count.
+GET {{baseUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10&effort=high
+
+###
+
+### Effort: optimized – lean fuzzy + rescore over top hits + bounded timeout.
+### Much lighter on ES under load. Same top results in the common case;
+### pagination.total is null (exact counting disabled). Compare against the
+### high-effort request above to see the ranking is unchanged for typical queries.
+GET {{baseUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10&effort=optimized
+
+###
+
+### Optimized effort on a typo query – fuzzy still resolves the near-exact match,
+### just with a tighter automaton (prefix_length 2, capped expansions).
+GET {{baseUrl}}/geocode?q=alexandira&lat=31.2001&lon=29.9187&limit=5&effort=optimized
 
 ###
 
