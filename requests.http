@@ -783,7 +783,7 @@ Content-Type: application/json
 
 {
   "locations": [
-    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0082, "lon": 31.5074 },
     { "lat": 30.0479, "lon": 31.2355 }
   ],
   "costing": "pedestrian",

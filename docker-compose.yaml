@@ -303,8 +303,8 @@ services:
     restart: unless-stopped
 
   # traffic-writer: writes the Redis per-edge speeds into Valhalla's
-  # memory-mapped traffic.tar, in place. Shares the valhalla-tiles volume with
-  # the valhalla container so the running router sees updates with no restart.
+  # memory-mapped traffic.tar, in place. Shares Valhalla's /custom_files (the
+  # ./data bind) so the running router sees updates with no restart.
   traffic-writer:
     build: .
     command: python -u -m services.traffic_writer
