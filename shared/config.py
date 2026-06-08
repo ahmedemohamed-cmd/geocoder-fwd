@@ -86,6 +86,57 @@ GOOGLE_MAPS_GEOCODE_URL = os.getenv(
 # ENABLE_DEEP gates the /deep/* endpoints; they also require an API key.
 ENABLE_DEEP = _safe_bool("ENABLE_DEEP", True)
 
+# ── Live traffic ───────────────────────────────────────────────────────────
+# Crowdsourced GPS probes from app users (and an optional external flow API) are
+# aggregated into per-edge speeds and written into Valhalla's memory-mapped
+# traffic.tar. ENABLE_TRAFFIC gates the probe-ingestion endpoints on the geocoder.
+ENABLE_TRAFFIC = _safe_bool("ENABLE_TRAFFIC", False)
+
+# Valhalla routing engine (used for map-matching probes -> edges and for /locate).
+VALHALLA_URL = os.getenv("VALHALLA_URL", "http://valhalla:8002")
+
+# Dedicated NATS stream for the high-volume, disposable probe firehose. Kept
+# separate from the OSM stream (different retention) so probe load can't evict
+# OSM ingest messages.
+TRAFFIC_STREAM = "TRAFFIC"
+TRAFFIC_SUBJECT = "traffic.probes"
+
+# Path to Valhalla's traffic extract, as seen by the traffic-writer container
+# (shares the valhalla-tiles volume mounted at /custom_files).
+TRAFFIC_EXTRACT_PATH = os.getenv("TRAFFIC_EXTRACT_PATH", "/custom_files/traffic.tar")
+
+# Writer cadence and aggregation tuning.
+TRAFFIC_WRITE_INTERVAL = _safe_int("TRAFFIC_WRITE_INTERVAL", 30)   # seconds between flushes
+TRAFFIC_EDGE_TTL = _safe_int("TRAFFIC_EDGE_TTL", 600)             # secs before an edge speed expires
+TRAFFIC_MIN_SAMPLES = _safe_int("TRAFFIC_MIN_SAMPLES", 3)         # min probes before a speed is trusted
+
+def _safe_float(env_var: str, default: float) -> float:
+    raw = os.getenv(env_var, str(default))
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid float for %s=%r, using default %s", env_var, raw, default)
+        return default
+
+TRAFFIC_EWMA_ALPHA = _safe_float("TRAFFIC_EWMA_ALPHA", 0.3)       # smoothing for per-edge speed
+TRAFFIC_MAX_TRACE = _safe_int("TRAFFIC_MAX_TRACE", 50)           # max probes per map-match call
+
+# Optional external flow provider (gap-filler / cold-start booster). "none"
+# disables it; "tomtom" needs TOMTOM_API_KEY. Probe data always takes priority.
+TRAFFIC_PROVIDER = os.getenv("TRAFFIC_PROVIDER", "none")
+TRAFFIC_PROVIDER_INTERVAL = _safe_int("TRAFFIC_PROVIDER_INTERVAL", 120)  # secs between provider polls
+TRAFFIC_PROVIDER_WEIGHT = _safe_float("TRAFFIC_PROVIDER_WEIGHT", 0.5)    # confidence vs. fresh probes
+# Bounding box the provider polls: "min_lat,min_lon,max_lat,max_lon" (default: Greater Cairo).
+TRAFFIC_PROVIDER_BBOX = os.getenv("TRAFFIC_PROVIDER_BBOX", "29.7,31.0,30.2,31.5")
+# Provider sampling grid: N×N query points across the bbox per poll. Keep small
+# to stay within free-tier rate limits (8×8 = 64 calls/poll by default).
+TRAFFIC_PROVIDER_GRID = _safe_int("TRAFFIC_PROVIDER_GRID", 8)
+TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
+TOMTOM_FLOW_URL = os.getenv(
+    "TOMTOM_FLOW_URL",
+    "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json",
+)
+
 # Performance tuning
 # When vectors are enabled, use smaller batch sizes to avoid timeouts
 _BATCH_SIZE = _safe_int("BATCH_SIZE", 500)

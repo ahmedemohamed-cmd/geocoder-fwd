@@ -12,6 +12,8 @@ Services:
     es-inserter       NATS -> Elasticsearch
     postgis-inserter  NATS -> PostGIS
     geocoder          FastAPI geocoding HTTP server (includes /insert endpoint)
+    traffic-aggregator  Map-match GPS probes -> per-edge speeds in Redis
+    traffic-writer      Write Redis per-edge speeds into Valhalla traffic.tar
     cleaner           Wipe all indexed data (ES, PostGIS, NATS)
 """
 
@@ -71,6 +73,16 @@ def main():
         else:
             from services.geocoder import app
             uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    elif service == "traffic-aggregator":
+        from services.traffic_aggregator import run
+
+        asyncio.run(run())
+
+    elif service == "traffic-writer":
+        from services.traffic_writer import run
+
+        run()  # synchronous loop (mmap writes)
 
     elif service == "cleaner":
         from services.cleaner import clean

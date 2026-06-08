@@ -13,6 +13,9 @@
 ###   POST /feedback      – popularity feedback loop
 ###   POST /places        – add a custom place
 ###   POST /insert        – insert raw OSM element via NATS
+###   POST /traffic/probe  – submit one GPS ping for live-traffic aggregation
+###   POST /traffic/probes – submit a GPS trace (batch) for live-traffic aggregation
+###   GET  /traffic/edge   – current live speed for the road edge nearest a point
 ###
 ### Routing (Valhalla, on {{routeUrl}} — host port 8001):
 ###   GET  /status            – engine/tileset status & loaded actions
@@ -838,6 +841,107 @@ Content-Type: application/json
   ],
   "costing": "auto",
   "verbose": true
+}
+
+###
+
+# ============================================================================
+# LIVE TRAFFIC  –  crowdsourced GPS probes feeding Valhalla
+#
+# App users stream GPS pings to the geocoder ({{baseUrl}}, requires
+# ENABLE_TRAFFIC=true). The traffic-aggregator map-matches them to Valhalla
+# edges and keeps a smoothed per-edge speed in Redis; the traffic-writer pushes
+# those speeds into Valhalla's traffic.tar. Routes then bend around congestion
+# when they ask for live traffic (date_time.type=0 + speed_types incl. "current").
+#
+# A probe ping: { lat, lon, speed?(m/s), heading?(deg), ts?(epoch seconds) }.
+# A batch (ordered trace from one device) map-matches far better than single
+# points, so prefer /traffic/probes with several points.
+# ============================================================================
+
+### Submit a GPS trace of SLOW pings (~3 m/s ≈ 11 km/h) along Tahrir → Giza.
+### Send this a few times (>= TRAFFIC_MIN_SAMPLES) to mark these edges congested.
+POST {{baseUrl}}/traffic/probes
+Content-Type: application/json
+
+{
+  "device_id": "demo-device-1",
+  "points": [
+    { "lat": 30.0444, "lon": 31.2357, "speed": 3.0, "ts": 1750000000 },
+    { "lat": 30.0429, "lon": 31.2300, "speed": 2.5, "ts": 1750000020 },
+    { "lat": 30.0410, "lon": 31.2230, "speed": 3.2, "ts": 1750000045 },
+    { "lat": 30.0388, "lon": 31.2150, "speed": 2.8, "ts": 1750000075 },
+    { "lat": 30.0360, "lon": 31.2050, "speed": 3.0, "ts": 1750000110 }
+  ]
+}
+
+###
+
+### Submit a free-flow trace (~25 m/s ≈ 90 km/h) — useful to clear congestion.
+POST {{baseUrl}}/traffic/probes
+Content-Type: application/json
+
+{
+  "device_id": "demo-device-2",
+  "points": [
+    { "lat": 30.0444, "lon": 31.2357, "speed": 25.0, "ts": 1750000000 },
+    { "lat": 30.0429, "lon": 31.2300, "speed": 24.0, "ts": 1750000003 },
+    { "lat": 30.0410, "lon": 31.2230, "speed": 26.0, "ts": 1750000006 },
+    { "lat": 30.0388, "lon": 31.2150, "speed": 25.5, "ts": 1750000010 }
+  ]
+}
+
+###
+
+### Submit a single GPS ping (device_id is a query param here).
+POST {{baseUrl}}/traffic/probe?device_id=demo-device-3
+Content-Type: application/json
+
+{ "lat": 30.0444, "lon": 31.2357, "speed": 4.0, "ts": 1750000000 }
+
+###
+
+### Inspect the current live speed for the edge nearest a point (debug/ops).
+### Returns the snapped edge_id (Valhalla GraphId), way_id, and live_speed_kph
+### (null until enough probes have accumulated for that edge).
+GET {{baseUrl}}/traffic/edge?lat=30.0444&lon=31.2357
+
+###
+
+### Baseline route (no live traffic) – Tahrir → Giza. Note summary.time.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Live-traffic route – same Tahrir → Giza, but opted into current traffic.
+### date_time.type=0 (current) + speed_types including "current" make Valhalla
+### use the live speeds written into traffic.tar. After posting the SLOW probes
+### above, summary.time should rise vs. the baseline; after the free-flow probes
+### (or once probes expire past TRAFFIC_EDGE_TTL) it returns to baseline.
+POST {{routeUrl}}/route
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "costing_options": {
+    "auto": { "speed_types": ["freeflow", "constrained", "predicted", "current"] }
+  },
+  "date_time": { "type": 0 },
+  "directions_options": { "units": "kilometers" }
 }
 
 ###

@@ -218,6 +218,10 @@ services:
       # in your environment or .env; ENABLE_DEEP gates the /deep/* endpoints.
       - ENABLE_DEEP=${ENABLE_DEEP:-true}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      # Live traffic: enables the /traffic/probe(s) + /traffic/edge endpoints.
+      # VALHALLA_URL is used to snap probe points to road edges.
+      - ENABLE_TRAFFIC=${ENABLE_TRAFFIC:-true}
+      - VALHALLA_URL=http://valhalla:8002
     deploy:
       resources:
         reservations:
@@ -241,10 +245,12 @@ services:
   # Valhalla routing engine.
   #
   # Uses the gis-ops "docker-valhalla" image, which on first start scans
-  # /custom_files for *.osm.pbf, builds the routing graph (tiles), then serves
-  # the routing API. We bind the existing data/egypt-latest.osm.pbf read-only
-  # into /custom_files and keep the built tiles + config in a named volume, so
-  # the build only happens once and survives restarts (force_rebuild=False).
+  # /custom_files for *.pbf, builds the routing graph (tiles) from ALL of them,
+  # then serves the routing API. configure_valhalla.sh globs $CUSTOM_FILES/*.pbf
+  # (top level only), so we mount the whole data dir at /custom_files — every
+  # *.osm.pbf the downloader/watcher drops in is included automatically, and the
+  # image rebuilds when it detects a new PBF set. Built tiles + config + the live
+  # traffic.tar persist under ./data and are shared with traffic-writer.
   #
   # The routing API listens on 8002 inside the container; we publish it on the
   # host as 8001 (the geocoder is on 8000). Endpoints: /route, /optimized_route,
@@ -254,8 +260,7 @@ services:
     ports:
       - "8001:8002"
     volumes:
-      - valhalla-tiles:/custom_files
-      - ./data/egypt-latest.osm.pbf:/custom_files/egypt-latest.osm.pbf:ro
+      - ./data:/custom_files
     environment:
       # Build the graph from the bundled PBF rather than downloading tiles.
       - use_tiles_ignore_pbf=False
@@ -269,6 +274,10 @@ services:
       # Elevation/transit pull large extra datasets; off by default.
       - build_elevation=False
       - build_transit=False
+      # Build the memory-mapped traffic extract that the traffic-writer updates
+      # in place to feed live traffic into routing (this is the default, pinned).
+      - traffic_name=traffic.tar
+      - build_tar=True
       - serve_tiles=True
       - server_threads=4
     healthcheck:
@@ -284,6 +293,56 @@ services:
       resources:
         limits:
           memory: 4G
+
+  # ── Live traffic pipeline ──────────────────────────────────────────────────
+  # traffic-aggregator: consumes GPS probes (NATS traffic.probes) from app users,
+  # map-matches them to Valhalla edges, and keeps a smoothed per-edge speed in
+  # Redis. Optionally augments with an external flow provider (TRAFFIC_PROVIDER).
+  traffic-aggregator:
+    build: .
+    command: python -u -m services.traffic_aggregator
+    environment:
+      - NATS_URL=nats://nats:4222
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - VALHALLA_URL=http://valhalla:8002
+      - TRAFFIC_MIN_SAMPLES=${TRAFFIC_MIN_SAMPLES:-3}
+      - TRAFFIC_EDGE_TTL=${TRAFFIC_EDGE_TTL:-600}
+      - TRAFFIC_EWMA_ALPHA=${TRAFFIC_EWMA_ALPHA:-0.3}
+      # Optional external flow provider (gap-filler / cold-start). "none" disables it;
+      # "tomtom" needs TOMTOM_API_KEY (free tier). Probe data always takes priority.
+      - TRAFFIC_PROVIDER=${TRAFFIC_PROVIDER:-none}
+      - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      - TRAFFIC_PROVIDER_BBOX=${TRAFFIC_PROVIDER_BBOX:-29.7,31.0,30.2,31.5}
+    depends_on:
+      nats:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # traffic-writer: writes the Redis per-edge speeds into Valhalla's
+  # memory-mapped traffic.tar, in place. Shares Valhalla's /custom_files (the
+  # ./data bind) so the running router sees updates with no restart.
+  traffic-writer:
+    build: .
+    command: python -u -m services.traffic_writer
+    volumes:
+      - ./data:/custom_files
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TRAFFIC_EXTRACT_PATH=/custom_files/traffic.tar
+      - TRAFFIC_WRITE_INTERVAL=${TRAFFIC_WRITE_INTERVAL:-30}
+      - TRAFFIC_EDGE_TTL=${TRAFFIC_EDGE_TTL:-600}
+    depends_on:
+      redis:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
+    restart: unless-stopped
 
   oa-watcher:
     build: .
@@ -355,4 +414,3 @@ volumes:
   elasticsearch-data:
   postgis-data:
   ollama-data:
-  valhalla-tiles:

@@ -80,7 +80,12 @@ from shared.config import (
     OLLAMA_MODEL,
     GOOGLE_MAPS_API_KEY,
     ENABLE_DEEP,
+    ENABLE_TRAFFIC,
+    TRAFFIC_SUBJECT,
+    VALHALLA_URL,
 )
+import httpx
+from shared.nats_client import ensure_stream, TRAFFIC_STREAM_CFG
 from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.interpolation import (
     interpolate_address,
@@ -330,6 +335,14 @@ async def lifespan(app: FastAPI):
             nc = await nats.connect(NATS_URL)
             js = nc.jetstream()
             print(f"[geocoder] Successfully connected to NATS")
+            # Ensure the traffic probe stream exists so /traffic/probe(s) can
+            # publish even before the aggregator has started.
+            if ENABLE_TRAFFIC:
+                try:
+                    await ensure_stream(js, TRAFFIC_STREAM_CFG)
+                    print("[geocoder] Ensured TRAFFIC probe stream")
+                except Exception as te:
+                    print(f"[geocoder] Warning: could not ensure TRAFFIC stream: {te}")
             break
         except Exception as e:
             print(f"[geocoder] Failed to connect to NATS (attempt {attempt + 1}/{max_retries}): {e}")
@@ -573,6 +586,7 @@ async def features():
     return {
         "vectors": ENABLE_VECTORS,
         "ai": ENABLE_AI,
+        "traffic": ENABLE_TRAFFIC,
     }
 
 
@@ -2080,6 +2094,114 @@ async def add_place(place: PlaceCreate):
         print(f"[geocoder] Error adding place: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to add place: {str(e)}")
 
+
+# ── live-traffic probe ingestion ───────────────────────────────────────────
+# App users stream GPS pings here. We publish each batch to the TRAFFIC NATS
+# stream; the traffic-aggregator map-matches them to Valhalla edges, smooths a
+# per-edge speed into Redis, and the traffic-writer pushes those speeds into
+# Valhalla's traffic.tar. See services/traffic_aggregator.py + traffic_writer.py.
+class ProbePing(BaseModel):
+    """A single GPS observation from a moving device."""
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    speed: float | None = Field(None, ge=0, description="Instantaneous speed in m/s, if known")
+    heading: float | None = Field(None, ge=0, le=360, description="Bearing in degrees, if known")
+    ts: float | None = Field(None, description="Unix epoch seconds for this fix")
+
+
+class ProbeBatch(BaseModel):
+    """An ordered GPS trace from one device/session (best for map-matching)."""
+    device_id: str = Field(..., min_length=1, max_length=128, description="Opaque device/session id")
+    points: list[ProbePing] = Field(..., min_length=1, max_length=500)
+
+
+async def _publish_probes(batch: ProbeBatch) -> int:
+    """Publish a probe batch to the TRAFFIC stream. Returns the point count."""
+    if not ENABLE_TRAFFIC:
+        raise HTTPException(status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)")
+    payload = json.dumps(batch.model_dump()).encode()
+    ack = await js.publish(TRAFFIC_SUBJECT, payload, timeout=10)
+    if not ack:
+        raise HTTPException(status_code=503, detail="Failed to publish probes to NATS")
+    return len(batch.points)
+
+
+@app.post("/traffic/probes", status_code=202)
+async def submit_probes(batch: ProbeBatch):
+    """Submit an ordered GPS trace (multiple pings) for live-traffic aggregation."""
+    try:
+        n = await _publish_probes(batch)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[geocoder] Error publishing probes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit probes: {str(e)}")
+    return {"status": "accepted", "device_id": batch.device_id, "points": n}
+
+
+@app.post("/traffic/probe", status_code=202)
+async def submit_probe(ping: ProbePing, device_id: str = Query(..., min_length=1, max_length=128)):
+    """Submit a single GPS ping (convenience wrapper around /traffic/probes)."""
+    batch = ProbeBatch(device_id=device_id, points=[ping])
+    try:
+        await _publish_probes(batch)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[geocoder] Error publishing probe: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit probe: {str(e)}")
+    return {"status": "accepted", "device_id": device_id, "points": 1}
+
+
+@app.get("/traffic/edge")
+async def traffic_edge(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+):
+    """Debug/ops: snap a point to its Valhalla edge and report the current live speed.
+
+    Snaps via Valhalla /locate to get the edge GraphId, then reads the smoothed
+    speed the aggregator keeps in Redis (null if no live data for that edge yet).
+    """
+    if not ENABLE_TRAFFIC:
+        raise HTTPException(status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)")
+    # Snap to the nearest edge via Valhalla.
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{VALHALLA_URL}/locate",
+                json={"locations": [{"lat": lat, "lon": lon}], "costing": "auto", "verbose": True},
+            )
+            resp.raise_for_status()
+            located = resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Valhalla /locate failed: {e}")
+
+    edges = (located[0].get("edges") if located else None) or []
+    if not edges:
+        return {"lat": lat, "lon": lon, "edge_id": None, "live_speed_kph": None,
+                "detail": "no road edge near this point"}
+    edge = edges[0]
+    graphid = edge.get("edge_id", {}).get("value")
+    way_id = edge.get("way_id")
+
+    live = None
+    if redis_pool is not None and graphid is not None:
+        h = await redis_pool.hgetall(f"tf:e:{graphid}")
+        if h and "kph" in h:
+            live = {
+                "kph": float(h["kph"]),
+                "samples": int(float(h.get("n", 0))),
+                "updated": float(h["ts"]) if "ts" in h else None,
+            }
+    return {
+        "lat": lat,
+        "lon": lon,
+        "edge_id": graphid,
+        "way_id": way_id,
+        "live_speed_kph": live["kph"] if live else None,
+        "live": live,
+    }
 
 
 # ── reverse geocoding (PostGIS + Elasticsearch) ───────────────────────────
