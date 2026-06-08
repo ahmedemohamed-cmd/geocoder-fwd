@@ -34,7 +34,7 @@ WORKERS = 8
 EFFORTS = [e.strip() for e in os.getenv("EFFORTS", "high,optimized").split(",") if e.strip()]
 EFFORT_LABELS = {
     "high": "High effort (default)",
-    "optimized": "Optimized effort (lean fuzzy + rescore + 800 ms timeout)",
+    "optimized": "Optimized effort (lean fuzzy + rescore, no exact hit count)",
 }
 
 _GENERIC = {"street", "st", "road", "rd", "ave", "avenue", "alley", "lane",

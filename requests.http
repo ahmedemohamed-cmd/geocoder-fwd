@@ -146,10 +146,10 @@ GET {{baseUrl}}/describe?osm_id=w888001
 #   effort=high|optimized – scoring effort (default high). 'high' = full fuzzy
 #                        recall + per-doc function_score over all matches.
 #                        'optimized' = lean fuzzy + function_score applied via
-#                        rescore over the top hits only + track_total_hits off
-#                        + an 800ms timeout; far cheaper for ES under load
-#                        (use when geocode traffic is stalling Elasticsearch).
-#                        In optimized mode pagination.total is null.
+#                        rescore over the top hits only + track_total_hits off;
+#                        far cheaper for ES under load (use when geocode traffic
+#                        is stalling Elasticsearch). In optimized mode
+#                        pagination.total is null.
 #
 # The response carries a `pagination` block: { limit, offset, total, has_more }.
 # To scroll, re-request with offset += limit until has_more is false.
@@ -244,7 +244,7 @@ GET {{baseUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10&effort=
 
 ###
 
-### Effort: optimized – lean fuzzy + rescore over top hits + bounded timeout.
+### Effort: optimized – lean fuzzy + rescore over top hits, no exact counting.
 ### Much lighter on ES under load. Same top results in the common case;
 ### pagination.total is null (exact counting disabled). Compare against the
 ### high-effort request above to see the ranking is unchanged for typical queries.

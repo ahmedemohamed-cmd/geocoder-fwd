@@ -118,10 +118,8 @@ from shared.address import (
 INDEX = "osm_places"
 
 # Optimized-effort tuning. The rescore window bounds how many top hits the
-# (expensive) function_score is applied to; the timeout bounds the worst-case
-# query so a single pathological request can't pin an ES search thread.
+# (expensive) function_score is applied to.
 _RESCORE_WINDOW = 200
-_OPTIMIZED_TIMEOUT = "800ms"
 
 
 def _normalize_confidence(score: float, max_score: float) -> float:
@@ -962,8 +960,8 @@ async def geocode(
         pattern="^(high|optimized)$",
         description="Scoring effort: 'high' (full fuzzy recall + per-doc "
                     "function_score over all matches) or 'optimized' (lean "
-                    "fuzzy + rescore over top hits + bounded timeout, far "
-                    "cheaper for ES under load).",
+                    "fuzzy + function_score applied via rescore over top hits "
+                    "+ no exact hit counting, far cheaper for ES under load).",
     ),
 ):
     """Full geocoding search.
@@ -1241,9 +1239,8 @@ async def geocode(
         # applies the (expensive) function_score only to the top window rather
         # than to every matching doc — the main lever against search-pool
         # stalls. The window is widened to cover the requested page so deep
-        # offsets still get scored.  Exact hit counting is skipped (it forces a
-        # full match-set traversal) and a timeout bounds the worst case so one
-        # pathological query can't pin a search thread.
+        # offsets still get scored.  Exact hit counting is also skipped, since
+        # it forces a full match-set traversal we don't need for ranking.
         body["query"] = text_query
         body["rescore"] = {
             "window_size": max(_RESCORE_WINDOW, offset + limit),
@@ -1254,7 +1251,6 @@ async def geocode(
             },
         }
         body["track_total_hits"] = False
-        body["timeout"] = _OPTIMIZED_TIMEOUT
     else:
         body["query"] = function_score_query
 
