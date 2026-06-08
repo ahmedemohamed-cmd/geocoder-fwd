@@ -23,7 +23,7 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 - Non-existent house number on a known street returned an interpolated point: **63/250 (25.2%)**
 
-# Optimized effort (lean fuzzy + rescore + 800 ms timeout)
+# Optimized effort (lean fuzzy + rescore, no exact hit count)
 
 ## Named places (750)
 
@@ -36,9 +36,9 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| exact (same osm_id) | 37.2% | 38.0% | 38.0% |
-| correct street | 38.0% | 38.0% | 38.0% |
+| exact (same osm_id) | 93.2% | 97.6% | 99.2% |
+| correct street | 99.6% | 100.0% | 100.0% |
 
 ## Interpolation probe (addresses, 250)
 
-- Non-existent house number on a known street returned an interpolated point: **31/250 (12.4%)**
+- Non-existent house number on a known street returned an interpolated point: **63/250 (25.2%)**
