@@ -329,13 +329,16 @@ async def run():
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     break
-                except nats.errors.TimeoutError:
+                except (nats.errors.TimeoutError, asyncio.TimeoutError):
+                    # Bare asyncio.TimeoutError (str == '') is raised by nats-py's
+                    # fetch() internals on some no-message paths and slips past a
+                    # nats.errors.TimeoutError-only catch — treat both as empty.
                     msgs = []
                     break
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[es-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
+                    print(f"[es-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {type(e).__name__}: {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
 
                     if is_conn_err:
                         async with reconnect_lock:

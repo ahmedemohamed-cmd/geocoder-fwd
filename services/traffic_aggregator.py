@@ -214,10 +214,13 @@ async def _probe_consumer(r: aioredis.Redis, client: httpx.AsyncClient):
     while True:
         try:
             msgs = await state["sub"].fetch(batch=100, timeout=5)
-        except nats.errors.TimeoutError:
+        except (nats.errors.TimeoutError, asyncio.TimeoutError):
+            # nats-py's fetch() raises a BARE asyncio.TimeoutError (str == '')
+            # from its internal wait_for on some no-message paths, not only the
+            # nats-specific TimeoutError. Both just mean "no probes this window".
             continue
         except Exception as e:
-            _log(f"fetch error: {e}")
+            _log(f"fetch error: {type(e).__name__}: {e}")
             if is_connection_error(e):
                 try:
                     state["nc"], state["js"] = await reconnect(state["nc"], state["js"], TRAFFIC_STREAM_CFG)
