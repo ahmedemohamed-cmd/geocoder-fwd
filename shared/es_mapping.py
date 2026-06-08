@@ -135,6 +135,14 @@ MAPPING = {
         },
     },
     "mappings": {
+        # dynamic:false — store any field not declared below in _source, but do
+        # NOT add it to the mapping. OSM elements carry thousands of distinct tag
+        # keys; if those (or any other ad-hoc object) were dynamically mapped the
+        # field count explodes past the 1000-field limit and ES starts rejecting
+        # docs ("Limit of total fields [1000] has been exceeded"). With dynamic
+        # disabled the mapping is fixed-size and ingest can never blow it up,
+        # while cached/undeclared fields are still returned on _source retrieval.
+        "dynamic": False,
         "properties": {
             "osm_id": {"type": "keyword"},
             "osm_type": {"type": "keyword"},
@@ -257,6 +265,10 @@ MAPPING = {
             "has_address": {"type": "boolean"},
             # AI-generated place description (cached, not indexed)
             "ai_description": {"type": "object", "enabled": False},
+            # Reverse-geocode enrichment cache written by geocoder.py
+            # (nearest_street + enclosing parents). Stored for retrieval only,
+            # never queried — keep it disabled so its nested keys are not mapped.
+            "address": {"type": "object", "enabled": False},
         }
     },
 }
