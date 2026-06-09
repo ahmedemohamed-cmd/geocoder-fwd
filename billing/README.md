@@ -8,7 +8,7 @@ in real time, generates monthly bills, and exposes admin + tenant reporting.
 | Component | Plane | Responsibility |
 |---|---|---|
 | `control_plane.py` | management | Admin: tenant + **plan** CRUD, view/mark-paid bills, run billing. Tenant: key CRUD (soft delete), enable/disable, **real-time usage**, history, invoices. Projects key/plan state into APISIX (`apisix_admin.py`) and hosts the `/internal/usage` sink. |
-| **Apache APISIX** (+ etcd) | data | The deployed gateway: `key-auth` validates `X-API-Key` against per-key consumers; per-tenant **consumer-groups** carry `limit-count`(redis) for cluster-wide hard quotas; `http-logger` streams usage to the sink. Config lives in etcd. |
+| **Apache APISIX** (+ etcd) | data | The deployed gateway: `key-auth` validates `X-API-Key` against per-key consumers; per-tenant **consumer-groups** carry `limit-count`(redis) for cluster-wide monthly hard quotas; `http-logger` streams usage to the sink. Config lives in etcd. |
 | `apisix_admin.py` | management | Admin-API client: route + per-tenant consumer-groups + per-key consumers. |
 | `aggregator.py` | batch | Drains the Redis usage-event list → Postgres rollups (its own service). |
 | `usage.py` | shared | Redis live counters (real-time display) + durable event buffer + flush. |
@@ -16,16 +16,24 @@ in real time, generates monthly bills, and exposes admin + tenant reporting.
 | `gateway.py` | data (reference) | The earlier self-contained FastAPI gateway, kept as a tested reference; **APISIX is the deployed data plane**. |
 | `repo.py` / `db.py` | data | asyncpg data-access + schema/seed. `security.py` hashing/key-enc/JWT. `auth.py` role guards. |
 
-Two counters: APISIX `limit-count`(redis) enforces the **hard quota** in-line and
-cluster-wide; the Redis **live counters** (fed by the usage sink) drive real-time
-display; **Postgres rollups** (drained from the Redis event list) are the durable
-billing source of truth. Per the design decision, counting events stay on Redis
-(not NATS). Enable/disable re-pushes the key to APISIX, so keys are stored
-encrypted-at-rest (`key_enc`, Fernet) in addition to the SHA-256 hash.
+**Quotas & metering.** A plan has a single monthly quota + overage price + hard-cap
+flag. APISIX `limit-count`(redis) enforces the per-tenant hard quota in-line and
+cluster-wide; the usage sink pushes events to a Redis list that the aggregator
+drains into **Postgres rollups** — the durable source of truth for both billing
+**and** the usage display (so counts never reset when the cache is evicted).
+Counting stays on Redis (not NATS). Enable/disable re-pushes the key to APISIX,
+so keys are stored encrypted-at-rest (`key_enc`, Fernet) in addition to the
+SHA-256 hash; the owning tenant can reveal/copy them.
+
+**Admin** can CRUD plans, **add/disable/delete tenant users**, and **reset tenant
+passwords** (Zitadel). Zitadel is configured for **TOTP-only MFA** with
+**registration disabled**.
 
 ## Real-time usage & key control (the requirements)
 
-- Tenant sees usage live: `GET /usage/current` reads Redis counters → no lag.
+- Tenant usage: `GET /usage/current` reads **durable Postgres rollups** (total +
+  per key); refresh to update. (The shared geocoder Redis is non-persistent/LRU,
+  so its live counters aren't used for display — they'd reset on eviction/restart.)
 - Tenant enable/disable key: `PATCH /keys/{id} {status}` → cache refreshed so the
   gateway honors it within ms.
 - Tenant key CRUD, delete is **soft** (`status=deleted`, row retained for audit).
@@ -52,7 +60,7 @@ Bootstrap seeds plans (`free`/`starter`/`pro`) and a platform admin
 
 ```bash
 pip install -r billing/requirements.txt
-pytest tests/billing          # 44 tests: auth/Zitadel, tenant/key/plan CRUD,
+pytest tests/billing          # 48 tests: auth/Zitadel, tenant/key/plan CRUD,
                               # gateway enforcement, quotas, scopes, aggregation,
                               # billing, APISIX consumer-mapping + usage sink
 ```
@@ -82,13 +90,13 @@ docker compose run --rm billing-zitadel-init   # provision Zitadel + write SPA c
 ```
 
 **Data plane (APISIX):** the control plane drives APISIX's Admin API — each API
-key becomes a `key-auth` consumer, each tenant a consumer-group whose
-`limit-count`(redis) is the cluster-wide hard quota (hard-cap plans only; soft
-plans are unlimited at the gateway and billed as overage). `http-logger` posts
-served requests to `/internal/usage`, which writes Redis live counters + the
-durable event list. Enable/disable add/remove the consumer (the key is re-pushed
-from its encrypted-at-rest copy). APISIX admin key + the sink token are dev
-defaults in compose — override for real deployments.
+key becomes a `key-auth` consumer; each tenant a consumer-group whose
+`limit-count`(redis) is the cluster-wide monthly hard quota (hard-cap plans only;
+soft plans are unlimited at the gateway and billed as overage). `http-logger`
+posts served requests to `/internal/usage`, which writes Redis live counters +
+the durable event list. Enable/disable add/remove the consumer (the key is
+re-pushed from its encrypted-at-rest copy). The APISIX admin key + the sink token
+are dev defaults in compose — override for real deployments.
 
 The provisioner writes `clientId`/`projectId`/`issuer`/`scope` into the shared
 `billing-frontend-config` volume, served at `/runtime/config.json`, so the SPA is
@@ -123,6 +131,6 @@ Zitadel.
 - **Event buffer = Redis list** (the chosen design — counting stays on Redis,
   not NATS). The aggregator can be pointed at NATS later without touching the
   control plane.
-- Tests: `pytest tests/billing` — 44 tests (auth/Zitadel-RS256, tenant/key/plan
+- Tests: `pytest tests/billing` — 48 tests (auth/Zitadel-RS256, tenant/key/plan
   CRUD, gateway enforcement, quotas, scopes, aggregation, billing, APISIX
   consumer-mapping + usage sink). Real Postgres `billing_test` + fakeredis.

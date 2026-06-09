@@ -67,3 +67,57 @@ async def provision_tenant_user(*, email: str, password: str, tenant_id: str,
             await c.post(f"/management/v1/users/{user_id}/grants", json={
                 "projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_TENANT]})
         return user_id
+
+
+async def _find_user_id(c: httpx.AsyncClient, email: str) -> str | None:
+    found = await c.post("/management/v1/users/_search", json={
+        "queries": [{"userNameQuery": {"userName": email,
+                     "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+    result = (found.json().get("result") or []) if found.status_code < 300 else []
+    return result[0]["id"] if result else None
+
+
+async def set_user_active(*, email: str, active: bool) -> bool:
+    """Deactivate/reactivate a user in Zitadel (no-op if disabled)."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        uid = await _find_user_id(c, email)
+        if not uid:
+            raise ZitadelError(f"user {email!r} not found in the IdP")
+        action = "_reactivate" if active else "_deactivate"
+        r = await c.post(f"/management/v1/users/{uid}/{action}")
+        if r.status_code >= 300 and "already" not in r.text.lower():
+            raise ZitadelError(f"{action} failed: {r.status_code} {r.text[:200]}")
+        return True
+
+
+async def delete_user(*, email: str) -> bool:
+    """Delete a user from Zitadel (no-op if disabled / already gone)."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        uid = await _find_user_id(c, email)
+        if not uid:
+            return False
+        await c.delete(f"/management/v1/users/{uid}")
+        return True
+
+
+async def set_user_password(*, email: str, password: str) -> bool:
+    """Admin reset: set a user's password in Zitadel (no-op if disabled)."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        found = await c.post("/management/v1/users/_search", json={
+            "queries": [{"userNameQuery": {"userName": email,
+                         "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+        result = (found.json().get("result") or []) if found.status_code < 300 else []
+        if not result:
+            raise ZitadelError(f"user {email!r} not found in the IdP")
+        uid = result[0]["id"]
+        r = await c.post(f"/v2/users/{uid}/password", json={
+            "newPassword": {"password": password, "changeRequired": False}})
+        if r.status_code >= 300:
+            raise ZitadelError(f"set password failed: {r.status_code} {r.text[:200]}")
+        return True

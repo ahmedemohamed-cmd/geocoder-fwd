@@ -22,16 +22,10 @@ export default function TenantDashboard({ api }) {
 
   const loadKeys = () => api.get("/keys").then(setKeys).catch((e) => setErr(e.message));
   const loadInvoices = () => api.get("/invoices").then(setInvoices).catch(() => {});
+  const loadUsage = () => api.get("/usage/current").then(setUsage).catch(() => {});
 
-  // Real-time usage: poll the live counters every 3s.
-  useEffect(() => {
-    let alive = true;
-    const tick = () => api.get("/usage/current").then((u) => alive && setUsage(u)).catch(() => {});
-    tick();
-    const h = setInterval(tick, 3000);
-    return () => { alive = false; clearInterval(h); };
-  }, []);
-  useEffect(() => { loadKeys(); loadInvoices(); }, []);
+  // Usage is loaded on open and on the manual Refresh button (no live polling).
+  useEffect(() => { loadUsage(); loadKeys(); loadInvoices(); }, []);
 
   const createKey = async (e) => {
     e.preventDefault();
@@ -61,7 +55,11 @@ export default function TenantDashboard({ api }) {
   return (
     <div className="grid">
       <section className="card">
-        <h2>Usage · {usage?.period}</h2>
+        <div className="row">
+          <h2>Usage · {usage?.period}</h2>
+          <span className="spacer" />
+          <button onClick={loadUsage}>Refresh</button>
+        </div>
         {usage ? (
           <>
             <div className="bignum">{usage.requests.toLocaleString()}
@@ -70,7 +68,7 @@ export default function TenantDashboard({ api }) {
               style={{ width: `${pct}%` }} /></div>
             <p className="muted">
               {usage.over_quota ? "Over quota — overage billed" : `${usage.remaining.toLocaleString()} remaining`}
-              {" · plan "}{usage.plan_id} · live (3s)
+              {" · plan "}{usage.plan_id}
             </p>
             <table>
               <thead><tr><th>Key</th><th>Requests (month)</th></tr></thead>

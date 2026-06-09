@@ -41,7 +41,7 @@ export default function App({ config }) {
       </header>
       <main>
         {role === "admin" && <AdminDashboard api={api} />}
-        {role === "tenant_user" && <TenantDashboard api={api} tenantId={tenantId} />}
+        {role === "tenant_user" && <TenantDashboard api={api} />}
         {!role && (
           <Centered>
             Your account has no billing role assigned. Ask an admin to grant

@@ -81,6 +81,24 @@ async def test_list_get_update_delete_tenant(cp_client):
     assert any(t["id"] == tenant["id"] and t["status"] == "deleted" for t in lst3.json())
 
 
+async def test_suspend_then_reactivate_tenant(cp_client):
+    tenant, _ = await make_tenant(cp_client, name="Susp", admin_email="susp@acme.test")
+    atok = await admin_token(cp_client)
+    h = bearer(atok)
+
+    # suspend (reversible) — still listed, not deleted
+    r = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
+                              json={"status": "suspended"})
+    assert r.status_code == 200 and r.json()["status"] == "suspended"
+    lst = await cp_client.get("/admin/tenants", headers=h)
+    assert any(t["id"] == tenant["id"] and t["status"] == "suspended" for t in lst.json())
+
+    # reactivate
+    r2 = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
+                               json={"status": "active"})
+    assert r2.status_code == 200 and r2.json()["status"] == "active"
+
+
 async def test_delete_missing_tenant_404(cp_client):
     atok = await admin_token(cp_client)
     r = await cp_client.delete("/admin/tenants/00000000-0000-0000-0000-000000000000",

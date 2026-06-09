@@ -43,7 +43,7 @@ button.danger { background:transparent; border-color:#553; color:var(--red); }
 
 .pill { padding:2px 9px; border-radius:999px; font-size:12px; }
 .pill.active, .pill.paid { background:rgba(46,204,113,.15); color:var(--green); }
-.pill.disabled, .pill.pending { background:rgba(245,166,35,.15); color:var(--amber); }
+.pill.disabled, .pill.pending, .pill.suspended { background:rgba(245,166,35,.15); color:var(--amber); }
 .pill.deleted { background:rgba(255,92,108,.15); color:var(--red); }
 
 .bignum { font-size:34px; font-weight:700; }

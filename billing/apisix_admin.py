@@ -54,7 +54,6 @@ async def ensure_route() -> None:
             "include_req_body": False,
         }
     async with _client() as c:
-        # compact log format: only what the sink needs
         await c.put("/plugin_metadata/http-logger", json={
             "log_format": {"consumer": "$consumer_name", "uri": "$uri", "status": "$status"}})
         r = await c.put(f"/routes/{config.APISIX_ROUTE_ID}", json={
@@ -79,7 +78,6 @@ async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool) -
                 "redis_database": config.REDIS_DB,
                 "key_type": "constant", "key": gid}}})
             return True
-        # soft/unlimited: remove the group if present (ignore 404)
         await c.delete(f"/consumer_groups/{gid}")
         return False
 

@@ -38,6 +38,49 @@ async def get_user_by_email(pool, email: str) -> dict | None:
     return _row(rec)
 
 
+async def list_tenant_users(pool, tenant_id: str) -> list[dict]:
+    rows = await pool.fetch(
+        "SELECT email, role, status FROM users WHERE tenant_id=$1 ORDER BY email", tenant_id)
+    return [dict(r) for r in rows]
+
+
+async def create_tenant_user(pool, *, tenant_id: str, email: str,
+                             password_hash: str, role: str = "tenant_user") -> dict:
+    try:
+        rec = await pool.fetchrow(
+            """INSERT INTO users (email, password_hash, role, tenant_id)
+               VALUES ($1,$2,$3,$4) RETURNING email, role, status""",
+            email, password_hash, role, tenant_id)
+    except asyncpg.UniqueViolationError:
+        raise Conflict(f"user {email!r} already exists")
+    return dict(rec)
+
+
+async def set_user_status(pool, *, tenant_id: str, email: str, status: str) -> dict:
+    rec = await pool.fetchrow(
+        "UPDATE users SET status=$1 WHERE email=$2 AND tenant_id=$3 "
+        "RETURNING email, role, status", status, email, tenant_id)
+    if rec is None:
+        raise NotFound("user not found for this tenant")
+    return dict(rec)
+
+
+async def delete_tenant_user(pool, *, tenant_id: str, email: str) -> None:
+    res = await pool.execute(
+        "DELETE FROM users WHERE email=$1 AND tenant_id=$2 AND role <> 'admin'",
+        email, tenant_id)
+    if res.endswith("0"):
+        raise NotFound("user not found for this tenant")
+
+
+async def set_user_password(pool, *, email: str, tenant_id: str, password_hash: str) -> None:
+    res = await pool.execute(
+        "UPDATE users SET password_hash=$1 WHERE email=$2 AND tenant_id=$3",
+        password_hash, email, tenant_id)
+    if res.endswith("0"):
+        raise NotFound("user not found for this tenant")
+
+
 # ── tenants ──────────────────────────────────────────────────────────────────
 async def create_tenant(
     pool, *, name: str, contact_email: str | None, plan_id: str,
@@ -218,6 +261,14 @@ async def usage_total_for_period(pool, tenant_id: str, period: str) -> int:
         tenant_id, period,
     )
     return int(val or 0)
+
+
+async def usage_by_key_for_period(pool, tenant_id: str, period: str) -> dict[str, int]:
+    """Durable per-key request counts for the period (from Postgres rollups)."""
+    rows = await pool.fetch(
+        "SELECT key_id, SUM(count)::bigint AS c FROM usage_rollups "
+        "WHERE tenant_id=$1 AND period=$2 GROUP BY key_id", tenant_id, period)
+    return {str(r["key_id"]): int(r["c"]) for r in rows}
 
 
 # ── invoices ─────────────────────────────────────────────────────────────────

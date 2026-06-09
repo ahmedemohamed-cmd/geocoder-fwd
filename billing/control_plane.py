@@ -54,8 +54,9 @@ from .auth import (current_identity, get_pool, get_redis, require_admin,
                    require_tenant)
 from .models import (CurrentUsage, Identity, InvoiceOut, KeyCreate, KeyCreated,
                      KeyOut, KeyUpdate, KeyUsage, LoginRequest, PlanCreate,
-                     PlanOut, PlanUpdate, TenantCreate, TenantOut, TenantUpdate,
-                     TokenResponse, UsageHistoryRow)
+                     PlanOut, PlanUpdate, ResetPasswordRequest, TenantCreate,
+                     TenantOut, TenantUpdate, TenantUserCreate, TenantUserOut,
+                     TenantUserUpdate, TokenResponse, UsageHistoryRow)
 
 router_tag_admin = "admin"
 router_tag_tenant = "tenant"
@@ -84,6 +85,8 @@ def build_app(pool=None, redis=None) -> FastAPI:
         user = await repo.get_user_by_email(pool, body.email)
         if not user or not security.verify_password(body.password, user["password_hash"]):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid credentials")
+        if user.get("status") == "disabled":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "user is disabled")
         token = security.issue_token(
             subject=user["email"], role=user["role"], tenant_id=user.get("tenant_id"))
         return TokenResponse(access_token=token, role=user["role"],
@@ -161,6 +164,90 @@ def build_app(pool=None, redis=None) -> FastAPI:
         return Response(status_code=204)
 
     # ── admin: plans CRUD ────────────────────────────────────────────────────
+    # ── admin: tenant users + password reset ─────────────────────────────────
+    @app.get("/admin/tenants/{tenant_id}/users", response_model=list[TenantUserOut],
+             tags=[router_tag_admin])
+    async def tenant_users(tenant_id: str, _: Identity = Depends(require_admin),
+                           pool=Depends(get_pool)):
+        try:
+            await repo.get_tenant(pool, tenant_id, include_deleted=True)
+        except repo.NotFound as e:
+            raise _not_found(e)
+        return await repo.list_tenant_users(pool, tenant_id)
+
+    @app.post("/admin/tenants/{tenant_id}/users", response_model=TenantUserOut,
+              status_code=201, tags=[router_tag_admin])
+    async def add_tenant_user(tenant_id: str, body: TenantUserCreate,
+                              _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        try:
+            await repo.get_tenant(pool, tenant_id)  # 404 if missing/deleted
+            user = await repo.create_tenant_user(
+                pool, tenant_id=tenant_id, email=body.email,
+                password_hash=security.hash_password(body.password))
+        except repo.NotFound as e:
+            raise _not_found(e)
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        try:
+            await zitadel_admin.provision_tenant_user(
+                email=body.email, password=body.password,
+                tenant_id=tenant_id, display_name=body.email)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"user created but IdP provisioning failed: {e}")
+        return user
+
+    @app.patch("/admin/tenants/{tenant_id}/users/{email}", response_model=TenantUserOut,
+               tags=[router_tag_admin])
+    async def modify_tenant_user(tenant_id: str, email: str, body: TenantUserUpdate,
+                                 _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        try:
+            user = await repo.set_user_status(pool, tenant_id=tenant_id, email=email,
+                                              status=body.status)
+        except repo.NotFound as e:
+            raise _not_found(e)
+        try:
+            await zitadel_admin.set_user_active(email=email, active=body.status == "active")
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"IdP update failed: {e}")
+        return user
+
+    @app.delete("/admin/tenants/{tenant_id}/users/{email}", status_code=204,
+                tags=[router_tag_admin])
+    async def delete_tenant_user(tenant_id: str, email: str,
+                                 _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        try:
+            await repo.delete_tenant_user(pool, tenant_id=tenant_id, email=email)
+        except repo.NotFound as e:
+            raise _not_found(e)
+        try:
+            await zitadel_admin.delete_user(email=email)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"IdP delete failed: {e}")
+        return Response(status_code=204)
+
+    @app.post("/admin/tenants/{tenant_id}/reset-password", status_code=204,
+              tags=[router_tag_admin])
+    async def reset_password(tenant_id: str, body: ResetPasswordRequest,
+                             _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        users = await repo.list_tenant_users(pool, tenant_id)
+        if not any(u["email"] == body.email for u in users):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found for this tenant")
+        # local hash (dev auth) — harmless in zitadel mode
+        try:
+            await repo.set_user_password(
+                pool, email=body.email, tenant_id=tenant_id,
+                password_hash=security.hash_password(body.new_password))
+        except repo.NotFound as e:
+            raise _not_found(e)
+        # the real login backend in zitadel mode
+        try:
+            await zitadel_admin.set_user_password(email=body.email, password=body.new_password)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"password reset in IdP failed: {e}")
+        return Response(status_code=204)
+
     @app.get("/admin/plans", response_model=list[PlanOut], tags=[router_tag_admin])
     async def list_plans(_: Identity = Depends(require_admin), pool=Depends(get_pool)):
         return await repo.list_plans(pool)
@@ -304,15 +391,19 @@ def build_app(pool=None, redis=None) -> FastAPI:
     @app.get("/usage/current", response_model=CurrentUsage, tags=[router_tag_tenant])
     async def current_usage(ident: Identity = Depends(require_tenant),
                             pool=Depends(get_pool), redis=Depends(get_redis)):
+        # Read DURABLE usage from Postgres rollups (not the ephemeral Redis
+        # counters, which the shared geocoder Redis can LRU-evict / lose on
+        # restart). Flush buffered events first so a refresh reflects fresh calls.
+        await usage.flush_events(pool, redis)
         period, _day = usage.now_parts()
         plan = await repo.tenant_with_plan(pool, ident.tenant_id)
         quota = int(plan.get("monthly_quota") or 0)
-        total = await usage.get_tenant_live(redis, ident.tenant_id, period)
-        per_key = []
-        for k in await repo.list_keys(pool, ident.tenant_id):
-            per_key.append(KeyUsage(
-                key_id=k["id"], key_name=k["name"],
-                requests=await usage.get_key_live(redis, k["id"], period)))
+        total = await repo.usage_total_for_period(pool, ident.tenant_id, period)
+        by_key = await repo.usage_by_key_for_period(pool, ident.tenant_id, period)
+        per_key = [
+            KeyUsage(key_id=k["id"], key_name=k["name"], requests=by_key.get(k["id"], 0))
+            for k in await repo.list_keys(pool, ident.tenant_id)
+        ]
         return CurrentUsage(
             tenant_id=ident.tenant_id, period=period, requests=total, quota=quota,
             remaining=max(0, quota - total), over_quota=total > quota,

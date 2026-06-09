@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL,                    -- admin | tenant_user
     tenant_id     UUID REFERENCES tenants(id),
+    status        TEXT NOT NULL DEFAULT 'active',   -- active | disabled
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -106,8 +107,10 @@ async def create_pool(dsn: str | None = None) -> asyncpg.Pool:
 async def init_schema(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
-        # idempotent migration for pre-existing databases
+        # idempotent migrations for pre-existing databases
         await conn.execute("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_enc TEXT")
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'")
 
 
 async def seed_plans(pool: asyncpg.Pool) -> None:

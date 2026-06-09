@@ -41,6 +41,26 @@ class TenantUpdate(BaseModel):
     status: str | None = Field(default=None, pattern="^(active|suspended)$")
 
 
+class TenantUserOut(BaseModel):
+    email: str
+    role: str
+    status: str = "active"
+
+
+class TenantUserCreate(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+
+
+class TenantUserUpdate(BaseModel):
+    status: str = Field(pattern="^(active|disabled)$")
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str = Field(min_length=8)
+
+
 class TenantOut(BaseModel):
     id: str
     name: str
