@@ -165,16 +165,18 @@ def _configure_login_policy(c) -> None:
                json={"type": "SECOND_FACTOR_TYPE_OTP"})
         # disable passwordless/passkey prompts
         c.put(f"{API}/admin/v1/policies/login", json={
-            # registration disabled: only admin-provisioned users can log in
+            # registration disabled: only admin-provisioned users can log in.
+            # forceMfa + mfaInitSkipLifetime=0s => authenticator-app (TOTP) setup
+            # is mandatory on first login and required on every subsequent login.
             "allowUsernamePassword": True, "allowRegister": False, "allowExternalIdp": True,
-            "forceMfa": False, "forceMfaLocalOnly": False,
+            "forceMfa": True, "forceMfaLocalOnly": False,
             "passwordlessType": "PASSWORDLESS_TYPE_NOT_ALLOWED",
             "hidePasswordReset": False, "ignoreUnknownUsernames": False,
             "allowDomainDiscovery": True, "passwordCheckLifetime": "864000s",
-            "externalLoginCheckLifetime": "864000s", "mfaInitSkipLifetime": "2592000s",
+            "externalLoginCheckLifetime": "864000s", "mfaInitSkipLifetime": "0s",
             "secondFactorCheckLifetime": "64800s", "multiFactorCheckLifetime": "43200s",
             "defaultRedirectUri": ""})
-        print("login policy: TOTP-only, passwordless disabled")
+        print("login policy: TOTP-only, forced MFA, passwordless disabled")
     except Exception as e:  # noqa: BLE001 - best effort
         print("WARN login policy config failed:", e)
 
