@@ -1,0 +1,8 @@
+{
+  "issuer": "http://localhost:8085",
+  "clientId": "REPLACE_AT_DEPLOY_TIME",
+  "projectId": "",
+  "scope": "openid profile email urn:zitadel:iam:user:metadata",
+  "apiBase": "http://localhost:8100",
+  "gatewayBase": "http://localhost:8080"
+}

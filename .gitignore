@@ -22,9 +22,15 @@ wheels/
 
 # Virtual Environment
 .venv/
+.venv-billing/
 venv/
 ENV/
 env/
+
+# Node / frontend
+node_modules/
+billing/frontend/dist/
+billing/frontend/.vite/
 
 # IDE
 .idea/
@@ -61,3 +67,6 @@ data/
 
 # Devin
 .devin/
+
+# Zitadel service-account PAT (local)
+billing/.zitadel-machinekey/

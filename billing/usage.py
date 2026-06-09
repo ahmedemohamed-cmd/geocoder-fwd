@@ -1,0 +1,125 @@
+"""Redis-backed live metering + durable event buffer + aggregator.
+
+Two planes of usage state:
+
+* **Live counters** (Redis INCR) — authoritative for real-time display and for
+  cluster-wide quota enforcement. Every gateway replica increments the *same*
+  Redis keys, so the count is global regardless of which replica served the
+  request. This is the analogue of APISIX's ``limit-count`` Redis policy.
+* **Durable rollups** (Postgres) — billing source of truth. The gateway pushes a
+  lightweight event onto a Redis list per request; the aggregator drains it in
+  batches into ``usage_rollups``. In production this buffer is NATS/JetStream
+  for at-least-once delivery; the list keeps the build self-contained.
+"""
+from __future__ import annotations
+
+import json
+from collections import defaultdict
+from datetime import date, datetime, timezone
+from typing import Any
+
+from . import config, repo
+
+
+def now_parts(ts: datetime | None = None) -> tuple[str, str]:
+    """Return (period 'YYYY-MM', day 'YYYY-MM-DD') in UTC."""
+    ts = ts or datetime.now(timezone.utc)
+    return ts.strftime("%Y-%m"), ts.strftime("%Y-%m-%d")
+
+
+# ── key cache (shared across replicas) ───────────────────────────────────────
+async def cache_key(redis, key_hash: str, payload: dict[str, Any]) -> None:
+    await redis.set(config.KEYCACHE_PREFIX + key_hash, json.dumps(payload),
+                    ex=config.KEYCACHE_TTL)
+
+
+async def get_cached_key(redis, key_hash: str) -> dict | None:
+    raw = await redis.get(config.KEYCACHE_PREFIX + key_hash)
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode()
+    return json.loads(raw)
+
+
+async def invalidate_key(redis, key_hash: str) -> None:
+    await redis.delete(config.KEYCACHE_PREFIX + key_hash)
+
+
+# ── live counters ────────────────────────────────────────────────────────────
+def _tkey(tenant_id: str, period: str) -> str:
+    return f"{config.LIVE_TENANT_PREFIX}{tenant_id}:{period}"
+
+
+def _kkey(key_id: str, period: str) -> str:
+    return f"{config.LIVE_KEY_PREFIX}{key_id}:{period}"
+
+
+async def incr_tenant(redis, tenant_id: str, period: str) -> int:
+    return int(await redis.incr(_tkey(tenant_id, period)))
+
+
+async def decr_tenant(redis, tenant_id: str, period: str) -> int:
+    return int(await redis.decr(_tkey(tenant_id, period)))
+
+
+async def incr_key(redis, key_id: str, period: str) -> int:
+    return int(await redis.incr(_kkey(key_id, period)))
+
+
+async def get_tenant_live(redis, tenant_id: str, period: str) -> int:
+    val = await redis.get(_tkey(tenant_id, period))
+    return int(val) if val is not None else 0
+
+
+async def get_key_live(redis, key_id: str, period: str) -> int:
+    val = await redis.get(_kkey(key_id, period))
+    return int(val) if val is not None else 0
+
+
+# ── durable event buffer ─────────────────────────────────────────────────────
+async def push_event(redis, *, tenant_id: str, key_id: str, endpoint: str,
+                     period: str, day: str) -> None:
+    await redis.rpush(config.USAGE_EVENTS_LIST, json.dumps(
+        {"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day}))
+
+
+async def record(redis, *, tenant_id: str, key_id: str, endpoint: str) -> None:
+    """Record one served request: bump live counters + enqueue a durable event.
+    Used by the APISIX usage sink and the legacy gateway."""
+    period, day = now_parts()
+    await incr_tenant(redis, tenant_id, period)
+    await incr_key(redis, key_id, period)
+    await push_event(redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint,
+                     period=period, day=day)
+
+
+async def flush_events(pool, redis, *, batch: int = 1000) -> int:
+    """Drain up to ``batch`` buffered events into Postgres rollups (idempotent
+    increments). Returns the number of events processed."""
+    events: list[dict] = []
+    for _ in range(batch):
+        raw = await redis.lpop(config.USAGE_EVENTS_LIST)
+        if raw is None:
+            break
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        events.append(json.loads(raw))
+    if not events:
+        return 0
+
+    agg: dict[tuple, int] = defaultdict(int)
+    for e in events:
+        agg[(e["t"], e["k"], e["p"], e["d"], e.get("e", ""))] += 1
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for (tenant_id, key_id, period, day, endpoint), n in agg.items():
+                await conn.execute(
+                    """INSERT INTO usage_rollups (tenant_id, key_id, period, day, endpoint, count)
+                       VALUES ($1,$2,$3,$4,$5,$6)
+                       ON CONFLICT (tenant_id, key_id, day, endpoint)
+                       DO UPDATE SET count = usage_rollups.count + EXCLUDED.count""",
+                    tenant_id, key_id, period, date.fromisoformat(day), endpoint, n,
+                )
+    return len(events)

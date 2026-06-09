@@ -1,0 +1,442 @@
+### Metered Geocoding API — via the APISIX gateway (data plane)
+###
+### Every request below goes through the Apache APISIX proxy ({{gatewayUrl}}),
+### NOT directly to the geocoder. APISIX authenticates the caller by API key,
+### enforces the tenant's monthly quota, meters the call, then forwards it to the
+### geocoder. The JSON responses are identical to the direct service — only the
+### entrypoint and the auth/quota behaviour differ.
+###
+### AUTHENTICATION
+###   Send your key in the  X-API-Key  header on EVERY request (all paths are
+###   protected, including /health and /features).
+###     401  – missing or invalid/deleted key
+###     403  – key disabled, or tenant suspended
+###     429  – monthly quota exceeded (hard-cap plans only; soft plans bill overage)
+###
+### GETTING A KEY
+###   Sign in to the console (http://localhost:8088) as a tenant user and create
+###   a key under "API keys" — the secret is shown once. Paste it into @apiKey.
+###   (Disable/enable/delete a key there too; changes take effect within ~1s.)
+###
+### METERING & BILLING
+###   Each served request (2xx) increments your tenant's monthly counter. Live
+###   usage shows on the console within a few seconds; rejected calls (401/403/429)
+###   are NOT counted. Monthly bills are generated from the recorded usage.
+###
+### ENDPOINTS (forwarded to the geocoder)
+###   GET  /features      – which optional features are enabled
+###   GET  /health        – dependency health check (keyed here)
+###   GET  /autocomplete  – fast prefix suggestions
+###   GET  /geocode       – full-text + vector + geo search (+ interpolation)
+###   GET  /address       – structured address search (+ interpolation)
+###   GET  /reverse       – reverse geocoding
+###   GET  /deep/forward  – deep forward geocoding via Google Maps
+###   GET  /deep/reverse  – deep reverse geocoding via Google Maps
+###   GET  /describe      – AI title + description for a place
+###   POST /feedback      – popularity feedback loop
+###   POST /places        – add a custom place
+###   POST /insert        – insert raw OSM element
+###   POST /traffic/probe  – submit one GPS ping
+###   POST /traffic/probes – submit a GPS trace (batch)
+###   GET  /traffic/edge   – live speed for the road edge nearest a point
+###
+### Shared query flags: vector=true|false · ai=true|false · describe=true|false
+
+@gatewayUrl = http://localhost:8080
+#@gatewayUrl = http://84.8.102.106:8080
+
+# Your tenant API key (create one in the console; shown once). Replace this.
+@apiKey = gk_250b6017_0NLrXxtKdNdS6HJ-sq3BIpBZZr1MGCFS
+
+
+# ============================================================================
+# AUTH / QUOTA behaviour (try these first to see the gateway in action)
+# ============================================================================
+
+### No key → 401 Unauthorized (key-auth rejects before reaching the geocoder)
+GET {{gatewayUrl}}/features
+
+###
+
+### Invalid key → 401 Unauthorized
+GET {{gatewayUrl}}/features
+X-API-Key: gk_not_a_real_key
+
+###
+
+### Valid key → 200 (this call is metered against your monthly quota)
+GET {{gatewayUrl}}/features
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /features  –  Feature flags
+# ============================================================================
+
+### Report which optional features (vectors, AI) are enabled
+GET {{gatewayUrl}}/features
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /health  –  Dependency health check (keyed when accessed via the gateway)
+# ============================================================================
+
+### ES / PostGIS / NATS / Redis / Ollama status (200 healthy, 503 degraded)
+GET {{gatewayUrl}}/health
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /autocomplete  –  Fast prefix-based suggestions
+#   q (required) · lat/lon (geo-bias) · limit (1–20, default 7)
+# ============================================================================
+
+### First few characters
+GET {{gatewayUrl}}/autocomplete?q=cai
+X-API-Key: {{apiKey}}
+
+###
+
+### Longer prefix narrows the suggestions
+GET {{gatewayUrl}}/autocomplete?q=cairo
+X-API-Key: {{apiKey}}
+
+###
+
+### Arabic prefix
+GET {{gatewayUrl}}/autocomplete?q=القاه
+X-API-Key: {{apiKey}}
+
+###
+
+### Geo-biased – prefer suggestions near downtown Cairo
+GET {{gatewayUrl}}/autocomplete?q=corn&lat=30.0444&lon=31.2357
+X-API-Key: {{apiKey}}
+
+###
+
+### Short prefix with geo-bias, raised limit (nearby restaurants)
+GET {{gatewayUrl}}/autocomplete?q=rest&lat=30.0444&lon=31.2357&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /geocode  –  Full-text + vector + geo-decay search
+#   q (required) · lat/lon (bias) · limit (1–50) · offset · vector · ai
+#   describe · effort=high|optimized
+#   Response carries a `pagination` block { limit, offset, total, has_more }.
+# ============================================================================
+
+### Basic name search
+GET {{gatewayUrl}}/geocode?q=makaram
+X-API-Key: {{apiKey}}
+
+###
+
+### Geo-biased search near the Giza Pyramids
+GET {{gatewayUrl}}/geocode?q=pyramids&lat=29.9792&lon=31.1342&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+### Multi-word search with Cairo location bias
+GET {{gatewayUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Text-only search, vector re-ranking disabled (faster)
+GET {{gatewayUrl}}/geocode?q=alexandria&limit=10&vector=false
+X-API-Key: {{apiKey}}
+
+###
+
+### Fuzzy / typo-tolerant search (Latin typo of an English name)
+GET {{gatewayUrl}}/geocode?q=alexandira&lat=31.2001&lon=29.9187&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+### Venue-type search near Cairo
+GET {{gatewayUrl}}/geocode?q=restaurant&lat=30.0444&lon=31.2357&limit=15
+X-API-Key: {{apiKey}}
+
+###
+
+### Address-like query: housenumber + street clauses are added automatically
+GET {{gatewayUrl}}/geocode?q=10 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+### Arabic name search
+GET {{gatewayUrl}}/geocode?q=القاهرة&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Include AI descriptions (cached where available, null otherwise)
+GET {{gatewayUrl}}/geocode?q=cairo tower&lat=30.0459&lon=31.2243&limit=5&describe=true
+X-API-Key: {{apiKey}}
+
+###
+
+### Address interpolation – housenumber may be interpolated from neighbours
+GET {{gatewayUrl}}/geocode?q=15 Tahrir Street, Cairo&lat=30.0444&lon=31.2357&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+### Paginate – page 1 (check pagination.has_more), then re-request with offset += limit
+GET {{gatewayUrl}}/geocode?q=makaram&limit=10&offset=0
+X-API-Key: {{apiKey}}
+
+###
+
+### Paginate – page 2
+GET {{gatewayUrl}}/geocode?q=makaram&limit=10&offset=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Effort: optimized – lean fuzzy + rescore over top hits, lighter on ES under load
+GET {{gatewayUrl}}/geocode?q=tahrir square&lat=30.0444&lon=31.2357&limit=10&effort=optimized
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /address  –  Structured address search
+#   q (required) · lat/lon · limit · postcode · city · country · describe
+#   Response includes a `parsed` field showing the decomposition.
+# ============================================================================
+
+### Full address: housenumber + street + city (auto-parsed)
+GET {{gatewayUrl}}/address?q=10 Tahrir Street, Cairo
+X-API-Key: {{apiKey}}
+
+###
+
+### Street with city supplied as an explicit filter param
+GET {{gatewayUrl}}/address?q=Corniche El Nil&city=Cairo&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Street with country restriction
+GET {{gatewayUrl}}/address?q=Nile Street&country=EG&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Postcode as a hard filter combined with a street query
+GET {{gatewayUrl}}/address?q=Tahrir Street&postcode=11511
+X-API-Key: {{apiKey}}
+
+###
+
+### Arabic address – street in Arabic script
+GET {{gatewayUrl}}/address?q=شارع التحرير, القاهرة
+X-API-Key: {{apiKey}}
+
+###
+
+### Address interpolation – odd/even fallback
+GET {{gatewayUrl}}/address?q=17 Corniche El Nil&city=Cairo&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /reverse  –  Reverse geocoding (lat/lon → address / street / boundaries)
+#   lat (required) · lon (required) · describe
+# ============================================================================
+
+### Tahrir Square, Cairo
+GET {{gatewayUrl}}/reverse?lat=30.0444&lon=31.2357
+X-API-Key: {{apiKey}}
+
+###
+
+### Near the Giza Pyramids
+GET {{gatewayUrl}}/reverse?lat=29.9792&lon=31.1342
+X-API-Key: {{apiKey}}
+
+###
+
+### Downtown Alexandria
+GET {{gatewayUrl}}/reverse?lat=31.2088&lon=29.9183
+X-API-Key: {{apiKey}}
+
+###
+
+### With AI descriptions on streets/polygons
+GET {{gatewayUrl}}/reverse?lat=30.0444&lon=31.2357&describe=true
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /deep/forward  &  /deep/reverse  –  Deep geocoding via Google Maps
+#   Resolve via Google, map to OSM tags, index, return geocode/reverse-shaped.
+#   Requires GOOGLE_MAPS_API_KEY + ENABLE_DEEP on the geocoder (else 503).
+#   forward: q, language (required) · limit · region · publish · enrich
+#   reverse: lat, lon, language (required) · publish · describe
+# ============================================================================
+
+### Deep forward (English) – resolve a place via Google, index it
+GET {{gatewayUrl}}/deep/forward?q=Cairo Tower&language=en&region=eg&limit=5
+X-API-Key: {{apiKey}}
+
+###
+
+### Deep forward without publishing (just resolve + return, don't index)
+GET {{gatewayUrl}}/deep/forward?q=15 Tahrir Street, Cairo&language=en&publish=false
+X-API-Key: {{apiKey}}
+
+###
+
+### Deep reverse – resolve an address for a point via Google
+GET {{gatewayUrl}}/deep/reverse?lat=30.0444&lon=31.2357&language=en
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /describe  –  AI-generated title + description for a place
+#   osm_id (required). First call blocks until generated, then cached.
+# ============================================================================
+
+### Describe a node (blocks until ready on first call)
+GET {{gatewayUrl}}/describe?osm_id=n271613766
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /feedback  –  Popularity feedback loop
+#   osm_id (required) · boost (0.1–10.0, default 1.0)
+# ============================================================================
+
+### Default boost (+1.0)
+POST {{gatewayUrl}}/feedback?osm_id=n271613766&boost=1.0
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /places  –  Add a custom place (published to NATS, indexed asynchronously)
+# ============================================================================
+
+### Minimal – name + coordinates
+POST {{gatewayUrl}}/places
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "Downtown Cafe",
+  "lat": 30.0500,
+  "lon": 31.2400,
+  "tags": { "amenity": "cafe" }
+}
+
+###
+
+### Restaurant with address fields
+POST {{gatewayUrl}}/places
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "Nile View Restaurant",
+  "name_en": "Nile View Restaurant",
+  "lat": 30.0444,
+  "lon": 31.2357,
+  "osm_type": "node",
+  "admin_level": 8,
+  "tags": { "amenity": "restaurant", "cuisine": "egyptian" },
+  "addr_housenumber": "5",
+  "addr_street": "Corniche El Nil",
+  "addr_city": "Cairo",
+  "addr_postcode": "11511",
+  "addr_country": "EG"
+}
+
+###
+
+# ============================================================================
+# /insert  –  Raw OSM element insertion (watcher.py message format)
+# ============================================================================
+
+### Node with address tags (indexed as an address point)
+POST {{gatewayUrl}}/insert
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "osm_id": "n999001",
+  "osm_type": "node",
+  "tags": {
+    "name": "Sample Building",
+    "building": "yes",
+    "addr:housenumber": "42",
+    "addr:street": "Tahrir Street",
+    "addr:city": "Cairo",
+    "addr:postcode": "11511",
+    "addr:country": "EG"
+  },
+  "geom": { "type": "Point", "coordinates": [31.2357, 30.0444] },
+  "admin_level": 0,
+  "area_km2": 0.0
+}
+
+###
+
+# ============================================================================
+# LIVE TRAFFIC  –  crowdsourced GPS probes (requires ENABLE_TRAFFIC on geocoder)
+#   probe ping: { lat, lon, speed?(m/s), heading?(deg), ts?(epoch seconds) }
+# ============================================================================
+
+### Submit a GPS trace (batch map-matches far better than single points)
+POST {{gatewayUrl}}/traffic/probes
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "device_id": "demo-device-1",
+  "points": [
+    { "lat": 30.0444, "lon": 31.2357, "speed": 3.0, "ts": 1750000000 },
+    { "lat": 30.0429, "lon": 31.2300, "speed": 2.5, "ts": 1750000020 },
+    { "lat": 30.0410, "lon": 31.2230, "speed": 3.2, "ts": 1750000045 }
+  ]
+}
+
+###
+
+### Submit a single GPS ping (device_id is a query param)
+POST {{gatewayUrl}}/traffic/probe?device_id=demo-device-3
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{ "lat": 30.0444, "lon": 31.2357, "speed": 4.0, "ts": 1750000000 }
+
+###
+
+### Inspect the current live speed for the edge nearest a point
+GET {{gatewayUrl}}/traffic/edge?lat=30.0444&lon=31.2357
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# NOTE — Routing (Valhalla) is NOT behind the metered proxy.
+# The APISIX route currently proxies only the geocoder (geocoder:8000). Valhalla
+# (/route, /isochrone, /sources_to_targets, …) is reached directly on its own
+# port — see requests.http. To meter routing too, add a second APISIX route for
+# the Valhalla upstream and call it here with the same X-API-Key.
+# ============================================================================
