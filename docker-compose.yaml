@@ -2,8 +2,8 @@ services:
   nats:
     image: nats:2.10
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
     command: "-c /etc/nats/nats.conf"
     volumes:
       - nats-data:/data
@@ -26,7 +26,7 @@ services:
       redis-server --save "" --appendonly no
       --maxmemory 850mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -42,7 +42,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -67,7 +67,7 @@ services:
   postgis:
     image: postgis/postgis:16-3.4-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -87,7 +87,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     environment:
@@ -176,7 +176,7 @@ services:
     build: .
     command: python -u -m services.geocoder
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./models:/app/models
     environment:
@@ -237,7 +237,7 @@ services:
   valhalla:
     image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
     ports:
-      - "8001:8002"
+      - "127.0.0.1:8001:8002"
     volumes:
       - ./data:/custom_files
     environment:
@@ -533,7 +533,7 @@ services:
       - ./billing/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
     ports:
       - "8080:9080"    # proxy (metered API entrypoint)
-      - "9180:9180"    # admin API
+      - "127.0.0.1:9180:9180"    # admin API
     depends_on:
       etcd:
         condition: service_started
