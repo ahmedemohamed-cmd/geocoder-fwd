@@ -102,7 +102,9 @@ APISIX_KEY_HEADER = os.getenv("APISIX_KEY_HEADER", "X-API-Key")
 APISIX_UPSTREAM = os.getenv("APISIX_UPSTREAM", "geocoder:8000")
 APISIX_ROUTE_URI = os.getenv("APISIX_ROUTE_URI", "/*")
 APISIX_ROUTE_ID = os.getenv("APISIX_ROUTE_ID", "geocoder")
-APISIX_VALHALLA_UPSTREAM = os.getenv("APISIX_VALHALLA_UPSTREAM", "valhalla:8002")
+# Routing paths are handled by the geocoder (which proxies to Valhalla internally
+# and adds Arabic narration support). Keep the env-var override for flexibility.
+APISIX_VALHALLA_UPSTREAM = os.getenv("APISIX_VALHALLA_UPSTREAM", "geocoder:8000")
 APISIX_VALHALLA_ROUTE_ID = os.getenv("APISIX_VALHALLA_ROUTE_ID", "valhalla")
 # TTL (seconds) on the per-month limit-count key. The quota itself resets when
 # the period-scoped key rolls over each calendar month (re-projected by the

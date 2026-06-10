@@ -2367,6 +2367,61 @@ async def deep_reverse(
     return result
 
 
+# ── Valhalla routing proxy (with Arabic narration) ────────────────────────────
+# Valhalla 3.5.1 has no Arabic locale; requests with language=ar fall back to
+# en-US silently.  These endpoints forward to Valhalla and rewrite instructions
+# to Arabic when the caller passes language=ar (or any ar-* BCP-47 tag).
+
+from services.routing import proxy as _routing_proxy
+
+
+@app.get("/status")
+async def routing_status():
+    """Valhalla engine status (version, tileset bbox, available actions)."""
+    status_code, body = await _routing_proxy("/status", "GET", None)
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@app.post("/route")
+async def routing_route(request: Request):
+    """Turn-by-turn directions. Supports language=ar for Arabic narration."""
+    body = await request.json()
+    status_code, result = await _routing_proxy("/route", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.post("/optimized_route")
+async def routing_optimized_route(request: Request):
+    """Optimized route (TSP) — reorders waypoints for shortest tour."""
+    body = await request.json()
+    status_code, result = await _routing_proxy("/optimized_route", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.post("/sources_to_targets")
+async def routing_sources_to_targets(request: Request):
+    """Time/distance matrix (many sources to many targets)."""
+    body = await request.json()
+    status_code, result = await _routing_proxy("/sources_to_targets", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.post("/isochrone")
+async def routing_isochrone(request: Request):
+    """Reachability polygons at given time/distance contours."""
+    body = await request.json()
+    status_code, result = await _routing_proxy("/isochrone", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@app.post("/locate")
+async def routing_locate(request: Request):
+    """Snap coordinates to the routing graph (nearest edges/nodes)."""
+    body = await request.json()
+    status_code, result = await _routing_proxy("/locate", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
 if __name__ == "__main__":
     import uvicorn
 
