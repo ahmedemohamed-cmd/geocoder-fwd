@@ -71,13 +71,19 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
             await usage.decr_tenant(redis, info["tenant_id"], period)
             return _err(429, "monthly quota exceeded")
 
-        # 4) meter ------------------------------------------------------------
+        # 4) proxy ------------------------------------------------------------
+        resp = await _forward(app.state.http_client, request, path)
+
+        # 5) meter — only count *served* requests (status < 400), matching the
+        # APISIX usage sink. An upstream error/4xx/5xx refunds the quota slot
+        # taken in step 3 and is not metered per-key or billed.
+        if resp.status_code >= 400:
+            await usage.decr_tenant(redis, info["tenant_id"], period)
+            return resp
         await usage.incr_key(redis, info["key_id"], period)
         await usage.push_event(redis, tenant_id=info["tenant_id"], key_id=info["key_id"],
                                endpoint=endpoint, period=period, day=day)
-
-        # 5) proxy ------------------------------------------------------------
-        return await _forward(app.state.http_client, request, path)
+        return resp
 
     return app
 

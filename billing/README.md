@@ -18,7 +18,10 @@ in real time, generates monthly bills, and exposes admin + tenant reporting.
 
 **Quotas & metering.** A plan has a single monthly quota + overage price + hard-cap
 flag. APISIX `limit-count`(redis) enforces the per-tenant hard quota in-line and
-cluster-wide; the usage sink pushes events to a Redis list that the aggregator
+cluster-wide; its Redis key is scoped to the calendar period (`<group>:<YYYY-MM>`)
+so the quota resets on the 1st in step with the Postgres rollups — the aggregator
+re-projects each tenant's group when the month rolls over. The usage sink pushes
+events to a Redis list that the aggregator
 drains into **Postgres rollups** — the durable source of truth for both billing
 **and** the usage display (so counts never reset when the cache is evicted).
 Counting stays on Redis (not NATS). Enable/disable re-pushes the key to APISIX,
@@ -60,7 +63,7 @@ Bootstrap seeds plans (`free`/`starter`/`pro`) and a platform admin
 
 ```bash
 pip install -r billing/requirements.txt
-pytest tests/billing          # 48 tests: auth/Zitadel, tenant/key/plan CRUD,
+pytest tests/billing          # 58 tests: auth/Zitadel, tenant/key/plan CRUD,
                               # gateway enforcement, quotas, scopes, aggregation,
                               # billing, APISIX consumer-mapping + usage sink
 ```
@@ -131,6 +134,6 @@ Zitadel.
 - **Event buffer = Redis list** (the chosen design — counting stays on Redis,
   not NATS). The aggregator can be pointed at NATS later without touching the
   control plane.
-- Tests: `pytest tests/billing` — 48 tests (auth/Zitadel-RS256, tenant/key/plan
+- Tests: `pytest tests/billing` — 58 tests (auth/Zitadel-RS256, tenant/key/plan
   CRUD, gateway enforcement, quotas, scopes, aggregation, billing, APISIX
   consumer-mapping + usage sink). Real Postgres `billing_test` + fakeredis.

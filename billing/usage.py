@@ -86,7 +86,10 @@ async def push_event(redis, *, tenant_id: str, key_id: str, endpoint: str,
 
 async def record(redis, *, tenant_id: str, key_id: str, endpoint: str) -> None:
     """Record one served request: bump live counters + enqueue a durable event.
-    Used by the APISIX usage sink and the legacy gateway."""
+    Used by the APISIX usage sink and the legacy gateway. The live counters are
+    the reference gateway's quota-enforcement state and a real-time observability
+    read (e.g. ``get_tenant_live``); durable billing/display reads the Postgres
+    rollups the durable event feeds."""
     period, day = now_parts()
     await incr_tenant(redis, tenant_id, period)
     await incr_key(redis, key_id, period)

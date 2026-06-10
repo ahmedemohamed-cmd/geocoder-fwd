@@ -102,8 +102,11 @@ APISIX_KEY_HEADER = os.getenv("APISIX_KEY_HEADER", "X-API-Key")
 APISIX_UPSTREAM = os.getenv("APISIX_UPSTREAM", "geocoder:8000")
 APISIX_ROUTE_URI = os.getenv("APISIX_ROUTE_URI", "/*")
 APISIX_ROUTE_ID = os.getenv("APISIX_ROUTE_ID", "geocoder")
-# Monthly quota window for limit-count (seconds).
-APISIX_LIMIT_WINDOW = _int("APISIX_LIMIT_WINDOW", 2592000)
+# TTL (seconds) on the per-month limit-count key. The quota itself resets when
+# the period-scoped key rolls over each calendar month (re-projected by the
+# aggregator), so this only needs to outlast the longest month — 32 days of
+# slack keeps a 31-day month's counter from expiring early.
+APISIX_LIMIT_WINDOW = _int("APISIX_LIMIT_WINDOW", 2764800)
 
 # Usage sink: APISIX http-logger posts request logs here; the control plane
 # turns them into Redis live counters + durable events.

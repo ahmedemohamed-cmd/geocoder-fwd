@@ -76,9 +76,12 @@ def build_app(pool=None, redis=None) -> FastAPI:
     app = FastAPI(title="API Key Management — Control Plane")
     app.state.pool = pool
     app.state.redis = redis
+    # Credentialed CORS is incompatible with a wildcard origin (the browser
+    # rejects "*" + credentials), so only allow credentials for explicit origins.
+    allow_credentials = "*" not in config.CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware, allow_origins=config.CORS_ORIGINS,
-        allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
+        allow_methods=["*"], allow_headers=["*"], allow_credentials=allow_credentials)
 
     # ── auth ─────────────────────────────────────────────────────────────────
     @app.post("/auth/login", response_model=TokenResponse, tags=["auth"])

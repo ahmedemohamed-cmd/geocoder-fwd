@@ -13,9 +13,16 @@ All functions are no-ops unless APISIX is configured, so dev/tests are unaffecte
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 
 from . import config
+
+
+def current_period() -> str:
+    """Current billing period 'YYYY-MM' in UTC (matches usage.now_parts)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
 def enabled() -> bool:
@@ -63,12 +70,21 @@ async def ensure_route() -> None:
         r.raise_for_status()
 
 
-async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool) -> bool:
+async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool,
+                                period: str | None = None) -> bool:
     """Create/update (hard-cap) or delete (soft) a tenant's limit-count group.
-    Returns True if the group exists (so consumers should join it)."""
+    Returns True if the group exists (so consumers should join it).
+
+    The limit-count Redis key is scoped to the calendar billing period
+    (``<group>:<YYYY-MM>``) so the hard quota resets on the 1st, aligned with the
+    Postgres rollups that billing reads. APISIX's own ``time_window`` is only a
+    TTL on that per-month key, so it's set generously (≥ longest month) and the
+    real reset comes from the key rolling over — re-projected each month by the
+    aggregator (see ``billing.aggregator``)."""
     if not enabled():
         return False
     gid = group_id(tenant_id)
+    period = period or current_period()
     async with _client() as c:
         if hard_cap and quota > 0:
             await c.put(f"/consumer_groups/{gid}", json={"plugins": {"limit-count": {
@@ -76,7 +92,7 @@ async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool) -
                 "rejected_code": 429, "policy": "redis",
                 "redis_host": config.REDIS_HOST, "redis_port": config.REDIS_PORT,
                 "redis_database": config.REDIS_DB,
-                "key_type": "constant", "key": gid}}})
+                "key_type": "constant", "key": f"{gid}:{period}"}}})
             return True
         await c.delete(f"/consumer_groups/{gid}")
         return False

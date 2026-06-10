@@ -422,6 +422,16 @@ async def tenant_ids_on_plan(pool, plan_id: str) -> list[str]:
     return [str(r["id"]) for r in rows]
 
 
+async def list_active_tenant_quota_specs(pool) -> list[dict]:
+    """(tenant_id, monthly_quota, hard_cap) for every active tenant — used to
+    re-project per-tenant APISIX limit-count groups at month rollover."""
+    rows = await pool.fetch(
+        """SELECT t.id AS tenant_id, p.monthly_quota, p.hard_cap
+             FROM tenants t JOIN plans p ON p.id = t.plan_id
+            WHERE t.status = 'active'""")
+    return [dict(r) for r in rows]
+
+
 async def list_plans(pool) -> list[dict]:
     return [dict(r) for r in await pool.fetch("SELECT * FROM plans ORDER BY base_price_cents")]
 
