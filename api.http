@@ -434,9 +434,250 @@ X-API-Key: {{apiKey}}
 ###
 
 # ============================================================================
-# NOTE — Routing (Valhalla) is NOT behind the metered proxy.
-# The APISIX route currently proxies only the geocoder (geocoder:8000). Valhalla
-# (/route, /isochrone, /sources_to_targets, …) is reached directly on its own
-# port — see requests.http. To meter routing too, add a second APISIX route for
-# the Valhalla upstream and call it here with the same X-API-Key.
+# ROUTING  –  Valhalla routing engine (proxied via APISIX gateway)
+#   All routing requests are POSTs with a JSON body. Coordinates are {lat, lon}.
+#   costing: auto | bicycle | pedestrian | bus | truck | motor_scooter | taxi
+#   Wait for GET /status to return 200 before routing (graph build can take
+#   several minutes on first start — watch: docker compose logs -f valhalla).
 # ============================================================================
+
+### Status – engine version, loaded tileset bbox, available actions
+GET {{gatewayUrl}}/status
+X-API-Key: {{apiKey}}
+
+###
+
+### Driving directions – Cairo (Tahrir Sq.) → Alexandria, turn-by-turn
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357, "type": "break" },
+    { "lat": 31.2001, "lon": 29.9187, "type": "break" }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers", "language": "en-US" }
+}
+
+###
+
+### Driving directions in Arabic narrative – Tahrir → Giza Pyramids
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers", "language": "ar-SA" }
+}
+
+###
+
+### Multi-stop route – Tahrir → Zamalek → Heliopolis → Giza Pyramids
+### "through" points don't split into legs; use "break" to force a leg split
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357, "type": "break" },
+    { "lat": 30.0614, "lon": 31.2208, "type": "through" },
+    { "lat": 30.0928, "lon": 31.3201, "type": "through" },
+    { "lat": 29.9792, "lon": 31.1342, "type": "break" }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Optimized route (TSP) – Valhalla reorders middle waypoints to minimise drive time
+POST {{gatewayUrl}}/optimized_route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0928, "lon": 31.3201 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Time/distance matrix – one origin (Tahrir) to several destinations at once
+POST {{gatewayUrl}}/sources_to_targets
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "sources": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "targets": [
+    { "lat": 31.2001, "lon": 29.9187 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 30.0928, "lon": 31.3201 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "auto",
+  "units": "kilometers"
+}
+
+###
+
+### Many-to-many matrix – 3 sources × 3 targets = 9 cost cells
+POST {{gatewayUrl}}/sources_to_targets
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "sources": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0614, "lon": 31.2208 },
+    { "lat": 30.0928, "lon": 31.3201 }
+  ],
+  "targets": [
+    { "lat": 30.0479, "lon": 31.2355 },
+    { "lat": 29.9792, "lon": 31.1342 },
+    { "lat": 31.2001, "lon": 29.9187 }
+  ],
+  "costing": "auto",
+  "units": "kilometers"
+}
+
+###
+
+### Bicycle directions – Tahrir → Zamalek
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 30.0614, "lon": 31.2208 }
+  ],
+  "costing": "bicycle",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Walking directions – Tahrir Sq. → Egyptian Museum
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0082, "lon": 31.5074 },
+    { "lat": 30.0479, "lon": 31.2355 }
+  ],
+  "costing": "pedestrian",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Truck directions – Tahrir → Alexandria, avoid tolls
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 31.2001, "lon": 29.9187 }
+  ],
+  "costing": "truck",
+  "costing_options": {
+    "truck": { "use_tolls": 0.0 }
+  },
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Isochrone – reachability polygons from Tahrir Sq. at 10 / 20 / 30 minutes
+POST {{gatewayUrl}}/isochrone
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "costing": "auto",
+  "contours": [
+    { "time": 10, "color": "ff0000" },
+    { "time": 20, "color": "00ff00" },
+    { "time": 30, "color": "0000ff" }
+  ],
+  "polygons": true
+}
+
+###
+
+### Locate – snap coordinates onto the routing graph (debug nearest edges/nodes)
+POST {{gatewayUrl}}/locate
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 }
+  ],
+  "costing": "auto",
+  "verbose": true
+}
+
+###
+
+### Baseline route (no live traffic) – Tahrir → Giza. Note summary.time.
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Live-traffic route – same Tahrir → Giza, opted into current traffic speeds.
+### After posting slow /traffic/probes above, summary.time should rise vs. baseline.
+POST {{gatewayUrl}}/route
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357 },
+    { "lat": 29.9792, "lon": 31.1342 }
+  ],
+  "costing": "auto",
+  "costing_options": {
+    "auto": { "speed_types": ["freeflow", "constrained", "predicted", "current"] }
+  },
+  "date_time": { "type": 0 },
+  "directions_options": { "units": "kilometers" }
+}
+
+###

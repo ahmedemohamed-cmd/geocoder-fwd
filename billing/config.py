@@ -102,6 +102,8 @@ APISIX_KEY_HEADER = os.getenv("APISIX_KEY_HEADER", "X-API-Key")
 APISIX_UPSTREAM = os.getenv("APISIX_UPSTREAM", "geocoder:8000")
 APISIX_ROUTE_URI = os.getenv("APISIX_ROUTE_URI", "/*")
 APISIX_ROUTE_ID = os.getenv("APISIX_ROUTE_ID", "geocoder")
+APISIX_VALHALLA_UPSTREAM = os.getenv("APISIX_VALHALLA_UPSTREAM", "valhalla:8002")
+APISIX_VALHALLA_ROUTE_ID = os.getenv("APISIX_VALHALLA_ROUTE_ID", "valhalla")
 # TTL (seconds) on the per-month limit-count key. The quota itself resets when
 # the period-scoped key rolls over each calendar month (re-projected by the
 # aggregator), so this only needs to outlast the longest month — 32 days of

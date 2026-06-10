@@ -39,9 +39,10 @@ async def _cp_lifespan(app):
     app.state.pool = await db.create_pool()
     app.state.redis = _make_redis()
     await db.bootstrap(app.state.pool)
-    if apisix_admin.enabled():        # provision the geocoder route + log format
+    if apisix_admin.enabled():        # provision the geocoder + valhalla routes
         try:
             await apisix_admin.ensure_route()
+            await apisix_admin.ensure_valhalla_route()
         except Exception:  # noqa: BLE001 - APISIX may still be starting
             pass
     yield

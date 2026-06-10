@@ -49,10 +49,7 @@ def _client() -> httpx.AsyncClient:
         headers={"X-API-KEY": config.APISIX_ADMIN_KEY}, timeout=15)
 
 
-async def ensure_route() -> None:
-    """Create/refresh the geocoder route + http-logger log format."""
-    if not enabled():
-        return
+def _metered_plugins() -> dict:
     plugins: dict = {"key-auth": {"header": config.APISIX_KEY_HEADER}}
     if config.USAGE_SINK_URL:
         plugins["http-logger"] = {
@@ -60,13 +57,35 @@ async def ensure_route() -> None:
             "batch_max_size": 50, "inactive_timeout": 2, "buffer_duration": 2,
             "include_req_body": False,
         }
+    return plugins
+
+
+async def ensure_route() -> None:
+    """Create/refresh the geocoder route + http-logger log format."""
+    if not enabled():
+        return
     async with _client() as c:
         await c.put("/plugin_metadata/http-logger", json={
             "log_format": {"consumer": "$consumer_name", "uri": "$uri", "status": "$status"}})
         r = await c.put(f"/routes/{config.APISIX_ROUTE_ID}", json={
             "uri": config.APISIX_ROUTE_URI,
             "upstream": {"type": "roundrobin", "nodes": {config.APISIX_UPSTREAM: 1}},
-            "plugins": plugins})
+            "plugins": _metered_plugins()})
+        r.raise_for_status()
+
+
+async def ensure_valhalla_route() -> None:
+    """Create/refresh the Valhalla routing route (higher priority than the geocoder wildcard)."""
+    if not enabled():
+        return
+    valhalla_uris = ["/status", "/route", "/optimized_route",
+                     "/sources_to_targets", "/isochrone", "/locate"]
+    async with _client() as c:
+        r = await c.put(f"/routes/{config.APISIX_VALHALLA_ROUTE_ID}", json={
+            "uris": valhalla_uris,
+            "priority": 10,
+            "upstream": {"type": "roundrobin", "nodes": {config.APISIX_VALHALLA_UPSTREAM: 1}},
+            "plugins": _metered_plugins()})
         r.raise_for_status()
 
 
