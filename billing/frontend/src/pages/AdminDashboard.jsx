@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import PlansCard from "./PlansCard.jsx";
+import AdminsCard from "./AdminsCard.jsx";
 
 export default function AdminDashboard({ api }) {
   const [tenants, setTenants] = useState([]);
@@ -196,6 +197,7 @@ export default function AdminDashboard({ api }) {
       </section>
 
       <PlansCard api={api} onChange={setPlans} />
+      <AdminsCard api={api} />
     </div>
   );
 }

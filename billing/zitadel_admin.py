@@ -104,6 +104,28 @@ async def delete_user(*, email: str) -> bool:
         return True
 
 
+async def provision_admin_user(*, email: str, password: str, display_name: str) -> str | None:
+    """Create a platform-admin login in Zitadel: active user granted the `admin`
+    project role (no tenant metadata). No-op if disabled."""
+    if not enabled():
+        return None
+    first, _, last = display_name.partition(" ")
+    async with _client() as c:
+        r = await c.post("/management/v1/users/human/_import", json={
+            "userName": email,
+            "profile": {"firstName": first or email, "lastName": last or "admin"},
+            "email": {"email": email, "isEmailVerified": True},
+            "password": password, "passwordChangeRequired": False,
+        })
+        if r.status_code >= 300:
+            raise ZitadelError(f"create admin failed: {r.status_code} {r.text[:300]}")
+        user_id = r.json().get("userId") or r.json().get("id")
+        if config.ZITADEL_PROJECT_ID:
+            await c.post(f"/management/v1/users/{user_id}/grants", json={
+                "projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_ADMIN]})
+        return user_id
+
+
 async def set_user_password(*, email: str, password: str) -> bool:
     """Admin reset: set a user's password in Zitadel (no-op if disabled)."""
     if not enabled():

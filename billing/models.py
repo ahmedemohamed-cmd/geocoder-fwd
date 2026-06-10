@@ -61,6 +61,20 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class AdminOut(BaseModel):
+    email: str
+    status: str = "active"
+
+
+class AdminCreate(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+
+
+class AdminUpdate(BaseModel):
+    status: str = Field(pattern="^(active|disabled)$")
+
+
 class TenantOut(BaseModel):
     id: str
     name: str

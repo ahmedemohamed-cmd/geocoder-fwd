@@ -52,7 +52,8 @@ async def _apisix_safe(coro) -> None:
         _log.warning("APISIX op failed: %s", e)
 from .auth import (current_identity, get_pool, get_redis, require_admin,
                    require_tenant)
-from .models import (CurrentUsage, Identity, InvoiceOut, KeyCreate, KeyCreated,
+from .models import (AdminCreate, AdminOut, AdminUpdate, CurrentUsage, Identity,
+                     InvoiceOut, KeyCreate, KeyCreated,
                      KeyOut, KeyUpdate, KeyUsage, LoginRequest, PlanCreate,
                      PlanOut, PlanUpdate, ResetPasswordRequest, TenantCreate,
                      TenantOut, TenantUpdate, TenantUserCreate, TenantUserOut,
@@ -95,6 +96,73 @@ def build_app(pool=None, redis=None) -> FastAPI:
     @app.get("/auth/me", response_model=Identity, tags=["auth"])
     async def me(ident: Identity = Depends(current_identity)):
         return ident
+
+    # ── admin: platform admins CRUD ──────────────────────────────────────────
+    @app.get("/admin/admins", response_model=list[AdminOut], tags=[router_tag_admin])
+    async def list_admins(_: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        return await repo.list_admins(pool)
+
+    @app.post("/admin/admins", response_model=AdminOut, status_code=201,
+              tags=[router_tag_admin])
+    async def add_admin(body: AdminCreate, _: Identity = Depends(require_admin),
+                        pool=Depends(get_pool)):
+        try:
+            admin = await repo.create_admin(
+                pool, email=body.email, password_hash=security.hash_password(body.password))
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        try:
+            await zitadel_admin.provision_admin_user(
+                email=body.email, password=body.password, display_name=body.email)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"admin created but IdP provisioning failed: {e}")
+        return admin
+
+    @app.patch("/admin/admins/{email}", response_model=AdminOut, tags=[router_tag_admin])
+    async def modify_admin(email: str, body: AdminUpdate,
+                           _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        try:
+            admin = await repo.set_admin_status(pool, email=email, status=body.status)
+        except repo.NotFound as e:
+            raise _not_found(e)
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        try:
+            await zitadel_admin.set_user_active(email=email, active=body.status == "active")
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"IdP update failed: {e}")
+        return admin
+
+    @app.delete("/admin/admins/{email}", status_code=204, tags=[router_tag_admin])
+    async def remove_admin(email: str, _: Identity = Depends(require_admin),
+                           pool=Depends(get_pool)):
+        try:
+            await repo.delete_admin(pool, email=email)
+        except repo.NotFound as e:
+            raise _not_found(e)
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        try:
+            await zitadel_admin.delete_user(email=email)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"IdP delete failed: {e}")
+        return Response(status_code=204)
+
+    @app.post("/admin/admins/{email}/reset-password", status_code=204,
+              tags=[router_tag_admin])
+    async def reset_admin_password(email: str, body: ResetPasswordRequest,
+                                   _: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        try:
+            await repo.set_admin_password(
+                pool, email=email, password_hash=security.hash_password(body.new_password))
+        except repo.NotFound as e:
+            raise _not_found(e)
+        try:
+            await zitadel_admin.set_user_password(email=email, password=body.new_password)
+        except zitadel_admin.ZitadelError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"IdP reset failed: {e}")
+        return Response(status_code=204)
 
     # ── admin: tenants CRUD ──────────────────────────────────────────────────
     @app.post("/admin/tenants", response_model=TenantOut, status_code=201,

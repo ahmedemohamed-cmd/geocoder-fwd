@@ -81,6 +81,57 @@ async def set_user_password(pool, *, email: str, tenant_id: str, password_hash: 
         raise NotFound("user not found for this tenant")
 
 
+# ── platform admins (role='admin', no tenant) ────────────────────────────────
+async def list_admins(pool) -> list[dict]:
+    rows = await pool.fetch(
+        "SELECT email, status FROM users WHERE role='admin' ORDER BY email")
+    return [dict(r) for r in rows]
+
+
+async def create_admin(pool, *, email: str, password_hash: str) -> dict:
+    try:
+        rec = await pool.fetchrow(
+            """INSERT INTO users (email, password_hash, role, tenant_id)
+               VALUES ($1,$2,'admin',NULL) RETURNING email, status""",
+            email, password_hash)
+    except asyncpg.UniqueViolationError:
+        raise Conflict(f"user {email!r} already exists")
+    return dict(rec)
+
+
+async def _other_active_admins(pool, email: str) -> int:
+    return int(await pool.fetchval(
+        "SELECT count(*) FROM users WHERE role='admin' AND status='active' AND email <> $1",
+        email))
+
+
+async def set_admin_status(pool, *, email: str, status: str) -> dict:
+    if status == "disabled" and await _other_active_admins(pool, email) == 0:
+        raise Conflict("cannot disable the last active admin")
+    rec = await pool.fetchrow(
+        "UPDATE users SET status=$1 WHERE email=$2 AND role='admin' "
+        "RETURNING email, status", status, email)
+    if rec is None:
+        raise NotFound("admin not found")
+    return dict(rec)
+
+
+async def delete_admin(pool, *, email: str) -> None:
+    if await _other_active_admins(pool, email) == 0:
+        raise Conflict("cannot remove the last active admin")
+    res = await pool.execute("DELETE FROM users WHERE email=$1 AND role='admin'", email)
+    if res.endswith("0"):
+        raise NotFound("admin not found")
+
+
+async def set_admin_password(pool, *, email: str, password_hash: str) -> None:
+    res = await pool.execute(
+        "UPDATE users SET password_hash=$1 WHERE email=$2 AND role='admin'",
+        password_hash, email)
+    if res.endswith("0"):
+        raise NotFound("admin not found")
+
+
 # ── tenants ──────────────────────────────────────────────────────────────────
 async def create_tenant(
     pool, *, name: str, contact_email: str | None, plan_id: str,
