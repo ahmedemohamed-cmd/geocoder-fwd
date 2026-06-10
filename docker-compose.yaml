@@ -455,7 +455,8 @@ services:
       # write the service-account PAT; the init container reads it back.
       - ./billing/.zitadel-machinekey:/machinekey
     ports:
-      - "8085:8080"
+      # Host-private: reach it via the reverse proxy (nginx/Istio terminates TLS).
+      - "127.0.0.1:8085:8080"
     depends_on:
       zitadel-db:
         condition: service_healthy
@@ -471,7 +472,8 @@ services:
       dockerfile: billing/Dockerfile
     command: uvicorn billing.main:control_plane_app --host 0.0.0.0 --port 8100
     ports:
-      - "8100:8100"
+      # Host-private: the SPA reaches it through the reverse proxy (HTTPS).
+      - "127.0.0.1:8100:8100"
     environment:
       - BILLING_PG_HOST=postgis
       - BILLING_PG_PORT=5432
@@ -532,7 +534,8 @@ services:
     volumes:
       - ./billing/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
     ports:
-      - "8080:9080"    # proxy (metered API entrypoint)
+      # Host-private: the metered API is exposed via the reverse proxy (HTTPS).
+      - "127.0.0.1:8080:9080"    # proxy (metered API entrypoint)
       - "127.0.0.1:9180:9180"    # admin API
     depends_on:
       etcd:
@@ -592,7 +595,8 @@ services:
     build:
       context: ./billing/frontend
     ports:
-      - "8088:80"
+      # Host-private: served to users through the reverse proxy (HTTPS).
+      - "127.0.0.1:8088:80"
     volumes:
       # runtime config.json written by billing-zitadel-init, served at /runtime/
       - billing-frontend-config:/usr/share/nginx/html/runtime:ro
