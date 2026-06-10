@@ -64,11 +64,13 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
             return _err(403, f"key not scoped for '{endpoint}'")
 
         # 3) enforce quota (cluster-wide via shared Redis) --------------------
+        # Atomic check-and-increment: a rejected request never bumps the counter
+        # (no transient over-count, no leaked slot if we crash mid-decision).
         period, day = usage.now_parts()
-        count = await usage.incr_tenant(redis, info["tenant_id"], period)
         quota = int(info.get("quota") or 0)
-        if info.get("hard_cap") and quota > 0 and count > quota:
-            await usage.decr_tenant(redis, info["tenant_id"], period)
+        cap = quota if info.get("hard_cap") else 0  # 0 ⇒ soft plan, unlimited at gateway
+        count = await usage.incr_tenant_if_allowed(redis, info["tenant_id"], period, cap)
+        if count is None:
             return _err(429, "monthly quota exceeded")
 
         # 4) proxy ------------------------------------------------------------

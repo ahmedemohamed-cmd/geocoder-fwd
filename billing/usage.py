@@ -18,6 +18,8 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
+from redis.exceptions import WatchError
+
 from . import config, repo
 
 
@@ -57,6 +59,36 @@ def _kkey(key_id: str, period: str) -> str:
 
 async def incr_tenant(redis, tenant_id: str, period: str) -> int:
     return int(await redis.incr(_tkey(tenant_id, period)))
+
+
+async def incr_tenant_if_allowed(redis, tenant_id: str, period: str,
+                                 cap: int) -> int | None:
+    """Atomically bump the tenant counter unless it would exceed ``cap``.
+
+    Returns the new count if allowed, or ``None`` when already at/over the cap
+    (``cap <= 0`` means unlimited). A rejected request never increments, so —
+    unlike a plain INCR-then-DECR-on-reject — a crash between the two ops can't
+    leak a permanently-consumed quota slot, and concurrent requests never observe
+    a transiently inflated counter. Implemented with a WATCH/MULTI optimistic
+    transaction (no Lua, so it works against the in-test fakeredis)."""
+    if cap <= 0:
+        return await incr_tenant(redis, tenant_id, period)
+    key = _tkey(tenant_id, period)
+    async with redis.pipeline() as pipe:
+        while True:
+            try:
+                await pipe.watch(key)
+                raw = await pipe.get(key)
+                cur = int(raw) if raw is not None else 0
+                if cur >= cap:
+                    await pipe.unwatch()
+                    return None
+                pipe.multi()
+                pipe.incr(key)
+                res = await pipe.execute()
+                return int(res[0])
+            except WatchError:  # concurrent writer touched the key; retry
+                continue
 
 
 async def decr_tenant(redis, tenant_id: str, period: str) -> int:
