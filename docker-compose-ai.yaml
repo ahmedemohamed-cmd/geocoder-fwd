@@ -246,13 +246,19 @@ services:
 
   # Valhalla routing engine.
   #
-  # Uses the gis-ops "docker-valhalla" image, which on first start scans
-  # /custom_files for *.pbf, builds the routing graph (tiles) from ALL of them,
-  # then serves the routing API. configure_valhalla.sh globs $CUSTOM_FILES/*.pbf
-  # (top level only), so we mount the whole data dir at /custom_files — every
-  # *.osm.pbf the downloader/watcher drops in is included automatically, and the
-  # image rebuilds when it detects a new PBF set. Built tiles + config + the live
-  # traffic.tar persist under ./data and are shared with traffic-writer.
+  # Uses the gis-ops "docker-valhalla" image. path_extension=valhalla scopes the
+  # image's working dir to /custom_files/valhalla, so everything Valhalla builds
+  # (valhalla_tiles/, valhalla_tiles.tar, valhalla.json, admin_data/,
+  # timezone_data/, traffic.tar, file_hashes.txt) lives under ./data/valhalla —
+  # alongside ./data/geonames and ./data/openaddresses — instead of the top of
+  # ./data. The traffic.tar in there is shared with traffic-writer.
+  #
+  # The OSM extracts themselves stay at the top of ./data (the watcher and other
+  # services read them there). configure_valhalla.sh discovers PBFs with
+  # `ls $CUSTOM_FILES/*.pbf`, which follows symlinks, so the downloader drops a
+  # relative symlink ./data/valhalla/<name>.pbf -> ../<name>.pbf for every PBF
+  # it saves; the graph is built from ALL of them and the image rebuilds when it
+  # detects a new PBF set.
   #
   # The routing API listens on 8002 inside the container; we publish it on the
   # host as 8001 (the geocoder is on 8000). Endpoints: /route, /optimized_route,
@@ -264,6 +270,9 @@ services:
     volumes:
       - ./data:/custom_files
     environment:
+      # Keep all of Valhalla's generated files in ./data/valhalla (see the
+      # service comment); the PBFs are reached via symlinks in that dir.
+      - path_extension=valhalla
       # Build the graph from the bundled PBF rather than downloading tiles.
       - use_tiles_ignore_pbf=False
       - tile_urls=
@@ -277,8 +286,10 @@ services:
       - build_elevation=False
       - build_transit=False
       # Build the memory-mapped traffic extract that the traffic-writer updates
-      # in place to feed live traffic into routing (this is the default, pinned).
-      - traffic_name=traffic.tar
+      # in place to feed live traffic into routing. The image appends ".tar"
+      # itself, so "traffic" yields traffic.tar (the old traffic_name=traffic.tar
+      # produced traffic.tar.tar).
+      - traffic_name=traffic
       - build_tar=True
       - serve_tiles=True
       - server_threads=4
@@ -331,14 +342,15 @@ services:
   traffic-writer:
     build: .
     command: python -u -m services.traffic_writer
-    # Shares Valhalla's /custom_files (now the ./data bind) so it writes the same
-    # traffic.tar the routing engine serves.
+    # Shares Valhalla's /custom_files (the ./data bind) so it writes the same
+    # traffic.tar the routing engine serves (under data/valhalla/, where
+    # path_extension=valhalla puts it).
     volumes:
       - ./data:/custom_files
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - TRAFFIC_EXTRACT_PATH=/custom_files/traffic.tar
+      - TRAFFIC_EXTRACT_PATH=/custom_files/valhalla/traffic.tar
       - TRAFFIC_WRITE_INTERVAL=${TRAFFIC_WRITE_INTERVAL:-30}
       - TRAFFIC_EDGE_TTL=${TRAFFIC_EDGE_TTL:-600}
     depends_on:

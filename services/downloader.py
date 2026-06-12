@@ -13,6 +13,7 @@ import os
 import requests
 
 from shared.config import OSM_URL, DATA_DIR, OA_DATA_DIR, GN_DATA_DIR
+from shared.valhalla import link_pbf_for_valhalla
 
 # Set SSL_VERIFY=false in .env to disable certificate verification (dev only)
 _SSL_VERIFY = os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
@@ -60,7 +61,8 @@ def _download_file(url: str, dest_dir: str, label: str = "downloader"):
 def download():
     # ── OSM PBF ───────────────────────────────────────────────────────────
     if OSM_URL:
-        _download_file(OSM_URL, DATA_DIR, label="downloader")
+        pbf_path = _download_file(OSM_URL, DATA_DIR, label="downloader")
+        link_pbf_for_valhalla(pbf_path, label="downloader")
     else:
         print("[downloader] No osm_url configured, skipping OSM download")
 

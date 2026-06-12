@@ -102,8 +102,11 @@ TRAFFIC_STREAM = "TRAFFIC"
 TRAFFIC_SUBJECT = "traffic.probes"
 
 # Path to Valhalla's traffic extract, as seen by the traffic-writer container
-# (shares the valhalla-tiles volume mounted at /custom_files).
-TRAFFIC_EXTRACT_PATH = os.getenv("TRAFFIC_EXTRACT_PATH", "/custom_files/traffic.tar")
+# (shares the ./data bind mounted at /custom_files; Valhalla keeps its files
+# under the valhalla/ subdir via path_extension=valhalla).
+TRAFFIC_EXTRACT_PATH = os.getenv(
+    "TRAFFIC_EXTRACT_PATH", "/custom_files/valhalla/traffic.tar"
+)
 
 # Writer cadence and aggregation tuning.
 TRAFFIC_WRITE_INTERVAL = _safe_int("TRAFFIC_WRITE_INTERVAL", 30)   # seconds between flushes

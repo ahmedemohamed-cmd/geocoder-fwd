@@ -16,6 +16,7 @@ import redis
 from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
 from shared import nats_client
 from shared.processed import load_processed, is_processed, record_processed
+from shared.valhalla import link_pbf_for_valhalla
 
 SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
@@ -878,6 +879,15 @@ async def _scan_and_process() -> int:
     """
     done = load_processed(DATA_DIR)
     existing_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.osm.pbf")))
+
+    # Keep data/valhalla/*.pbf symlinks in sync so the routing engine sees
+    # every extract, including ones copied into data/ by hand (idempotent).
+    for f in existing_files:
+        try:
+            link_pbf_for_valhalla(f, label="watcher")
+        except OSError as e:
+            print(f"[watcher] Could not link {os.path.basename(f)} for Valhalla: {e}")
+
     pending = [f for f in existing_files if not is_processed(DATA_DIR, f, done)]
     if not pending:
         return 0
