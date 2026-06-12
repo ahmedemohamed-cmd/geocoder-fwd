@@ -490,10 +490,10 @@ services:
       - ZITADEL_JWKS_URL=http://zitadel:8080/oauth/v2/keys
       - ZITADEL_HOST_HEADER=localhost:8085
       - ZITADEL_API_URL=http://zitadel:8080
-      # ZITADEL_PROJECT_ID + ZITADEL_SERVICE_TOKEN are produced by provisioning;
-      # supply them via .env to enable tenant-user provisioning in the IdP.
-      - ZITADEL_PROJECT_ID=${ZITADEL_PROJECT_ID:-}
-      - ZITADEL_SERVICE_TOKEN=${ZITADEL_SERVICE_TOKEN:-}
+      # ZITADEL_PROJECT_ID + ZITADEL_SERVICE_TOKEN are read from the shared
+      # volumes written by billing-zitadel-init (config.json + pat.txt), so
+      # .env no longer needs to be updated after provisioning.
+      - ZITADEL_PAT_FILE=/machinekey/pat.txt
       # APISIX data-plane provisioning (consumers/groups) + usage-sink wiring.
       - APISIX_ADMIN_URL=http://apisix:9180
       - APISIX_ADMIN_KEY=billing-apisix-admin-key-change-me
@@ -501,11 +501,18 @@ services:
       - USAGE_SINK_URL=http://billing-control-plane:8100/internal/usage?token=sink-secret
       - USAGE_SINK_SECRET=sink-secret
       - BILLING_KEY_ENC_SECRET=${BILLING_KEY_ENC_SECRET:-dev-key-encryption-secret-change-me}
+    volumes:
+      # Read projectId from config.json written by billing-zitadel-init.
+      - billing-frontend-config:/runtime:ro
+      # Read PAT (service token) from the same machinekey written by Zitadel.
+      - ./billing/.zitadel-machinekey:/machinekey:ro
     depends_on:
       postgis:
         condition: service_healthy
       redis:
         condition: service_healthy
+      billing-zitadel-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # etcd: APISIX's configuration store (routes, consumers, plugins).

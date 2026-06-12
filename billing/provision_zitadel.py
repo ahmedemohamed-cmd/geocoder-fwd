@@ -35,25 +35,44 @@ LOGOUTS = os.getenv("SPA_LOGOUT_URIS", "http://localhost:8088/").split(",")
 ADMIN_LOGIN = os.getenv("ADMIN_LOGIN_NAME", "zitadel-admin@zitadel.localhost")
 
 
-def _token() -> str:
+def _token(pat_file: str = "") -> str:
     tok = os.getenv("ZITADEL_SERVICE_TOKEN", "")
-    if not tok and os.getenv("ZITADEL_PAT_FILE"):
-        with open(os.environ["ZITADEL_PAT_FILE"]) as f:
-            tok = f.read().strip()
+    if not tok:
+        path = pat_file or os.getenv("ZITADEL_PAT_FILE", "")
+        if path:
+            with open(path) as f:
+                tok = f.read().strip()
     if not tok:
         sys.exit("no Zitadel PAT (set ZITADEL_SERVICE_TOKEN or ZITADEL_PAT_FILE)")
     return tok
 
 
-def _wait_ready(c: httpx.Client, tries: int = 60) -> None:
-    for _ in range(tries):
+def _wait_ready(tries: int = 90) -> str:
+    """Wait until OIDC is up AND the PAT is accepted; return the valid PAT.
+
+    Re-reads the PAT file on every attempt so we pick up the token that
+    Zitadel writes during first-instance init (which may complete after this
+    container starts).  Only returns once /auth/v1/users/me returns 200.
+    """
+    pat_file = os.getenv("ZITADEL_PAT_FILE", "")
+    for i in range(tries):
         try:
-            if c.get(f"{API}/.well-known/openid-configuration").status_code == 200:
-                return
-        except httpx.HTTPError:
+            pat = _token(pat_file)
+            headers = {"Authorization": f"Bearer {pat}",
+                       "Content-Type": "application/json"}
+            host = os.getenv("ZITADEL_HOST_HEADER", "")
+            if host:
+                headers["Host"] = host
+            with httpx.Client(headers=headers, timeout=10) as probe:
+                if probe.get(f"{API}/.well-known/openid-configuration").status_code == 200:
+                    if probe.get(f"{API}/auth/v1/users/me").status_code == 200:
+                        return pat
+                    if i % 5 == 0:
+                        print(f"Zitadel OIDC up but PAT not yet accepted, retrying…")
+        except (httpx.HTTPError, OSError):
             pass
         time.sleep(2)
-    sys.exit("Zitadel did not become ready")
+    sys.exit("Zitadel did not become ready within the allotted time")
 
 
 def _post(c, path, body):
@@ -66,13 +85,12 @@ def _post(c, path, body):
 
 
 def main() -> None:
-    pat = _token()
+    pat = _wait_ready()   # blocks until Zitadel is up and the PAT is accepted
     headers = {"Authorization": f"Bearer {pat}", "Content-Type": "application/json"}
     host_override = os.getenv("ZITADEL_HOST_HEADER", "")
     if host_override:
-        headers["Host"] = host_override  # resolve to the instance via service name
+        headers["Host"] = host_override
     with httpx.Client(headers=headers, timeout=30) as c:
-        _wait_ready(c)
         issuer = c.get(f"{API}/.well-known/openid-configuration").json()["issuer"]
 
         # 0) Zitadel v4 defaults to "Login UI v2", which is a separate service we

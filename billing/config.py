@@ -70,7 +70,22 @@ ZITADEL_JWKS_URL = os.getenv("ZITADEL_JWKS_URL", f"{ZITADEL_ISSUER}/oauth/v2/key
 ZITADEL_HOST_HEADER = os.getenv("ZITADEL_HOST_HEADER", "")
 # Audience to require in the token (the SPA client/project id). Empty = skip aud.
 ZITADEL_AUDIENCE = os.getenv("ZITADEL_AUDIENCE", "")
-ZITADEL_PROJECT_ID = os.getenv("ZITADEL_PROJECT_ID", "")
+def _provision_project_id() -> str:
+    """Read projectId from the config.json written by billing-zitadel-init.
+
+    Falls back gracefully so dev/test runs without the volume still work.
+    """
+    if os.getenv("ZITADEL_PROJECT_ID"):
+        return os.environ["ZITADEL_PROJECT_ID"]
+    cfg_path = os.getenv("PROVISION_CONFIG_PATH", "/runtime/config.json")
+    try:
+        import json as _json
+        with open(cfg_path) as _f:
+            return _json.load(_f).get("projectId", "")
+    except (OSError, ValueError):
+        return ""
+
+ZITADEL_PROJECT_ID = _provision_project_id()
 # Zitadel role-grant claim and our two role keys within the project.
 ZITADEL_ROLES_CLAIM = "urn:zitadel:iam:org:project:roles"
 ZITADEL_METADATA_CLAIM = "urn:zitadel:iam:user:metadata"
@@ -79,7 +94,19 @@ ZITADEL_TENANT_METADATA_KEY = os.getenv("ZITADEL_TENANT_METADATA_KEY", "tenant_i
 
 # Service-account PAT used by the control plane to provision Zitadel users/metadata
 # when AUTH_MODE=zitadel (optional; tenant provisioning falls back to no-op if unset).
-ZITADEL_SERVICE_TOKEN = os.getenv("ZITADEL_SERVICE_TOKEN", "")
+def _service_token() -> str:
+    if os.getenv("ZITADEL_SERVICE_TOKEN"):
+        return os.environ["ZITADEL_SERVICE_TOKEN"]
+    pat_file = os.getenv("ZITADEL_PAT_FILE", "")
+    if pat_file:
+        try:
+            with open(pat_file) as _f:
+                return _f.read().strip()
+        except OSError:
+            pass
+    return ""
+
+ZITADEL_SERVICE_TOKEN = _service_token()
 ZITADEL_API_URL = os.getenv("ZITADEL_API_URL", ZITADEL_ISSUER)
 
 # Bootstrap platform admin (seeded on first start if no admin exists).
