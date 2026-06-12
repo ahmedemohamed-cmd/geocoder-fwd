@@ -275,9 +275,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      # First boot builds the graph from the PBF, which can take several
-      # minutes; don't mark unhealthy while that initial build is running.
-      start_period: 600s
+      # A full graph build from the PBF (first boot, new PBF set, or wiped
+      # data/valhalla) takes 15-20+ min for Egypt; don't mark unhealthy while
+      # it runs, or `up` waits on service_healthy will fail mid-build.
+      start_period: 18000s
     restart: unless-stopped
     deploy:
       resources:
