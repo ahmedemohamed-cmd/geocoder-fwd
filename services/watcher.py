@@ -149,13 +149,15 @@ class ProgressTracker:
         print(f"[{self.description}] Completed in {elapsed:.1f} seconds")
 
 
-def _safe_admin_level(tags: dict) -> int:
-    """Parse admin_level from tags, returning 0 for non-numeric values."""
-    raw = tags.get("admin_level", 0) or 0
+def _safe_admin_level(tags: dict) -> int | None:
+    """Return admin_level as int, or None when the tag is absent or non-numeric."""
+    raw = tags.get("admin_level")
+    if raw is None:
+        return None
     try:
         return int(raw)
     except (ValueError, TypeError):
-        return 0
+        return None
 
 
 def _has_identifiable_tags(tags: dict) -> bool:

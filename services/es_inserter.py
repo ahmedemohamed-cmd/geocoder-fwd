@@ -412,7 +412,7 @@ async def run():
             actions = []
             for elem, txt, vec in zip(elements, texts, vectors):
                 tags = elem["tags"]
-                admin_level = elem.get("admin_level", 0)
+                admin_level = elem.get("admin_level")  # None when tag is absent
                 area_km2 = elem.get("area_km2", 0.0)
                 rank = compute_offline_rank(tags, admin_level, area_km2)
 

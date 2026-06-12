@@ -463,10 +463,12 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
         print(f"[geocoder] Enrichment PostGIS query failed for {osm_id}: {e}")
         return None
 
-    # Collect all osm_ids to fetch from ES
-    line_ids = [row["osm_id"] for row in nearest_lines]
-    parent_ids = [row["osm_id"] for row in enclosing_polygons]
-    parent_ids.extend(row["osm_id"] for row in closed_lines)
+    # Collect all osm_ids to fetch from ES.
+    # Exclude the element's own osm_id: a polygon's centroid falls inside itself,
+    # so without this filter the element would list itself as its own parent.
+    line_ids = [row["osm_id"] for row in nearest_lines if row["osm_id"] != osm_id]
+    parent_ids = [row["osm_id"] for row in enclosing_polygons if row["osm_id"] != osm_id]
+    parent_ids.extend(row["osm_id"] for row in closed_lines if row["osm_id"] != osm_id)
 
     all_ids = list(set(line_ids + parent_ids))
     if not all_ids:
@@ -501,7 +503,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
             }
             break
 
-    # Build parents list from enclosing polygons + closed lines, sorted by admin_level
+    # Build parents list from enclosing polygons + closed lines
     parents = []
     seen = set()
     for row_id in parent_ids:
@@ -515,10 +517,15 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
                 "name": src.get("name", ""),
                 "name_en": src.get("name_en", ""),
                 "name_fr": src.get("name_fr", ""),
-                "admin_level": src.get("admin_level", 0),
+                "admin_level": src.get("admin_level"),
+                "area_km2": src.get("area_km2", 0),
             })
-    # Sort parents by admin_level descending (most specific first: suburb→city→state→country)
-    parents.sort(key=lambda p: p["admin_level"], reverse=True)
+    # Smallest area first (most specific enclosing polygon), then by admin_level
+    # descending as a tiebreaker. None admin_level sorts last within same area.
+    parents.sort(key=lambda p: (
+        p.get("area_km2", 0),
+        -p["admin_level"] if p["admin_level"] is not None else float("inf"),
+    ))
 
     address = {"nearest_street": nearest_street, "parents": parents}
 
@@ -1166,8 +1173,15 @@ async def geocode(
         # write-back) instead of blocking the response on heavy PostGIS spatial
         # joins. The value is served from ES on subsequent searches. This keeps
         # the search hot path free of synchronous spatial-join fan-out.
-        if result["address"] is None:
+        address = result["address"]
+        if address is None:
             _schedule_enrichment(src["osm_id"], src.get("centroid"))
+        else:
+            cached_parents = address.get("parents") or []
+            stale = any("area_km2" not in p for p in cached_parents)
+            self_ref = any(p.get("osm_id") == src["osm_id"] for p in cached_parents)
+            if stale or self_ref:
+                _schedule_enrichment(src["osm_id"], src.get("centroid"))
 
     # ── Address interpolation fallback ────────────────────────────────────
     # When the query contained a housenumber but no result matched it
@@ -2180,10 +2194,12 @@ async def reverse(
         merged["confidence"] = _distance_confidence(line_dist)
         result["nearest_line"] = merged
 
-    result["enclosing_polygons"] = [
-        merge_result(row, es_data.get(row["osm_id"]))
-        for row in enclosing_polygons
-    ]
+    polys = [merge_result(row, es_data.get(row["osm_id"])) for row in enclosing_polygons]
+    polys.sort(key=lambda p: (
+        p.get("area_km2", 0),
+        -p["admin_level"] if p.get("admin_level") is not None else float("inf"),
+    ))
+    result["enclosing_polygons"] = polys
 
     # Attach AI descriptions when requested
     if describe and ENABLE_AI:

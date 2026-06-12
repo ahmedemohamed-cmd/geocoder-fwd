@@ -209,8 +209,10 @@ _WATERWAY_SCORES: dict[str, float] = {
 
 
 # ── admin_level → score  (OSM admin_level: 2=country … 10=suburb) ─────────
-def _admin_score(admin_level: int) -> float:
-    if admin_level <= 0:
+def _admin_score(admin_level: int | None) -> float:
+    # None means no admin_level tag — treat as a very high level (non-boundary).
+    # Lower admin_level value = higher administrative rank (2=country, 10=suburb).
+    if admin_level is None or admin_level <= 0:
         return 0.0
     # 2 → 1.0, 4 → 0.80, 6 → 0.60, 8 → 0.40, 10 → 0.20
     return min(1.0, max(0.0, 1.0 - (admin_level - 2) * 0.10))
@@ -358,7 +360,7 @@ W_BRAND = 0.3
 _W_BASE = W_PLACE + W_POP + W_META + W_LANDUSE + W_POI + W_BRAND
 
 
-def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float:
+def compute_offline_rank(tags: dict, admin_level: int | None, area_km2: float) -> float:
     """Return a positive float offline rank (higher = more important).
 
     Typical range: 0 (random POI) .. ~10 (major city / country).
@@ -373,7 +375,7 @@ def compute_offline_rank(tags: dict, admin_level: int, area_km2: float) -> float
     w_total = _W_BASE
 
     # Admin level (only counted when the element is an admin boundary)
-    if admin_level > 0:
+    if admin_level is not None and admin_level > 0:
         raw += W_ADMIN * _admin_score(admin_level)
         w_total += W_ADMIN
 
