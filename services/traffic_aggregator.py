@@ -49,6 +49,33 @@ from shared.traffic_providers import get_provider
 
 _INDEX_KEY = "tf:idx"
 
+# Atomic EWMA fold. The read-modify-write (read kph/n, blend, increment, write)
+# MUST run server-side under a single EVAL so that concurrent writers — multiple
+# aggregator replicas, or the probe consumer racing the provider poller — cannot
+# lose updates on a hot edge. A client-side hgetall→compute→hset would race.
+#
+# KEYS[1] = tf:e:{gid}   KEYS[2] = tf:idx
+# ARGV: alpha, kph, now, ttl, min_samples, gid
+_EWMA_LUA = """
+local prev = redis.call('HGET', KEYS[1], 'kph')
+local n = tonumber(redis.call('HGET', KEYS[1], 'n')) or 0
+local alpha = tonumber(ARGV[1])
+local kph = tonumber(ARGV[2])
+local new_kph
+if prev then
+  new_kph = (1 - alpha) * tonumber(prev) + alpha * kph
+else
+  new_kph = kph
+end
+n = n + 1
+redis.call('HSET', KEYS[1], 'kph', string.format('%.2f', new_kph), 'n', n, 'ts', ARGV[3])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+if n >= tonumber(ARGV[5]) then
+  redis.call('ZADD', KEYS[2], tonumber(ARGV[3]), ARGV[6])
+end
+return n
+"""
+
 
 def _log(msg: str) -> None:
     print(f"[traffic-aggregator] {msg}", flush=True)
@@ -75,23 +102,16 @@ async def _update_edge(r: aioredis.Redis, gid: int, kph: float, weight: float, n
     if kph <= 0 or kph > 300:
         return  # implausible — drop
     key = f"tf:e:{gid}"
-    h = await r.hgetall(key)
-    if h and "kph" in h:
-        prev = float(h["kph"])
-        n = int(float(h.get("n", 0)))
-        alpha = min(1.0, TRAFFIC_EWMA_ALPHA * weight)
-        new_kph = (1 - alpha) * prev + alpha * kph
-    else:
-        new_kph = kph
-        n = 0
-    n += 1
-
-    pipe = r.pipeline()
-    pipe.hset(key, mapping={"kph": f"{new_kph:.2f}", "n": n, "ts": f"{now:.0f}"})
-    pipe.expire(key, TRAFFIC_EDGE_TTL * 2)  # GC safety net; writer drives real expiry via zset
-    if n >= TRAFFIC_MIN_SAMPLES:
-        pipe.zadd(_INDEX_KEY, {str(gid): now})
-    await pipe.execute()
+    alpha = min(1.0, TRAFFIC_EWMA_ALPHA * weight)
+    # Atomic server-side fold — see _EWMA_LUA. Safe under concurrent writers.
+    await r.eval(
+        _EWMA_LUA,
+        2,                          # numkeys
+        key, _INDEX_KEY,            # KEYS
+        f"{alpha}", f"{kph}", f"{now:.0f}",
+        f"{TRAFFIC_EDGE_TTL * 2}",  # GC safety net; writer drives real expiry via zset
+        f"{TRAFFIC_MIN_SAMPLES}", str(gid),
+    )
 
 
 # ── Valhalla map-matching ─────────────────────────────────────────────────────
