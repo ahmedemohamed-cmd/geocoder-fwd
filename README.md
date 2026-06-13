@@ -1,5 +1,8 @@
 # OSM Geocoding Service
-
+### fresh start
+```bash
+docker compose down -v && cd data/ && sudo rm -rf admin_data/ duplicateways.txt file_hashes.txt .processed traffic.tar.tar valhalla.json valhalla valhalla_tiles valhalla_tiles.tar geonames/.processed openaddresses/.processed && cd .. && docker compose build && docker compose up -d && docker compose run --rm billing-zitadel-init
+```
 A scalable OpenStreetMap geocoding stack with full-text search and geometry storage. Supports both CPU-only and AI-accelerated (GPU) modes with vector embeddings.
 
 ## Architecture

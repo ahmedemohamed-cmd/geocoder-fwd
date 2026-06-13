@@ -190,9 +190,12 @@ async def update_tenant(pool, tenant_id: str, fields: dict) -> dict:
     return _row(rec)
 
 
-async def soft_delete_tenant(pool, tenant_id: str) -> None:
+async def soft_delete_tenant(pool, tenant_id: str) -> list[str]:
     """Deactivate a tenant: mark deleted and disable all its keys (preserves
-    invoices/usage history for audit)."""
+    invoices/usage history for audit). Its login users are hard-deleted —
+    create_tenant enforces email uniqueness across ALL users, so leaving them
+    would block re-creating a tenant with the same admin email. Returns the
+    removed emails so the caller can clean up the IdP."""
     async with pool.acquire() as conn:
         async with conn.transaction():
             res = await conn.execute(
@@ -207,6 +210,9 @@ async def soft_delete_tenant(pool, tenant_id: str) -> None:
                 "WHERE tenant_id=$1 AND status <> 'deleted'",
                 tenant_id,
             )
+            rows = await conn.fetch(
+                "DELETE FROM users WHERE tenant_id=$1 RETURNING email", tenant_id)
+            return [r["email"] for r in rows]
 
 
 # ── api keys ─────────────────────────────────────────────────────────────────

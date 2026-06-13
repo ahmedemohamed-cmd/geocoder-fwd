@@ -227,11 +227,23 @@ def build_app(pool=None, redis=None) -> FastAPI:
     async def delete_tenant(tenant_id: str, _: Identity = Depends(require_admin),
                             pool=Depends(get_pool), redis=Depends(get_redis)):
         try:
-            await repo.soft_delete_tenant(pool, tenant_id)
+            emails = await repo.soft_delete_tenant(pool, tenant_id)
         except repo.NotFound as e:
             raise _not_found(e)
         await _invalidate_tenant_cache(pool, redis, tenant_id)
         await _sync_tenant(pool, tenant_id)  # tears down group + consumers in APISIX
+        # Remove the tenant's login identities from the IdP too, so the emails
+        # can be reused by a future tenant (no-op in dev mode / already gone).
+        failed = []
+        for email in emails:
+            try:
+                await zitadel_admin.delete_user(email=email)
+            except zitadel_admin.ZitadelError:
+                failed.append(email)
+        if failed:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                f"tenant deleted but IdP cleanup failed for: {', '.join(failed)}")
         return Response(status_code=204)
 
     # ── admin: plans CRUD ────────────────────────────────────────────────────

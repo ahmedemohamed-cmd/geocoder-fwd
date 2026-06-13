@@ -55,9 +55,23 @@ async def provision_tenant_user(*, email: str, password: str, tenant_id: str,
             "password": password,
             "passwordChangeRequired": False,
         })
-        if r.status_code >= 300:
+        if r.status_code < 300:
+            user_id = r.json().get("userId") or r.json().get("id")
+        elif r.status_code == 409 or "already exist" in r.text.lower():
+            # An orphaned identity can survive a tenant deletion that failed
+            # IdP cleanup. The local DB is the source of truth for email
+            # ownership, so adopt the orphan: overwrite its password and fall
+            # through to (re)set the tenant metadata and role grant.
+            user_id = await _find_user_id(c, email)
+            if not user_id:
+                raise ZitadelError(f"create user failed: {r.status_code} {r.text[:300]}")
+            pr = await c.post(f"/v2/users/{user_id}/password", json={
+                "newPassword": {"password": password, "changeRequired": False}})
+            if pr.status_code >= 300:
+                raise ZitadelError(
+                    f"adopting existing user failed: {pr.status_code} {pr.text[:200]}")
+        else:
             raise ZitadelError(f"create user failed: {r.status_code} {r.text[:300]}")
-        user_id = r.json().get("userId") or r.json().get("id")
 
         meta_val = base64.b64encode(tenant_id.encode()).decode()
         await c.post(f"/management/v1/users/{user_id}/metadata/"

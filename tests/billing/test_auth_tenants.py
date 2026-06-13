@@ -45,6 +45,19 @@ async def test_create_tenant_unknown_plan_404(cp_client):
     assert r.status_code == 404
 
 
+async def test_recreate_tenant_after_delete_reuses_admin_email(cp_client):
+    # delete must free the admin email (locally and in the IdP) so the same
+    # tenant can be created again — regression: 409 "user already exists"
+    tenant, _ = await make_tenant(cp_client, name="Gamma", admin_email="g@acme.test")
+    atok = await admin_token(cp_client)
+    d = await cp_client.delete(f"/admin/tenants/{tenant['id']}", headers=bearer(atok))
+    assert d.status_code == 204
+    tenant2, ttok2 = await make_tenant(cp_client, name="Gamma", admin_email="g@acme.test")
+    assert tenant2["id"] != tenant["id"]
+    me = await cp_client.get("/auth/me", headers=bearer(ttok2))
+    assert me.json()["tenant_id"] == tenant2["id"]
+
+
 async def test_create_tenant_duplicate_user_409(cp_client):
     await make_tenant(cp_client, name="One", admin_email="dup@acme.test")
     atok = await admin_token(cp_client)
