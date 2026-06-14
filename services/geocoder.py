@@ -34,25 +34,22 @@ address point stored in the osm_addresses PostGIS table.
 """
 
 import asyncio
-from contextlib import asynccontextmanager
+import json
 import logging
-import math
 import os
-import re
 import socket
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
-import json
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from fastapi import FastAPI, Query, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from elasticsearch import AsyncElasticsearch
 import asyncpg
 import nats
 import redis.asyncio as aioredis
+from elasticsearch import AsyncElasticsearch
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 # ── structured logger ─────────────────────────────────────────────────────
 _logger = logging.getLogger("geocoder.access")
@@ -62,66 +59,85 @@ _handler.setFormatter(logging.Formatter("%(message)s"))
 _logger.addHandler(_handler)
 _logger.propagate = False
 
-from shared.config import (
-    ELASTICSEARCH_URL,
-    EMBEDDING_DIM,
-    ENABLE_VECTORS,
-    ENABLE_AI,
-    POSTGRES_HOST,
-    POSTGRES_PORT,
-    POSTGRES_DB,
-    POSTGRES_USER,
-    POSTGRES_PASSWORD,
-    NATS_URL,
-    NATS_SUBJECT,
-    REDIS_HOST,
-    REDIS_PORT,
-    OLLAMA_URL,
-    OLLAMA_MODEL,
-    GOOGLE_MAPS_API_KEY,
-    ENABLE_DEEP,
-    ENABLE_TRAFFIC,
-    TRAFFIC_SUBJECT,
-    VALHALLA_URL,
-)
+# General-purpose diagnostics logger (distinct from the access logger above).
+from shared.logging import get_logger
+
+logger = get_logger("geocoder")
+
 import httpx
-from shared.nats_client import ensure_stream, TRAFFIC_STREAM_CFG
-from shared.llm import generate_description, is_ollama_available, warm_up_model
-from shared.interpolation import (
-    interpolate_address,
-    reverse_interpolate,
-    InterpolatedAddress,
-    _parse_housenumber,
+
+from services.geocoder_helpers import (
+    _distance_confidence,
+    _element_to_geocode_result,
+    _haversine_m,
+    _interpolated_to_result,
+    _normalize_confidence,
+    _street_token_match,
+    _text_should_full,
+    _text_should_lean,
+)
+from services.geocoder_models import (
+    InsertMessage,
+    PlaceCreate,
+    PlaceResponse,
+    ProbeBatch,
+    ProbePing,
+)
+from shared.address import (
+    is_address_query,
+    normalize_address_text,
+    parse_address_query,
+)
+from shared.autocomplete import (
+    index_entry as ac_index_entry,
 )
 from shared.autocomplete import (
     query as ac_query,
-    index_entry as ac_index_entry,
+)
+from shared.autocomplete import (
     update_score as ac_update_score,
+)
+from shared.autocomplete import (
     warm_from_es as ac_warm_from_es,
 )
-from shared.embeddings import embed_texts, build_text
-from shared.ranking import compute_offline_rank
+from shared.config import (
+    ELASTICSEARCH_URL,
+    ENABLE_AI,
+    ENABLE_DEEP,
+    ENABLE_TRAFFIC,
+    ENABLE_VECTORS,
+    GOOGLE_MAPS_API_KEY,
+    NATS_SUBJECT,
+    NATS_URL,
+    OLLAMA_MODEL,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+    REDIS_HOST,
+    REDIS_PORT,
+    TRAFFIC_SUBJECT,
+    VALHALLA_URL,
+)
+from shared.embeddings import embed_texts
+from shared.google_maps import (
+    GoogleMapsError,
+    map_result_to_element,
+)
 from shared.google_maps import (
     forward_geocode as gmaps_forward,
+)
+from shared.google_maps import (
     reverse_geocode as gmaps_reverse,
-    map_result_to_element,
-    GoogleMapsError,
 )
-from shared.address import (
-    extract_address_components,
-    build_full_address,
-    is_address_query,
-    parse_address_query,
-    normalize_address_text,
+from shared.interpolation import (
+    _parse_housenumber,
+    interpolate_address,
+    reverse_interpolate,
 )
-from services.geocoder_models import (
-    PlaceCreate, InsertMessage, PlaceResponse, ProbePing, ProbeBatch,
-)
-from services.geocoder_helpers import (
-    _normalize_confidence, _distance_confidence, _STREET_GENERIC_TOKENS,
-    _street_token_match, _interpolated_to_result, _text_should_full,
-    _text_should_lean, _haversine_m, _element_to_geocode_result,
-)
+from shared.llm import generate_description, is_ollama_available, warm_up_model
+from shared.nats_client import TRAFFIC_STREAM_CFG, ensure_stream
 
 INDEX = "osm_places"
 
@@ -166,7 +182,7 @@ def _schedule_enrichment(osm_id: str, centroid: dict | None) -> None:
         try:
             await _enrich_address(osm_id, centroid)
         except Exception:
-            pass
+            logger.warning("Background enrichment failed for %s", osm_id, exc_info=True)
         finally:
             _enrich_inflight.discard(osm_id)
 
@@ -175,9 +191,9 @@ def _schedule_enrichment(osm_id: str, centroid: dict | None) -> None:
     task.add_done_callback(_enrich_bg_tasks.discard)
 
 
-_AC_MAX_DOCS = 100_000   # top-ranked docs to keep in Redis
+_AC_MAX_DOCS = 100_000  # top-ranked docs to keep in Redis
 _AC_BATCH_SIZE = 2_000  # ES fetch size per round-trip
-_AC_REWARM_SECS = 600   # re-warm interval (10 minutes)
+_AC_REWARM_SECS = 600  # re-warm interval (10 minutes)
 
 
 async def _warm_autocomplete():
@@ -201,12 +217,17 @@ async def _warm_autocomplete():
             due = last is None or (time.time() - float(last)) >= _AC_REWARM_SECS
             if due:
                 got = await redis_pool.set(
-                    "geocoder:ac:warming", warmer_id, nx=True, ex=180,
+                    "geocoder:ac:warming",
+                    warmer_id,
+                    nx=True,
+                    ex=180,
                 )
                 if got:
                     try:
                         count = await ac_warm_from_es(
-                            redis_pool, es, INDEX,
+                            redis_pool,
+                            es,
+                            INDEX,
                             batch_size=_AC_BATCH_SIZE,
                             max_docs=_AC_MAX_DOCS,
                         )
@@ -217,14 +238,16 @@ async def _warm_autocomplete():
                             sleep_secs = _AC_REWARM_SECS
                         else:
                             sleep_secs = 30
-                        print(f"[geocoder] Autocomplete warm-up complete: {count} docs indexed")
+                        logger.info(
+                            f"[geocoder] Autocomplete warm-up complete: {count} docs indexed"
+                        )
                     finally:
                         await redis_pool.delete("geocoder:ac:warming")
         except asyncio.CancelledError:
-            print("[geocoder] Autocomplete warm-up task cancelled")
+            logger.info("[geocoder] Autocomplete warm-up task cancelled")
             raise
         except Exception as e:
-            print(f"[geocoder] Autocomplete warm-up failed: {e}")
+            logger.error(f"[geocoder] Autocomplete warm-up failed: {e}")
             sleep_secs = 30
         await asyncio.sleep(sleep_secs)
 
@@ -233,9 +256,11 @@ async def _warm_ollama():
     """Background task: pre-load the Ollama model to avoid cold-start delays."""
     ok = await warm_up_model()
     if ok:
-        print("[geocoder] Ollama model pre-loaded successfully")
+        logger.info("[geocoder] Ollama model pre-loaded successfully")
     else:
-        print("[geocoder] Ollama model warm-up failed (descriptions may be slow on first call)")
+        logger.error(
+            "[geocoder] Ollama model warm-up failed (descriptions may be slow on first call)"
+        )
 
 
 @asynccontextmanager
@@ -245,16 +270,18 @@ async def lifespan(app: FastAPI):
     # Retry logic for connecting to dependencies
     max_retries = 10
     retry_delay = 2
-    
+
     # Connect to Elasticsearch
     for attempt in range(max_retries):
         try:
             es = AsyncElasticsearch(ELASTICSEARCH_URL)
             await es.ping()
-            print(f"[geocoder] Successfully connected to Elasticsearch")
+            logger.info("[geocoder] Successfully connected to Elasticsearch")
             break
         except Exception as e:
-            print(f"[geocoder] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.error(
+                f"[geocoder] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}"
+            )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
             else:
@@ -272,10 +299,12 @@ async def lifespan(app: FastAPI):
                 min_size=2,
                 max_size=10,
             )
-            print(f"[geocoder] Successfully connected to PostGIS")
+            logger.info("[geocoder] Successfully connected to PostGIS")
             break
         except Exception as e:
-            print(f"[geocoder] Failed to connect to PostGIS (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.error(
+                f"[geocoder] Failed to connect to PostGIS (attempt {attempt + 1}/{max_retries}): {e}"
+            )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
             else:
@@ -286,18 +315,20 @@ async def lifespan(app: FastAPI):
         try:
             nc = await nats.connect(NATS_URL)
             js = nc.jetstream()
-            print(f"[geocoder] Successfully connected to NATS")
+            logger.info("[geocoder] Successfully connected to NATS")
             # Ensure the traffic probe stream exists so /traffic/probe(s) can
             # publish even before the aggregator has started.
             if ENABLE_TRAFFIC:
                 try:
                     await ensure_stream(js, TRAFFIC_STREAM_CFG)
-                    print("[geocoder] Ensured TRAFFIC probe stream")
+                    logger.info("[geocoder] Ensured TRAFFIC probe stream")
                 except Exception as te:
-                    print(f"[geocoder] Warning: could not ensure TRAFFIC stream: {te}")
+                    logger.warning(f"[geocoder] Warning: could not ensure TRAFFIC stream: {te}")
             break
         except Exception as e:
-            print(f"[geocoder] Failed to connect to NATS (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.error(
+                f"[geocoder] Failed to connect to NATS (attempt {attempt + 1}/{max_retries}): {e}"
+            )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
             else:
@@ -307,16 +338,16 @@ async def lifespan(app: FastAPI):
     try:
         if not await es.indices.exists(index=INDEX):
             await es.indices.create(index=INDEX, **ES_MAPPING)
-            print(f"[geocoder] Created ES index {INDEX}")
+            logger.info(f"[geocoder] Created ES index {INDEX}")
     except Exception as e:
-        print(f"[geocoder] Error checking/creating ES index: {e}")
+        logger.error(f"[geocoder] Error checking/creating ES index: {e}")
         try:
             await es.indices.create(index=INDEX, **ES_MAPPING)
-            print(f"[geocoder] Created ES index {INDEX} (fallback)")
+            logger.info(f"[geocoder] Created ES index {INDEX} (fallback)")
         except Exception as e2:
             if "resource_already_exists" not in str(e2).lower():
                 raise
-            print(f"[geocoder] ES index {INDEX} already exists (concurrent create)")
+            logger.info(f"[geocoder] ES index {INDEX} already exists (concurrent create)")
 
     # Connect to Redis and warm autocomplete index
     try:
@@ -327,13 +358,13 @@ async def lifespan(app: FastAPI):
             socket_connect_timeout=5,
         )
         await redis_pool.ping()
-        print(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+        logger.info(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
 
         # Warm autocomplete index from ES in background (store ref to prevent GC)
         _ac_task = asyncio.create_task(_warm_autocomplete())
     except Exception as e:
-        print(f"[geocoder] Redis connection failed: {e}")
-        print(f"[geocoder] Autocomplete will fall back to Elasticsearch")
+        logger.error(f"[geocoder] Redis connection failed: {e}")
+        logger.info("[geocoder] Autocomplete will fall back to Elasticsearch")
         redis_pool = None  # type: ignore[assignment]
 
     # Warm up Ollama model so the first /describe request doesn't pay cold-start cost
@@ -368,21 +399,23 @@ async def logging_middleware(request: Request, call_next):
     except Exception:
         latency_ms = round((time.monotonic() - start) * 1000, 1)
         _logger.info(
-            json.dumps({
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "query": str(request.url.query),
-                "status": 500,
-                "latency_ms": latency_ms,
-            })
+            json.dumps(
+                {
+                    "ts": datetime.now(UTC).isoformat(),
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "query": str(request.url.query),
+                    "status": 500,
+                    "latency_ms": latency_ms,
+                }
+            )
         )
         raise
 
     latency_ms = round((time.monotonic() - start) * 1000, 1)
     log_entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "request_id": request_id,
         "method": request.method,
         "path": request.url.path,
@@ -460,7 +493,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
             """
             closed_lines = await conn.fetch(closed_lines_query, point_wkt)
     except Exception as e:
-        print(f"[geocoder] Enrichment PostGIS query failed for {osm_id}: {e}")
+        logger.error(f"[geocoder] Enrichment PostGIS query failed for {osm_id}: {e}")
         return None
 
     # Collect all osm_ids to fetch from ES.
@@ -477,7 +510,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
         try:
             await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
         except Exception:
-            pass
+            logger.debug("Failed to cache empty address for %s", osm_id, exc_info=True)
         return address
 
     # Batch-fetch metadata from ES
@@ -488,7 +521,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
             if doc.get("found"):
                 es_data[doc["_id"]] = doc["_source"]
     except Exception as e:
-        print(f"[geocoder] Error fetching address data from ES: {e}")
+        logger.error(f"[geocoder] Error fetching address data from ES: {e}")
 
     # Find nearest street: first line in distance order that has a name
     nearest_street = None
@@ -512,20 +545,24 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
         seen.add(row_id)
         src = es_data.get(row_id)
         if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
-            parents.append({
-                "osm_id": row_id,
-                "name": src.get("name", ""),
-                "name_en": src.get("name_en", ""),
-                "name_fr": src.get("name_fr", ""),
-                "admin_level": src.get("admin_level"),
-                "area_km2": src.get("area_km2", 0),
-            })
+            parents.append(
+                {
+                    "osm_id": row_id,
+                    "name": src.get("name", ""),
+                    "name_en": src.get("name_en", ""),
+                    "name_fr": src.get("name_fr", ""),
+                    "admin_level": src.get("admin_level"),
+                    "area_km2": src.get("area_km2", 0),
+                }
+            )
     # Smallest area first (most specific enclosing polygon), then by admin_level
     # descending as a tiebreaker. None admin_level sorts last within same area.
-    parents.sort(key=lambda p: (
-        p.get("area_km2", 0),
-        -p["admin_level"] if p["admin_level"] is not None else float("inf"),
-    ))
+    parents.sort(
+        key=lambda p: (
+            p.get("area_km2", 0),
+            -p["admin_level"] if p["admin_level"] is not None else float("inf"),
+        )
+    )
 
     address = {"nearest_street": nearest_street, "parents": parents}
 
@@ -533,7 +570,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     try:
         await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
     except Exception as e:
-        print(f"[geocoder] Error caching address for {osm_id}: {e}")
+        logger.error(f"[geocoder] Error caching address for {osm_id}: {e}")
 
     return address
 
@@ -602,18 +639,20 @@ async def health():
         checks["redis"] = {"status": "error", "detail": str(e)}
 
     # Overall status: fail only if critical services are down
-    critical_ok = all(
-        checks[svc]["status"] == "ok"
-        for svc in ("elasticsearch", "postgis")
-    )
+    critical_ok = all(checks[svc]["status"] == "ok" for svc in ("elasticsearch", "postgis"))
     overall = "healthy" if critical_ok else "degraded"
     status_code = 200 if critical_ok else 503
 
     # Ollama (non-critical — only used for AI descriptions)
     ollama_ok = await is_ollama_available()
-    checks["ollama"] = {"status": "ok", "model": OLLAMA_MODEL} if ollama_ok else {
-        "status": "error", "detail": "unreachable",
-    }
+    checks["ollama"] = (
+        {"status": "ok", "model": OLLAMA_MODEL}
+        if ollama_ok
+        else {
+            "status": "error",
+            "detail": "unreachable",
+        }
+    )
 
     return JSONResponse(
         status_code=status_code,
@@ -668,9 +707,7 @@ async def _resolve_street_names(
         # Wide metro radius: tight enough to drop same-named streets in other
         # governorates, loose enough to still resolve far districts (New Cairo,
         # 6th October) that a downtown-biased query would otherwise miss.
-        flt.append(
-            {"geo_distance": {"distance": "60km", "centroid": {"lat": lat, "lon": lon}}}
-        )
+        flt.append({"geo_distance": {"distance": "60km", "centroid": {"lat": lat, "lon": lon}}})
     body = {
         "size": limit,
         "query": {"bool": {"must": must, "filter": flt}},
@@ -679,7 +716,7 @@ async def _resolve_street_names(
     try:
         resp = await es.search(index=INDEX, **body)
     except Exception as e:
-        print(f"[geocoder] Street resolution failed for {street!r}: {e}")
+        logger.error(f"[geocoder] Street resolution failed for {street!r}: {e}")
         return names
 
     seen = {n.lower() for n in names}
@@ -694,9 +731,7 @@ async def _resolve_street_names(
 
 
 # ── AI place descriptions ────────────────────────────────────────────────
-async def _get_or_generate_description(
-    osm_id: str, *, wait: bool = False
-) -> dict[str, str] | None:
+async def _get_or_generate_description(osm_id: str, *, wait: bool = False) -> dict[str, str] | None:
     """Return cached AI description or generate one.
 
     If ``wait=True`` (used by /describe), blocks until generation completes.
@@ -707,12 +742,27 @@ async def _get_or_generate_description(
     """
     # 1. Check ES cache
     try:
-        doc = await es.get(index=INDEX, id=osm_id, _source_includes=[
-            "ai_description", "name", "name_en", "name_fr", "tags", "centroid",
-            "full_address", "addr_housenumber", "addr_street", "addr_city",
-            "addr_suburb", "addr_state", "addr_postcode", "addr_country",
-            "admin_level",
-        ])
+        doc = await es.get(
+            index=INDEX,
+            id=osm_id,
+            _source_includes=[
+                "ai_description",
+                "name",
+                "name_en",
+                "name_fr",
+                "tags",
+                "centroid",
+                "full_address",
+                "addr_housenumber",
+                "addr_street",
+                "addr_city",
+                "addr_suburb",
+                "addr_state",
+                "addr_postcode",
+                "addr_country",
+                "admin_level",
+            ],
+        )
         src = doc["_source"]
         cached = src.get("ai_description")
         if cached:
@@ -739,7 +789,7 @@ async def _generate_and_cache(osm_id: str, place_data: dict) -> dict[str, str] |
     try:
         await es.update(index=INDEX, id=osm_id, body={"doc": {"ai_description": desc}})
     except Exception as e:
-        print(f"[geocoder] Failed to cache ai_description for {osm_id}: {e}")
+        logger.error(f"[geocoder] Failed to cache ai_description for {osm_id}: {e}")
 
     return desc
 
@@ -752,11 +802,21 @@ async def _attach_descriptions(results: list[dict]) -> None:
         return
 
     _source_fields = [
-        "ai_description", "name", "name_en", "name_fr",
-        "tags", "centroid", "full_address",
-        "addr_housenumber", "addr_street", "addr_city",
-        "addr_suburb", "addr_state", "addr_postcode",
-        "addr_country", "admin_level",
+        "ai_description",
+        "name",
+        "name_en",
+        "name_fr",
+        "tags",
+        "centroid",
+        "full_address",
+        "addr_housenumber",
+        "addr_street",
+        "addr_city",
+        "addr_suburb",
+        "addr_state",
+        "addr_postcode",
+        "addr_country",
+        "admin_level",
     ]
 
     try:
@@ -765,11 +825,7 @@ async def _attach_descriptions(results: list[dict]) -> None:
             body={"ids": ids},
             source_includes=_source_fields,
         )
-        docs_by_id = {
-            d["_id"]: d["_source"]
-            for d in resp["docs"]
-            if d.get("found")
-        }
+        docs_by_id = {d["_id"]: d["_source"] for d in resp["docs"] if d.get("found")}
     except Exception:
         for result in results:
             result["ai_description"] = None
@@ -802,7 +858,9 @@ async def describe(
     """
     desc = await _get_or_generate_description(osm_id, wait=True)
     if desc is None:
-        raise HTTPException(status_code=404, detail="Place not found or description generation failed")
+        raise HTTPException(
+            status_code=404, detail="Place not found or description generation failed"
+        )
     return {"osm_id": osm_id, **desc}
 
 
@@ -815,17 +873,24 @@ async def geocode(
     lat: float | None = Query(None),
     lon: float | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
-    offset: int = Query(0, ge=0, le=9950, description="Result offset for pagination/scrolling (from + size must stay ≤ 10000)"),
+    offset: int = Query(
+        0,
+        ge=0,
+        le=9950,
+        description="Result offset for pagination/scrolling (from + size must stay ≤ 10000)",
+    ),
     vector: bool = Query(True, description="Enable semantic vector search"),
     ai: bool = Query(True, description="Enable AI-assisted search"),
-    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    describe: bool = Query(
+        False, description="Include AI-generated descriptions (cached where available)"
+    ),
     effort: str = Query(
         "high",
         pattern="^(high|optimized)$",
         description="Scoring effort: 'high' (full fuzzy recall + per-doc "
-                    "function_score over all matches) or 'optimized' (lean "
-                    "fuzzy + function_score applied via rescore over top hits "
-                    "+ no exact hit counting, far cheaper for ES under load).",
+        "function_score over all matches) or 'optimized' (lean "
+        "fuzzy + function_score applied via rescore over top hits "
+        "+ no exact hit counting, far cheaper for ES under load).",
     ),
 ):
     """Full geocoding search.
@@ -994,7 +1059,11 @@ async def geocode(
                         "bool": {
                             "must": [
                                 {"term": {"addr_housenumber": {"value": hn}}},
-                                {"match_phrase": {"addr_street": {"query": parsed_addr["street"], "slop": 1}}},
+                                {
+                                    "match_phrase": {
+                                        "addr_street": {"query": parsed_addr["street"], "slop": 1}
+                                    }
+                                },
                             ],
                             "boost": 50,
                         }
@@ -1002,29 +1071,21 @@ async def geocode(
                 )
             else:
                 # No street context: a bare housenumber term match is all we have.
-                should_clauses.append(
-                    {"term": {"addr_housenumber": {"value": hn, "boost": 15}}}
-                )
+                should_clauses.append({"term": {"addr_housenumber": {"value": hn, "boost": 15}}})
 
         if parsed_addr.get("city"):
             city_val = parsed_addr["city"]
             # City match boosts results in the right locality
-            should_clauses.append(
-                {"match": {"addr_city": {"query": city_val, "boost": 3}}}
-            )
+            should_clauses.append({"match": {"addr_city": {"query": city_val, "boost": 3}}})
             should_clauses.append(
                 {"match": {"addr_city.autocomplete": {"query": city_val, "boost": 1.5}}}
             )
             # Also check name field — cities themselves are named places
-            should_clauses.append(
-                {"match": {"name": {"query": city_val, "boost": 2}}}
-            )
+            should_clauses.append({"match": {"name": {"query": city_val, "boost": 2}}})
 
         if parsed_addr.get("suburb"):
             suburb_val = parsed_addr["suburb"]
-            should_clauses.append(
-                {"match": {"addr_suburb": {"query": suburb_val, "boost": 2}}}
-            )
+            should_clauses.append({"match": {"addr_suburb": {"query": suburb_val, "boost": 2}}})
             should_clauses.append(
                 {"match": {"addr_suburb.autocomplete": {"query": suburb_val, "boost": 1}}}
             )
@@ -1041,9 +1102,7 @@ async def geocode(
 
         # Layer 4: Boost documents that have address data (they're more likely
         # to be what the user wants when searching for an address)
-        should_clauses.append(
-            {"term": {"has_address": {"value": True, "boost": 2}}}
-        )
+        should_clauses.append({"term": {"has_address": {"value": True, "boost": 2}}})
 
     text_query: dict = {
         "bool": {
@@ -1155,14 +1214,14 @@ async def geocode(
             "popularity": src.get("popularity", 0),
             "confidence": _normalize_confidence(h["_score"], max_score),
             # structured address fields (present when element has addr:* tags)
-            "full_address":      src.get("full_address", ""),
-            "addr_housenumber":  src.get("addr_housenumber", ""),
-            "addr_street":       src.get("addr_street", ""),
-            "addr_city":         src.get("addr_city", ""),
-            "addr_postcode":     src.get("addr_postcode", ""),
-            "addr_country":      src.get("addr_country", ""),
-            "addr_suburb":       src.get("addr_suburb", ""),
-            "addr_state":        src.get("addr_state", ""),
+            "full_address": src.get("full_address", ""),
+            "addr_housenumber": src.get("addr_housenumber", ""),
+            "addr_street": src.get("addr_street", ""),
+            "addr_city": src.get("addr_city", ""),
+            "addr_postcode": src.get("addr_postcode", ""),
+            "addr_country": src.get("addr_country", ""),
+            "addr_suburb": src.get("addr_suburb", ""),
+            "addr_state": src.get("addr_state", ""),
             # reverse-geocoded address enrichment (computed on demand)
             "address": src.get("address"),
         }
@@ -1275,6 +1334,7 @@ async def geocode(
 
 # ── autocomplete ──────────────────────────────────────────────────────────
 
+
 @app.get("/autocomplete")
 async def autocomplete(
     request: Request,
@@ -1301,7 +1361,7 @@ async def autocomplete(
                 request.state.result_count = len(redis_hits)
                 return {"source": "redis", "results": redis_hits}
         except Exception as e:
-            print(f"[geocoder] Redis autocomplete error, falling back to ES: {e}")
+            logger.error(f"[geocoder] Redis autocomplete error, falling back to ES: {e}")
 
     # ── Elasticsearch edge-ngram autocomplete (fallback) ────────────────
     q_norm = normalize_address_text(q)
@@ -1385,9 +1445,19 @@ async def autocomplete(
             }
         },
         "_source": [
-            "osm_id", "osm_type", "name", "name_en", "name_fr",
-            "centroid", "admin_level", "offline_rank", "popularity",
-            "full_address", "addr_street", "addr_city", "addr_country",
+            "osm_id",
+            "osm_type",
+            "name",
+            "name_en",
+            "name_fr",
+            "centroid",
+            "admin_level",
+            "offline_rank",
+            "popularity",
+            "full_address",
+            "addr_street",
+            "addr_city",
+            "addr_country",
         ],
     }
 
@@ -1404,16 +1474,18 @@ async def autocomplete(
         else:
             label = name
 
-        results.append({
-            "osm_id": src.get("osm_id"),
-            "label": label,
-            "name": src.get("name", ""),
-            "name_en": src.get("name_en", ""),
-            "name_fr": src.get("name_fr", ""),
-            "centroid": src.get("centroid"),
-            "admin_level": src.get("admin_level", 0),
-            "confidence": _normalize_confidence(h["_score"], max_score),
-        })
+        results.append(
+            {
+                "osm_id": src.get("osm_id"),
+                "label": label,
+                "name": src.get("name", ""),
+                "name_en": src.get("name_en", ""),
+                "name_fr": src.get("name_fr", ""),
+                "centroid": src.get("centroid"),
+                "admin_level": src.get("admin_level", 0),
+                "confidence": _normalize_confidence(h["_score"], max_score),
+            }
+        )
 
     request.state.result_count = len(results)
     return {"source": "elasticsearch", "results": results}
@@ -1449,14 +1521,14 @@ async def feedback(
             },
         )
     except Exception as e:
-        print(f"[geocoder] Failed to update popularity for {osm_id}: {e}", flush=True)
+        logger.error(f"[geocoder] Failed to update popularity for {osm_id}: {e}")
 
     # Update Redis autocomplete score in background
     if redis_pool is not None:
         try:
             await ac_update_score(redis_pool, osm_id, boost=boost)
         except Exception:
-            pass
+            logger.debug("Failed to update autocomplete score for %s", osm_id, exc_info=True)
 
     return {"status": "ok", "osm_id": osm_id}
 
@@ -1472,7 +1544,9 @@ async def address_search(
     postcode: str | None = Query(None, description="Restrict results to postal code"),
     city: str | None = Query(None, description="Restrict results to city/town"),
     country: str | None = Query(None, description="Restrict to ISO country code (e.g. EG)"),
-    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    describe: bool = Query(
+        False, description="Include AI-generated descriptions (cached where available)"
+    ),
 ):
     """Structured address search powered by Elasticsearch.
 
@@ -1502,7 +1576,7 @@ async def address_search(
     if country:
         parsed["country"] = country.upper()
 
-    must_clauses:   list[dict] = []
+    must_clauses: list[dict] = []
     should_clauses: list[dict] = []
     filter_clauses: list[dict] = []
 
@@ -1546,22 +1620,14 @@ async def address_search(
 
     # 2. Phrase match on full_address for exact ordering boost
     should_clauses.append(
-        {
-            "match_phrase": {
-                "full_address": {"query": q_norm, "boost": 8, "slop": 1}
-            }
-        }
+        {"match_phrase": {"full_address": {"query": q_norm, "boost": 8, "slop": 1}}}
     )
 
     # 3. Parsed component-specific boosts (higher precision)
     if parsed.get("street"):
         # Exact phrase match on street
         should_clauses.append(
-            {
-                "match_phrase": {
-                    "addr_street": {"query": parsed["street"], "boost": 10, "slop": 1}
-                }
-            }
+            {"match_phrase": {"addr_street": {"query": parsed["street"], "boost": 10, "slop": 1}}}
         )
         # Fuzzy token match on street
         should_clauses.append(
@@ -1598,7 +1664,11 @@ async def address_search(
                     "bool": {
                         "must": [
                             {"term": {"addr_housenumber": {"value": hn_val}}},
-                            {"match_phrase": {"addr_street": {"query": parsed["street"], "slop": 1}}},
+                            {
+                                "match_phrase": {
+                                    "addr_street": {"query": parsed["street"], "slop": 1}
+                                }
+                            },
                         ],
                         "boost": 50,
                     }
@@ -1606,23 +1676,17 @@ async def address_search(
             )
         else:
             # No street context: a bare housenumber term match is all we have.
-            should_clauses.append(
-                {"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}}
-            )
+            should_clauses.append({"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}})
 
     # City as boost (when not already a hard filter)
     if parsed.get("city") and not city:
-        should_clauses.append(
-            {"match": {"addr_city": {"query": parsed["city"], "boost": 3}}}
-        )
+        should_clauses.append({"match": {"addr_city": {"query": parsed["city"], "boost": 3}}})
         should_clauses.append(
             {"match": {"addr_city.autocomplete": {"query": parsed["city"], "boost": 1}}}
         )
 
     if parsed.get("suburb"):
-        should_clauses.append(
-            {"match": {"addr_suburb": {"query": parsed["suburb"], "boost": 2}}}
-        )
+        should_clauses.append({"match": {"addr_suburb": {"query": parsed["suburb"], "boost": 2}}})
 
     # 4. Name fallback — search POI/place names so "Cairo Tower" still works
     should_clauses.append(
@@ -1630,9 +1694,12 @@ async def address_search(
             "multi_match": {
                 "query": q_norm,
                 "fields": [
-                    "name^3", "name.autocomplete^1",
-                    "name_en^3", "name_en.autocomplete^1",
-                    "name_fr^3", "name_fr.autocomplete^1",
+                    "name^3",
+                    "name.autocomplete^1",
+                    "name_en^3",
+                    "name_en.autocomplete^1",
+                    "name_fr^3",
+                    "name_fr.autocomplete^1",
                 ],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
@@ -1642,19 +1709,15 @@ async def address_search(
     )
 
     # 5. Tags-text fallback for broad matching
-    should_clauses.append(
-        {"match": {"tags_text": {"query": q_norm, "boost": 0.5}}}
-    )
+    should_clauses.append({"match": {"tags_text": {"query": q_norm, "boost": 0.5}}})
 
     # ── Prefer results with addr:* data but don't exclude others ─────────
     # Instead of filtering has_address=true, we boost it
-    should_clauses.append(
-        {"term": {"has_address": {"value": True, "boost": 3}}}
-    )
+    should_clauses.append({"term": {"has_address": {"value": True, "boost": 3}}})
 
     text_query: dict = {
         "bool": {
-            "must":   must_clauses,
+            "must": must_clauses,
             "should": should_clauses,
             "filter": filter_clauses,
             "minimum_should_match": 1,
@@ -1755,23 +1818,23 @@ async def address_search(
     addr_results = resp["hits"]["hits"]
     results = [
         {
-            "osm_id":          h["_source"]["osm_id"],
-            "osm_type":        h["_source"].get("osm_type", ""),
-            "name":            h["_source"].get("name", ""),
-            "name_en":         h["_source"].get("name_en", ""),
-            "name_fr":         h["_source"].get("name_fr", ""),
-            "full_address":    h["_source"].get("full_address", ""),
+            "osm_id": h["_source"]["osm_id"],
+            "osm_type": h["_source"].get("osm_type", ""),
+            "name": h["_source"].get("name", ""),
+            "name_en": h["_source"].get("name_en", ""),
+            "name_fr": h["_source"].get("name_fr", ""),
+            "full_address": h["_source"].get("full_address", ""),
             "addr_housenumber": h["_source"].get("addr_housenumber", ""),
-            "addr_street":     h["_source"].get("addr_street", ""),
-            "addr_city":       h["_source"].get("addr_city", ""),
-            "addr_postcode":   h["_source"].get("addr_postcode", ""),
-            "addr_country":    h["_source"].get("addr_country", ""),
-            "addr_suburb":     h["_source"].get("addr_suburb", ""),
-            "addr_state":      h["_source"].get("addr_state", ""),
-            "centroid":        h["_source"].get("centroid"),
-            "geom":            h["_source"].get("geom"),
-            "offline_rank":    h["_source"].get("offline_rank", 0),
-            "confidence":      _normalize_confidence(h["_score"], max_score),
+            "addr_street": h["_source"].get("addr_street", ""),
+            "addr_city": h["_source"].get("addr_city", ""),
+            "addr_postcode": h["_source"].get("addr_postcode", ""),
+            "addr_country": h["_source"].get("addr_country", ""),
+            "addr_suburb": h["_source"].get("addr_suburb", ""),
+            "addr_state": h["_source"].get("addr_state", ""),
+            "centroid": h["_source"].get("centroid"),
+            "geom": h["_source"].get("geom"),
+            "offline_rank": h["_source"].get("offline_rank", 0),
+            "confidence": _normalize_confidence(h["_score"], max_score),
         }
         for h in addr_results
     ]
@@ -1820,11 +1883,11 @@ async def address_search(
 @app.post("/insert")
 async def insert(message: InsertMessage):
     """Insert an OSM element by publishing it to NATS stream.
-    
+
     This endpoint accepts the exact same message format that watcher.py publishes,
     allowing you to manually insert OSM elements that will be processed by the
     es-inserter and postgis-inserter services.
-    
+
     Message format matches watcher.py:
     {
         "osm_id": "n123" | "w456" | "r789",
@@ -1840,37 +1903,37 @@ async def insert(message: InsertMessage):
         message_dict = message.model_dump()
         msg_json = json.dumps(message_dict).encode()
         ack = await js.publish(NATS_SUBJECT, msg_json, timeout=10)
-        
+
         if not ack:
             raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
-        
-        print(f"[geocoder] Published element {message.osm_id} to NATS stream")
-        
+
+        logger.info(f"[geocoder] Published element {message.osm_id} to NATS stream")
+
         return {
             "status": "ok",
             "osm_id": message.osm_id,
-            "message": "Element published to NATS stream for processing"
+            "message": "Element published to NATS stream for processing",
         }
-        
+
     except Exception as e:
-        print(f"[geocoder] Error inserting element: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to insert element: {str(e)}")
+        logger.error(f"[geocoder] Error inserting element: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to insert element: {str(e)}") from e
 
 
 # ── add place endpoint ─────────────────────────────────────────────────────────
 @app.post("/places", response_model=PlaceResponse)
 async def add_place(place: PlaceCreate):
     """Add a new place to the geocoding database.
-    
+
     Publishes the place to NATS stream for processing by the inserters.
     Returns the created place with its generated ID immediately.
     """
     # Generate a unique ID for the custom place
     custom_id = f"custom_{uuid.uuid4().hex[:16]}"
-    
+
     # Create geometry from lat/lon (GeoJSON format: [lon, lat])
     geom_point = {"type": "Point", "coordinates": [place.lon, place.lat]}
-    
+
     # Prepare tags for publishing
     tags = place.tags or {}
     # Add name to tags for consistency with OSM data
@@ -1882,20 +1945,20 @@ async def add_place(place: PlaceCreate):
     # Map address fields → OSM addr:* tags
     _addr_map = {
         "addr:housenumber": place.addr_housenumber,
-        "addr:street":      place.addr_street,
-        "addr:city":        place.addr_city,
-        "addr:postcode":    place.addr_postcode,
-        "addr:country":     place.addr_country,
-        "addr:suburb":      place.addr_suburb,
-        "addr:state":       place.addr_state,
+        "addr:street": place.addr_street,
+        "addr:city": place.addr_city,
+        "addr:postcode": place.addr_postcode,
+        "addr:country": place.addr_country,
+        "addr:suburb": place.addr_suburb,
+        "addr:state": place.addr_state,
     }
     for tag_key, tag_val in _addr_map.items():
         if tag_val:
             tags[tag_key] = tag_val
-    
+
     # Get current timestamp
-    created_at = datetime.now(timezone.utc).isoformat()
-    
+    created_at = datetime.now(UTC).isoformat()
+
     try:
         # Create message in the same format as watcher publishes
         message = {
@@ -1906,15 +1969,15 @@ async def add_place(place: PlaceCreate):
             "admin_level": place.admin_level,
             "area_km2": 0.0,  # Points have no area
         }
-        
+
         # Publish to NATS stream
         msg_json = json.dumps(message).encode()
         ack = await js.publish(NATS_SUBJECT, msg_json, timeout=10)
-        
+
         if not ack:
             raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
-        
-        print(f"[geocoder] Published place {custom_id} to NATS stream")
+
+        logger.info(f"[geocoder] Published place {custom_id} to NATS stream")
 
         # Index into Redis autocomplete immediately (don't wait for ES round-trip)
         if redis_pool is not None:
@@ -1946,12 +2009,12 @@ async def add_place(place: PlaceCreate):
             lat=place.lat,
             lon=place.lon,
             admin_level=place.admin_level,
-            created_at=created_at
+            created_at=created_at,
         )
-        
+
     except Exception as e:
-        print(f"[geocoder] Error adding place: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to add place: {str(e)}")
+        logger.error(f"[geocoder] Error adding place: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add place: {str(e)}") from e
 
 
 # ── live-traffic probe ingestion ───────────────────────────────────────────
@@ -1965,7 +2028,9 @@ async def add_place(place: PlaceCreate):
 async def _publish_probes(batch: ProbeBatch) -> int:
     """Publish a probe batch to the TRAFFIC stream. Returns the point count."""
     if not ENABLE_TRAFFIC:
-        raise HTTPException(status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)")
+        raise HTTPException(
+            status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)"
+        )
     payload = json.dumps(batch.model_dump()).encode()
     ack = await js.publish(TRAFFIC_SUBJECT, payload, timeout=10)
     if not ack:
@@ -1981,8 +2046,8 @@ async def submit_probes(batch: ProbeBatch):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[geocoder] Error publishing probes: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to submit probes: {str(e)}")
+        logger.error(f"[geocoder] Error publishing probes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit probes: {str(e)}") from e
     return {"status": "accepted", "device_id": batch.device_id, "points": n}
 
 
@@ -1995,8 +2060,8 @@ async def submit_probe(ping: ProbePing, device_id: str = Query(..., min_length=1
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[geocoder] Error publishing probe: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to submit probe: {str(e)}")
+        logger.error(f"[geocoder] Error publishing probe: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit probe: {str(e)}") from e
     return {"status": "accepted", "device_id": device_id, "points": 1}
 
 
@@ -2011,7 +2076,9 @@ async def traffic_edge(
     speed the aggregator keeps in Redis (null if no live data for that edge yet).
     """
     if not ENABLE_TRAFFIC:
-        raise HTTPException(status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)")
+        raise HTTPException(
+            status_code=503, detail="Live traffic is disabled (ENABLE_TRAFFIC=false)"
+        )
     # Snap to the nearest edge via Valhalla.
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -2022,12 +2089,17 @@ async def traffic_edge(
             resp.raise_for_status()
             located = resp.json()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Valhalla /locate failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Valhalla /locate failed: {e}") from e
 
     edges = (located[0].get("edges") if located else None) or []
     if not edges:
-        return {"lat": lat, "lon": lon, "edge_id": None, "live_speed_kph": None,
-                "detail": "no road edge near this point"}
+        return {
+            "lat": lat,
+            "lon": lon,
+            "edge_id": None,
+            "live_speed_kph": None,
+            "detail": "no road edge near this point",
+        }
     edge = edges[0]
     graphid = edge.get("edge_id", {}).get("value")
     way_id = edge.get("way_id")
@@ -2056,7 +2128,9 @@ async def traffic_edge(
 async def reverse(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),
-    describe: bool = Query(False, description="Include AI-generated descriptions (cached where available)"),
+    describe: bool = Query(
+        False, description="Include AI-generated descriptions (cached where available)"
+    ),
 ):
     """Reverse geocoding using PostGIS + Elasticsearch.
 
@@ -2118,7 +2192,7 @@ async def reverse(
                 if doc.get("found"):
                     es_data[doc["_id"]] = doc["_source"]
         except Exception as e:
-            print(f"[geocoder] Error fetching from Elasticsearch: {e}")
+            logger.error(f"[geocoder] Error fetching from Elasticsearch: {e}")
 
     # Helper to merge PostGIS and ES data
     def merge_result(pg_row, es_source):
@@ -2151,17 +2225,17 @@ async def reverse(
         raw_addr_geom = nearest_addr_row["geom"]
         dist = round(nearest_addr_row["distance_m"], 1)
         result["nearest_address"] = {
-            "osm_id":       nearest_addr_row["osm_id"],
-            "osm_type":     nearest_addr_row["osm_type"],
-            "housenumber":  nearest_addr_row["housenumber"],
-            "street":       nearest_addr_row["street"],
-            "city":         nearest_addr_row["city"],
-            "postcode":     nearest_addr_row["postcode"],
-            "country":      nearest_addr_row["country"],
+            "osm_id": nearest_addr_row["osm_id"],
+            "osm_type": nearest_addr_row["osm_type"],
+            "housenumber": nearest_addr_row["housenumber"],
+            "street": nearest_addr_row["street"],
+            "city": nearest_addr_row["city"],
+            "postcode": nearest_addr_row["postcode"],
+            "country": nearest_addr_row["country"],
             "full_address": nearest_addr_row["full_address"],
-            "geom":         json.loads(raw_addr_geom) if isinstance(raw_addr_geom, str) else raw_addr_geom,
-            "distance_m":   dist,
-            "confidence":   _distance_confidence(dist),
+            "geom": json.loads(raw_addr_geom) if isinstance(raw_addr_geom, str) else raw_addr_geom,
+            "distance_m": dist,
+            "confidence": _distance_confidence(dist),
         }
 
     # ── Reverse address interpolation ─────────────────────────────────
@@ -2195,10 +2269,12 @@ async def reverse(
         result["nearest_line"] = merged
 
     polys = [merge_result(row, es_data.get(row["osm_id"])) for row in enclosing_polygons]
-    polys.sort(key=lambda p: (
-        p.get("area_km2", 0),
-        -p["admin_level"] if p.get("admin_level") is not None else float("inf"),
-    ))
+    polys.sort(
+        key=lambda p: (
+            p.get("area_km2", 0),
+            -p["admin_level"] if p.get("admin_level") is not None else float("inf"),
+        )
+    )
     result["enclosing_polygons"] = polys
 
     # Attach AI descriptions when requested
@@ -2222,7 +2298,9 @@ async def reverse(
 
 def _deep_guard() -> None:
     if not ENABLE_DEEP:
-        raise HTTPException(status_code=503, detail="Deep endpoints are disabled (ENABLE_DEEP=false)")
+        raise HTTPException(
+            status_code=503, detail="Deep endpoints are disabled (ENABLE_DEEP=false)"
+        )
     if not GOOGLE_MAPS_API_KEY:
         raise HTTPException(status_code=503, detail="GOOGLE_MAPS_API_KEY is not configured")
 
@@ -2235,7 +2313,7 @@ async def _publish_element(message: dict) -> bool:
         await js.publish(NATS_SUBJECT, json.dumps(message).encode(), timeout=10)
         return True
     except Exception as e:
-        print(f"[geocoder] deep: failed to publish {message.get('osm_id')} to NATS: {e}")
+        logger.error(f"[geocoder] deep: failed to publish {message.get('osm_id')} to NATS: {e}")
         return False
 
 
@@ -2243,12 +2321,15 @@ async def _publish_element(message: dict) -> bool:
 async def deep_forward(
     request: Request,
     q: str = Query(..., min_length=1, description="Free-text place/address query"),
-    language: str = Query(..., min_length=2, max_length=10,
-                          description="Result language (mandatory), e.g. en, ar, fr"),
+    language: str = Query(
+        ..., min_length=2, max_length=10, description="Result language (mandatory), e.g. en, ar, fr"
+    ),
     limit: int = Query(10, ge=1, le=25),
     region: str | None = Query(None, description="ccTLD region bias, e.g. 'eg'"),
     publish: bool = Query(True, description="Publish mapped results to NATS for indexing"),
-    enrich: bool = Query(True, description="Attach parent/nearest-street enrichment from local data"),
+    enrich: bool = Query(
+        True, description="Attach parent/nearest-street enrichment from local data"
+    ),
 ):
     """Deep forward geocoding via Google Maps.
 
@@ -2261,14 +2342,14 @@ async def deep_forward(
     try:
         raw = await gmaps_forward(q, language, region=region)
     except GoogleMapsError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     mapped = []
     for r in raw[:limit]:
         try:
             mapped.append(map_result_to_element(r, language))
         except Exception as e:
-            print(f"[geocoder] deep/forward: skipped a result ({e})")
+            logger.warning(f"[geocoder] deep/forward: skipped a result ({e})")
 
     published = 0
     if publish:
@@ -2284,7 +2365,7 @@ async def deep_forward(
             *[_enrich_address(r["osm_id"], r["centroid"]) for r in results],
             return_exceptions=True,
         )
-        for r, addr in zip(results, enrichments):
+        for r, addr in zip(results, enrichments, strict=False):
             if isinstance(addr, dict):
                 r["address"] = addr
 
@@ -2306,8 +2387,9 @@ async def deep_forward(
 async def deep_reverse(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    language: str = Query(..., min_length=2, max_length=10,
-                          description="Result language (mandatory), e.g. en, ar, fr"),
+    language: str = Query(
+        ..., min_length=2, max_length=10, description="Result language (mandatory), e.g. en, ar, fr"
+    ),
     publish: bool = Query(True, description="Publish mapped results to NATS for indexing"),
     describe: bool = Query(False, description="Include AI descriptions on local geometry context"),
 ):
@@ -2323,14 +2405,14 @@ async def deep_reverse(
     try:
         raw = await gmaps_reverse(lat, lon, language)
     except GoogleMapsError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     mapped = []
     for r in raw:
         try:
             mapped.append(map_result_to_element(r, language))
         except Exception as e:
-            print(f"[geocoder] deep/reverse: skipped a result ({e})")
+            logger.warning(f"[geocoder] deep/reverse: skipped a result ({e})")
 
     published = 0
     if publish:
@@ -2341,7 +2423,7 @@ async def deep_reverse(
     try:
         result = await reverse(lat=lat, lon=lon, describe=describe)
     except Exception as e:
-        print(f"[geocoder] deep/reverse: local reverse failed ({e})")
+        logger.error(f"[geocoder] deep/reverse: local reverse failed ({e})")
         result = {
             "nearest_address": None,
             "interpolated_address": None,
@@ -2364,18 +2446,18 @@ async def deep_reverse(
         c = best["centroid"]
         dist = round(_haversine_m(lat, lon, c["lat"], c["lon"]), 1)
         result["nearest_address"] = {
-            "osm_id":       best["message"]["osm_id"],
-            "osm_type":     "node",
-            "housenumber":  t.get("addr:housenumber", ""),
-            "street":       t.get("addr:street", ""),
-            "city":         t.get("addr:city", ""),
-            "postcode":     t.get("addr:postcode", ""),
-            "country":      t.get("addr:country", ""),
+            "osm_id": best["message"]["osm_id"],
+            "osm_type": "node",
+            "housenumber": t.get("addr:housenumber", ""),
+            "street": t.get("addr:street", ""),
+            "city": t.get("addr:city", ""),
+            "postcode": t.get("addr:postcode", ""),
+            "country": t.get("addr:country", ""),
             "full_address": best.get("formatted_address", ""),
-            "geom":         best["message"]["geom"],
-            "distance_m":   dist,
-            "confidence":   best.get("confidence", _distance_confidence(dist)),
-            "source":       "google",
+            "geom": best["message"]["geom"],
+            "distance_m": dist,
+            "confidence": best.get("confidence", _distance_confidence(dist)),
+            "source": "google",
         }
 
     result["source"] = "google"
@@ -2384,58 +2466,12 @@ async def deep_reverse(
 
 
 # ── Valhalla routing proxy (with Arabic narration) ────────────────────────────
-# Valhalla 3.5.1 has no Arabic locale; requests with language=ar fall back to
-# en-US silently.  These endpoints forward to Valhalla and rewrite instructions
-# to Arabic when the caller passes language=ar (or any ar-* BCP-47 tag).
+# The /status, /route, /optimized_route, /sources_to_targets, /isochrone and
+# /locate endpoints live in services.routing (they're a stateless pass-through to
+# Valhalla) and are mounted here.
+from services.routing import router as routing_router
 
-from services.routing import proxy as _routing_proxy
-
-
-@app.get("/status")
-async def routing_status():
-    """Valhalla engine status (version, tileset bbox, available actions)."""
-    status_code, body = await _routing_proxy("/status", "GET", None)
-    return JSONResponse(content=body, status_code=status_code)
-
-
-@app.post("/route")
-async def routing_route(request: Request):
-    """Turn-by-turn directions. Supports language=ar for Arabic narration."""
-    body = await request.json()
-    status_code, result = await _routing_proxy("/route", "POST", body)
-    return JSONResponse(content=result, status_code=status_code)
-
-
-@app.post("/optimized_route")
-async def routing_optimized_route(request: Request):
-    """Optimized route (TSP) — reorders waypoints for shortest tour."""
-    body = await request.json()
-    status_code, result = await _routing_proxy("/optimized_route", "POST", body)
-    return JSONResponse(content=result, status_code=status_code)
-
-
-@app.post("/sources_to_targets")
-async def routing_sources_to_targets(request: Request):
-    """Time/distance matrix (many sources to many targets)."""
-    body = await request.json()
-    status_code, result = await _routing_proxy("/sources_to_targets", "POST", body)
-    return JSONResponse(content=result, status_code=status_code)
-
-
-@app.post("/isochrone")
-async def routing_isochrone(request: Request):
-    """Reachability polygons at given time/distance contours."""
-    body = await request.json()
-    status_code, result = await _routing_proxy("/isochrone", "POST", body)
-    return JSONResponse(content=result, status_code=status_code)
-
-
-@app.post("/locate")
-async def routing_locate(request: Request):
-    """Snap coordinates to the routing graph (nearest edges/nodes)."""
-    body = await request.json()
-    status_code, result = await _routing_proxy("/locate", "POST", body)
-    return JSONResponse(content=result, status_code=status_code)
+app.include_router(routing_router)
 
 
 if __name__ == "__main__":
@@ -2447,7 +2483,6 @@ if __name__ == "__main__":
     # a fleet-wide Redis lock so workers/replicas don't all rescan ES.
     workers = int(os.getenv("GEOCODER_WORKERS", "1"))
     if workers > 1:
-        uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000,
-                    workers=workers)
+        uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000, workers=workers)
     else:
         uvicorn.run(app, host="0.0.0.0", port=8000)

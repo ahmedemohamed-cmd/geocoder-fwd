@@ -18,7 +18,7 @@
 - **Model**: paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 50+ languages including Arabic)
 - **Hardware**: NVIDIA GPU with CUDA support
 - **Impact**: 10-20x faster vector generation compared to CPU
-- **Configuration**: Automatically enabled in docker-compose-ai.yaml
+- **Configuration**: Automatically enabled in docker-compose.ai.yaml
 
 ### 4. NATS Timeout and Rate Limiting (✅ Applied)
 - **Publish timeout**: Increased from 30s to 120s
@@ -31,7 +31,7 @@
 - **Previous**: max_memory and max_storage limits on NATS service
 - **Current**: No resource limits, allowing NATS to use available system resources
 - **Impact**: Improved NATS stability and message processing capacity
-- **Configuration**: Removed from docker-compose-ai.yaml
+- **Configuration**: Removed from docker-compose.ai.yaml
 
 ## Additional Optimization Strategies
 

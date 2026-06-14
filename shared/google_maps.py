@@ -18,6 +18,7 @@ The mapping deliberately emits OSM ``addr:*`` and feature tags (amenity/shop/
 tourism/place/…) so that downstream address extraction, full-address building,
 and offline-rank scoring all behave the same as for native OSM data.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -144,8 +145,9 @@ async def _request(params: dict) -> dict:
     return data
 
 
-async def forward_geocode(query: str, language: str, *, region: str | None = None,
-                          bounds: str | None = None) -> list[dict]:
+async def forward_geocode(
+    query: str, language: str, *, region: str | None = None, bounds: str | None = None
+) -> list[dict]:
     """Forward geocode. ``language`` is required (drives result name language)."""
     params = {"address": query, "language": language}
     if region:
@@ -190,8 +192,14 @@ def _derive_name(result: dict, tags: dict) -> str:
 
     if types & {"route"}:
         return comp("route") or ""
-    for t in ("locality", "administrative_area_level_2", "administrative_area_level_1",
-              "country", "neighborhood", "sublocality"):
+    for t in (
+        "locality",
+        "administrative_area_level_2",
+        "administrative_area_level_1",
+        "country",
+        "neighborhood",
+        "sublocality",
+    ):
         if t in types:
             return comp(t)
     # establishment / point_of_interest / premise / natural_feature / etc.

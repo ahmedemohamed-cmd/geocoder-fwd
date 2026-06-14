@@ -3,6 +3,7 @@
 Uses a local RSA keypair to simulate Zitadel-signed tokens, so the whole
 verification + mapping path is exercised offline (no running Zitadel needed).
 """
+
 import base64
 import time
 
@@ -18,8 +19,8 @@ from billing import auth, config, security
 def rsa_keys():
     priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     priv_pem = priv.private_bytes(
-        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption())
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )
     pub = priv.public_key()
     return priv_pem, pub
 
@@ -57,8 +58,9 @@ def test_zitadel_admin_token_maps_to_admin(zitadel_mode, rsa_keys):
 
 def test_zitadel_tenant_token_maps_role_and_tenant(zitadel_mode, rsa_keys):
     priv, _ = rsa_keys
-    tok = _zitadel_token(priv, roles=["tenant_user"],
-                         tenant_uuid="11111111-2222-3333-4444-555555555555")
+    tok = _zitadel_token(
+        priv, roles=["tenant_user"], tenant_uuid="11111111-2222-3333-4444-555555555555"
+    )
     ident = auth.identity_from_claims(security.decode_token(tok))
     assert ident.role == "tenant_user"
     assert ident.tenant_id == "11111111-2222-3333-4444-555555555555"
@@ -81,8 +83,8 @@ def test_zitadel_no_billing_role_rejected(zitadel_mode, rsa_keys):
 def test_zitadel_bad_signature_rejected(zitadel_mode):
     other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     other_pem = other.private_bytes(
-        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption())
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )
     tok = _zitadel_token(other_pem, roles=["admin"])  # signed by the wrong key
     with pytest.raises(jwt.PyJWTError):
         security.decode_token(tok)

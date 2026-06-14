@@ -5,6 +5,7 @@ matching, Elasticsearch text-query builders, result shaping and geo math. None
 of these touch the live clients (Elasticsearch / PostGIS / Redis / NATS), so they
 import in isolation and are trivially unit-testable.
 """
+
 import math
 import re
 
@@ -59,9 +60,28 @@ def _distance_confidence(distance_m: float) -> float:
 # Generic street-type tokens stripped before comparing street names, so that
 # "Tahrir Street" vs "Tahrir St" still matches on the meaningful token "tahrir".
 _STREET_GENERIC_TOKENS = {
-    "street", "st", "road", "rd", "ave", "avenue", "alley", "lane", "drive", "dr",
-    "square", "sq", "blvd", "boulevard",
-    "شارع", "ش", "طريق", "حارة", "حاره", "زقاق", "ميدان", "كوبري",
+    "street",
+    "st",
+    "road",
+    "rd",
+    "ave",
+    "avenue",
+    "alley",
+    "lane",
+    "drive",
+    "dr",
+    "square",
+    "sq",
+    "blvd",
+    "boulevard",
+    "شارع",
+    "ش",
+    "طريق",
+    "حارة",
+    "حاره",
+    "زقاق",
+    "ميدان",
+    "كوبري",
 }
 
 
@@ -129,23 +149,64 @@ def _text_should_full(q: str) -> list[dict]:
     """
     return [
         # broad fuzzy recall (no boost — guarantees recall; ordering comes below)
-        {"multi_match": {"query": q, "fields": [
-            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
-            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
-            "type": "best_fields", "fuzziness": "AUTO"}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": [
+                    "name^5",
+                    "name.autocomplete^2",
+                    "name_en^5",
+                    "name_en.autocomplete^2",
+                    "name_fr^5",
+                    "name_fr.autocomplete^2",
+                    "tags_text",
+                ],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+            }
+        },
         # near-exact boost (edit distance ≤1, first char must match)
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "fuzziness": 1, "prefix_length": 1, "boost": 10}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "fuzziness": 1,
+                "prefix_length": 1,
+                "boost": 10,
+            }
+        },
         # phrase boost: contiguous phrase
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "phrase", "boost": 10}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "phrase",
+                "boost": 10,
+            }
+        },
         # exact all-tokens boost: every query word appears verbatim
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "best_fields", "operator": "and", "boost": 15}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "best_fields",
+                "operator": "and",
+                "boost": 15,
+            }
+        },
         # fuzzy all-tokens boost: keeps a precision boost for misspelled multiword
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "operator": "and", "fuzziness": "AUTO",
-            "prefix_length": 1, "boost": 8}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "operator": "and",
+                "fuzziness": "AUTO",
+                "prefix_length": 1,
+                "boost": 8,
+            }
+        },
     ]
 
 
@@ -159,17 +220,49 @@ def _text_should_lean(q: str) -> list[dict]:
     driver of the huge candidate sets that stall the search thread pool.
     """
     return [
-        {"multi_match": {"query": q, "fields": [
-            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
-            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
-            "type": "best_fields"}},
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "fuzziness": "AUTO", "prefix_length": 2,
-            "max_expansions": 30, "boost": 4}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "phrase", "boost": 10}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "best_fields", "operator": "and", "boost": 15}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": [
+                    "name^5",
+                    "name.autocomplete^2",
+                    "name_en^5",
+                    "name_en.autocomplete^2",
+                    "name_fr^5",
+                    "name_fr.autocomplete^2",
+                    "tags_text",
+                ],
+                "type": "best_fields",
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+                "prefix_length": 2,
+                "max_expansions": 30,
+                "boost": 4,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "phrase",
+                "boost": 10,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "best_fields",
+                "operator": "and",
+                "boost": 15,
+            }
+        },
     ]
 
 
@@ -207,11 +300,11 @@ def _element_to_geocode_result(extra: dict) -> dict:
         "confidence": extra.get("confidence", 0.6),
         "full_address": full_addr,
         "addr_housenumber": addr.get("housenumber", ""),
-        "addr_street":      addr.get("street", ""),
-        "addr_city":        addr.get("city", ""),
-        "addr_postcode":    addr.get("postcode", ""),
-        "addr_country":     addr.get("country", ""),
-        "addr_suburb":      addr.get("suburb", ""),
-        "addr_state":       addr.get("state", ""),
+        "addr_street": addr.get("street", ""),
+        "addr_city": addr.get("city", ""),
+        "addr_postcode": addr.get("postcode", ""),
+        "addr_country": addr.get("country", ""),
+        "addr_suburb": addr.get("suburb", ""),
+        "addr_state": addr.get("state", ""),
         "address": None,
     }

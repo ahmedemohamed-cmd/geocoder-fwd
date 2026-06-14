@@ -1,4 +1,5 @@
 """Auth + admin tenant CRUD."""
+
 from conftest import admin_token, bearer, login, make_tenant
 
 
@@ -12,8 +13,7 @@ async def test_admin_login_ok_and_me(cp_client):
 
 
 async def test_login_wrong_password(cp_client):
-    r = await cp_client.post("/auth/login",
-                             json={"email": "admin@example.com", "password": "nope"})
+    r = await cp_client.post("/auth/login", json={"email": "admin@example.com", "password": "nope"})
     assert r.status_code == 401
 
 
@@ -32,16 +32,26 @@ async def test_admin_creates_tenant_and_user_can_login(cp_client):
 
 async def test_tenant_user_cannot_manage_tenants(cp_client):
     _, ttok = await make_tenant(cp_client, admin_email="b@acme.test")
-    r = await cp_client.post("/admin/tenants", headers=bearer(ttok), json={
-        "name": "X", "admin_email": "x@x.test", "admin_password": "password123"})
+    r = await cp_client.post(
+        "/admin/tenants",
+        headers=bearer(ttok),
+        json={"name": "X", "admin_email": "x@x.test", "admin_password": "password123"},
+    )
     assert r.status_code == 403
 
 
 async def test_create_tenant_unknown_plan_404(cp_client):
     atok = await admin_token(cp_client)
-    r = await cp_client.post("/admin/tenants", headers=bearer(atok), json={
-        "name": "Z", "plan_id": "ghost",
-        "admin_email": "z@z.test", "admin_password": "password123"})
+    r = await cp_client.post(
+        "/admin/tenants",
+        headers=bearer(atok),
+        json={
+            "name": "Z",
+            "plan_id": "ghost",
+            "admin_email": "z@z.test",
+            "admin_password": "password123",
+        },
+    )
     assert r.status_code == 404
 
 
@@ -61,9 +71,16 @@ async def test_recreate_tenant_after_delete_reuses_admin_email(cp_client):
 async def test_create_tenant_duplicate_user_409(cp_client):
     await make_tenant(cp_client, name="One", admin_email="dup@acme.test")
     atok = await admin_token(cp_client)
-    r = await cp_client.post("/admin/tenants", headers=bearer(atok), json={
-        "name": "Two", "plan_id": "free",
-        "admin_email": "dup@acme.test", "admin_password": "password123"})
+    r = await cp_client.post(
+        "/admin/tenants",
+        headers=bearer(atok),
+        json={
+            "name": "Two",
+            "plan_id": "free",
+            "admin_email": "dup@acme.test",
+            "admin_password": "password123",
+        },
+    )
     assert r.status_code == 409
 
 
@@ -75,14 +92,16 @@ async def test_list_get_update_delete_tenant(cp_client):
     lst = await cp_client.get("/admin/tenants", headers=h)
     assert any(t["id"] == tenant["id"] for t in lst.json())
 
-    upd = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
-                                json={"name": "Beta2", "plan_id": "pro"})
+    upd = await cp_client.patch(
+        f"/admin/tenants/{tenant['id']}", headers=h, json={"name": "Beta2", "plan_id": "pro"}
+    )
     assert upd.status_code == 200 and upd.json()["name"] == "Beta2"
     assert upd.json()["plan_id"] == "pro"
 
     # invalid plan on update
-    bad = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
-                                json={"plan_id": "ghost"})
+    bad = await cp_client.patch(
+        f"/admin/tenants/{tenant['id']}", headers=h, json={"plan_id": "ghost"}
+    )
     assert bad.status_code == 400
 
     # soft delete → excluded from default list, visible with include_deleted
@@ -100,20 +119,23 @@ async def test_suspend_then_reactivate_tenant(cp_client):
     h = bearer(atok)
 
     # suspend (reversible) — still listed, not deleted
-    r = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
-                              json={"status": "suspended"})
+    r = await cp_client.patch(
+        f"/admin/tenants/{tenant['id']}", headers=h, json={"status": "suspended"}
+    )
     assert r.status_code == 200 and r.json()["status"] == "suspended"
     lst = await cp_client.get("/admin/tenants", headers=h)
     assert any(t["id"] == tenant["id"] and t["status"] == "suspended" for t in lst.json())
 
     # reactivate
-    r2 = await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=h,
-                               json={"status": "active"})
+    r2 = await cp_client.patch(
+        f"/admin/tenants/{tenant['id']}", headers=h, json={"status": "active"}
+    )
     assert r2.status_code == 200 and r2.json()["status"] == "active"
 
 
 async def test_delete_missing_tenant_404(cp_client):
     atok = await admin_token(cp_client)
-    r = await cp_client.delete("/admin/tenants/00000000-0000-0000-0000-000000000000",
-                               headers=bearer(atok))
+    r = await cp_client.delete(
+        "/admin/tenants/00000000-0000-0000-0000-000000000000", headers=bearer(atok)
+    )
     assert r.status_code == 404

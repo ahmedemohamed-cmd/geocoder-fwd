@@ -1,5 +1,6 @@
 """Usage display reads durable Postgres rollups, so it survives a Redis cache
 loss (the shared geocoder Redis is non-persistent + LRU-evicting)."""
+
 from conftest import bearer, create_key, make_tenant
 
 from billing import apisix_admin
@@ -11,8 +12,10 @@ async def test_usage_survives_redis_reset(cp_client, pool, redis):
     consumer = apisix_admin.consumer_name(key["id"])
 
     # three served requests recorded via the usage sink
-    await cp_client.post("/internal/usage", json=[
-        {"consumer": consumer, "uri": "/geocode", "status": 200} for _ in range(3)])
+    await cp_client.post(
+        "/internal/usage",
+        json=[{"consumer": consumer, "uri": "/geocode", "status": 200} for _ in range(3)],
+    )
 
     # first read flushes the event buffer into Postgres rollups
     cur = await cp_client.get("/usage/current", headers=bearer(ttok))

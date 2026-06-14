@@ -235,7 +235,7 @@ MAPPING = {
                 },
             },
             "addr_postcode": {"type": "keyword"},
-            "addr_country":  {"type": "keyword"},
+            "addr_country": {"type": "keyword"},
             "addr_suburb": {
                 "type": "text",
                 "analyzer": "address_standard",
@@ -269,6 +269,6 @@ MAPPING = {
             # (nearest_street + enclosing parents). Stored for retrieval only,
             # never queried — keep it disabled so its nested keys are not mapped.
             "address": {"type": "object", "enabled": False},
-        }
+        },
     },
 }

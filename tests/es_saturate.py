@@ -7,6 +7,7 @@ pre-encoded request bodies, so the client can actually push ES to its knee. We
 ramp total concurrency and watch ES-side search queue/rejected + CPU to locate
 the real saturation point (queue climbing / rejections / CPU ~100% = ES-bound).
 """
+
 import json
 import multiprocessing as mp
 import random
@@ -18,16 +19,20 @@ ES = "http://localhost:9200/osm_places/_search"
 CAIRO = (30.0444, 31.2357)
 DURATION = 10.0
 THREADS_PER_PROC = 16
-PROC_LEVELS = [1, 2, 3, 4, 6, 8, 12]   # total conc = procs * THREADS_PER_PROC
+PROC_LEVELS = [1, 2, 3, 4, 6, 8, 12]  # total conc = procs * THREADS_PER_PROC
 
 
 def _bodies():
-    import os, sys
+    import os
+    import sys
+
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import stress as s
+
     random.seed(7)
     qs = random.sample(s.QUERIES, min(200, len(s.QUERIES)))
     return [json.dumps(s.es_body(q)).encode() for q in qs]
+
 
 BODIES = _bodies()
 
@@ -35,6 +40,7 @@ BODIES = _bodies()
 def worker(args):
     duration, threads = args
     import threading
+
     stop = time.time() + duration
     counts = [0, 0]  # ok, err
     lats = []
@@ -47,8 +53,9 @@ def worker(args):
             body = random.choice(BODIES)
             t0 = time.perf_counter()
             try:
-                req = urllib.request.Request(ES, data=body,
-                                             headers={"Content-Type": "application/json"})
+                req = urllib.request.Request(
+                    ES, data=body, headers={"Content-Type": "application/json"}
+                )
                 with urllib.request.urlopen(req, timeout=30) as r:
                     r.read()
                     ok = r.status == 200
@@ -67,29 +74,49 @@ def worker(args):
             lats.extend(local_lats)
 
     ts = [threading.Thread(target=run) for _ in range(threads)]
-    for t in ts: t.start()
-    for t in ts: t.join()
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
     return counts[0], counts[1], lats
 
 
 def es_stats():
     try:
-        u = ("http://localhost:9200/_nodes/stats/process,thread_pool"
-             "?filter_path=nodes.*.process.cpu.percent,"
-             "nodes.*.thread_pool.search.queue,nodes.*.thread_pool.search.rejected")
+        u = (
+            "http://localhost:9200/_nodes/stats/process,thread_pool"
+            "?filter_path=nodes.*.process.cpu.percent,"
+            "nodes.*.thread_pool.search.queue,nodes.*.thread_pool.search.rejected"
+        )
         with urllib.request.urlopen(u, timeout=5) as r:
             d = json.loads(r.read())
         node = next(iter(d["nodes"].values()))
-        return (node["process"]["cpu"]["percent"],
-                node["thread_pool"]["search"]["queue"],
-                node["thread_pool"]["search"]["rejected"])
+        return (
+            node["process"]["cpu"]["percent"],
+            node["thread_pool"]["search"]["queue"],
+            node["thread_pool"]["search"]["rejected"],
+        )
     except Exception:
         return (None, None, None)
 
 
 def main():
-    print(f"# ES saturation  duration={DURATION}s/level  threads/proc={THREADS_PER_PROC}  bodies={len(BODIES)}\n")
-    hdr = ("procs", "conc", "rps", "ok", "err", "p50ms", "p90ms", "p99ms", "es_cpu%", "es_q_end", "es_rej")
+    print(
+        f"# ES saturation  duration={DURATION}s/level  threads/proc={THREADS_PER_PROC}  bodies={len(BODIES)}\n"
+    )
+    hdr = (
+        "procs",
+        "conc",
+        "rps",
+        "ok",
+        "err",
+        "p50ms",
+        "p90ms",
+        "p99ms",
+        "es_cpu%",
+        "es_q_end",
+        "es_rej",
+    )
     print("| " + " | ".join(hdr) + " |")
     print("|" + "|".join(["---"] * len(hdr)) + "|")
     for procs in PROC_LEVELS:
@@ -105,29 +132,46 @@ def main():
                 time.sleep(0.5)
 
         import threading
-        smp = threading.Thread(target=sample); smp.start()
+
+        smp = threading.Thread(target=sample)
+        smp.start()
         t0 = time.time()
         with mp.Pool(procs) as pool:
             results = pool.map(worker, [(DURATION, THREADS_PER_PROC)] * procs)
         elapsed = time.time() - t0
-        stop_sampling.set(); smp.join()
+        stop_sampling.set()
+        smp.join()
         _, q_end, rej1 = es_stats()
 
         ok = sum(r[0] for r in results)
         err = sum(r[1] for r in results)
         lats = sorted(l for r in results for l in r[2])
         n = len(lats)
-        def pct(p): return round(lats[min(n - 1, int(p * n))], 1) if n else 0
+
+        def pct(p):
+            return round(lats[min(n - 1, int(p * n))], 1) if n else 0
+
         row = {
-            "procs": procs, "conc": procs * THREADS_PER_PROC,
-            "rps": round(ok / elapsed, 1), "ok": ok, "err": err,
+            "procs": procs,
+            "conc": procs * THREADS_PER_PROC,
+            "rps": round(ok / elapsed, 1),
+            "ok": ok,
+            "err": err,
             "p50": round(statistics.median(lats), 1) if n else 0,
-            "p90": pct(0.90), "p99": pct(0.99),
+            "p90": pct(0.90),
+            "p99": pct(0.99),
             "cpu": round(statistics.mean(cpu_samples)) if cpu_samples else None,
-            "q": q_end, "rej": (rej1 - rej0) if (rej1 is not None and rej0 is not None) else None,
+            "q": q_end,
+            "rej": (rej1 - rej0) if (rej1 is not None and rej0 is not None) else None,
         }
-        print("| {procs} | {conc} | {rps} | {ok} | {err} | {p50} | {p90} | {p99} | {cpu} | {q} | {rej} |".format(**row))
-        import sys; sys.stdout.flush()
+        print(
+            "| {procs} | {conc} | {rps} | {ok} | {err} | {p50} | {p90} | {p99} | {cpu} | {q} | {rej} |".format(
+                **row
+            )
+        )
+        import sys
+
+        sys.stdout.flush()
         time.sleep(2.0)
 
 

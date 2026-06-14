@@ -2,10 +2,14 @@ import asyncio
 import logging
 
 import nats
-from nats.js.api import ConsumerConfig, StreamConfig, RetentionPolicy
+from nats.js.api import ConsumerConfig, RetentionPolicy, StreamConfig
+
 from shared.config import (
-    NATS_URL, NATS_STREAM, NATS_SUBJECT,
-    TRAFFIC_STREAM, TRAFFIC_SUBJECT,
+    NATS_STREAM,
+    NATS_SUBJECT,
+    NATS_URL,
+    TRAFFIC_STREAM,
+    TRAFFIC_SUBJECT,
 )
 
 logger = logging.getLogger(__name__)
@@ -15,10 +19,10 @@ _STREAM_CFG = StreamConfig(
     name=NATS_STREAM,
     subjects=[NATS_SUBJECT],
     retention=RetentionPolicy.LIMITS,
-    max_age=86400,           # 24 h
-    max_bytes=10737418240,   # 10 GB
+    max_age=86400,  # 24 h
+    max_bytes=10737418240,  # 10 GB
     storage="file",
-    max_msg_size=-1,         # unlimited — server ceiling is 64 MB (nats.conf)
+    max_msg_size=-1,  # unlimited — server ceiling is 64 MB (nats.conf)
     discard="old",
 )
 
@@ -29,8 +33,8 @@ TRAFFIC_STREAM_CFG = StreamConfig(
     name=TRAFFIC_STREAM,
     subjects=[TRAFFIC_SUBJECT],
     retention=RetentionPolicy.LIMITS,
-    max_age=3600,            # 1 h
-    max_bytes=536870912,     # 512 MB
+    max_age=3600,  # 1 h
+    max_bytes=536870912,  # 512 MB
     storage="file",
     max_msg_size=-1,
     discard="old",
@@ -83,7 +87,9 @@ async def ensure_stream(js, stream_cfg=_STREAM_CFG):
                 logger.info("Stream %s created", stream_cfg.name)
                 return
             except Exception as e2:
-                if (is_transient_error(e2) or "already exists" in str(e2).lower()) and attempt < stream_retries - 1:
+                if (
+                    is_transient_error(e2) or "already exists" in str(e2).lower()
+                ) and attempt < stream_retries - 1:
                     await asyncio.sleep(1 * (attempt + 1))
                     continue
                 elif attempt >= stream_retries - 1:
@@ -109,10 +115,13 @@ async def connect(stream_cfg=_STREAM_CFG):
             transient = is_transient_error(e)
             logger.warning(
                 "Failed to connect to NATS (attempt %d/%d): %s (transient: %s)",
-                attempt + 1, max_retries, e, transient,
+                attempt + 1,
+                max_retries,
+                e,
+                transient,
             )
             if attempt < max_retries - 1:
-                delay = base_retry_delay * (2 ** attempt) if transient else base_retry_delay
+                delay = base_retry_delay * (2**attempt) if transient else base_retry_delay
                 await asyncio.sleep(min(delay, 30))
             else:
                 raise
@@ -168,15 +177,18 @@ async def subscribe_to(js, stream, subject, consumer_name):
                 stream=stream,
                 config=ConsumerConfig(
                     max_waiting=10,
-                    max_deliver=-1,   # unlimited redelivery
-                    ack_wait=300,     # 5 min to allow slow bulk inserts
+                    max_deliver=-1,  # unlimited redelivery
+                    ack_wait=300,  # 5 min to allow slow bulk inserts
                 ),
             )
             logger.info("Attached to consumer %s with desired config", consumer_name)
         except Exception as e:
             logger.debug(
                 "ConsumerConfig attach failed for %s (attempt %d/%d): %s — trying simple attach",
-                consumer_name, attempt + 1, max_retries, e,
+                consumer_name,
+                attempt + 1,
+                max_retries,
+                e,
             )
             # Fall back to a config-free attach (works when consumer already
             # exists with incompatible immutable fields).  Log a warning so the
@@ -192,7 +204,9 @@ async def subscribe_to(js, stream, subject, consumer_name):
             except Exception as e2:
                 any_transient = is_transient_error(e) or is_transient_error(e2)
                 if any_transient and attempt < max_retries - 1:
-                    logger.warning("Retrying subscription creation (attempt %d/%d)", attempt + 1, max_retries)
+                    logger.warning(
+                        "Retrying subscription creation (attempt %d/%d)", attempt + 1, max_retries
+                    )
                     await asyncio.sleep(2 * (attempt + 1))
                     continue
                 logger.error("Failed to create subscription after %d attempts: %s", max_retries, e2)
@@ -207,7 +221,10 @@ async def subscribe_to(js, stream, subject, consumer_name):
             except Exception as verify_err:
                 logger.warning(
                     "Consumer %s not found on server after subscribe (attempt %d/%d): %s",
-                    consumer_name, attempt + 1, max_retries, verify_err,
+                    consumer_name,
+                    attempt + 1,
+                    max_retries,
+                    verify_err,
                 )
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2 * (attempt + 1))

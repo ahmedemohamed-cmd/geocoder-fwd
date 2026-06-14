@@ -31,20 +31,29 @@ import random
 import asyncpg
 import nats.errors
 
+from shared.address import build_full_address, extract_address_components, has_address
+from shared.centroid import centroid_latlon
 from shared.config import (
-    POSTGRES_HOST,
-    POSTGRES_PORT,
-    POSTGRES_DB,
-    POSTGRES_USER,
-    POSTGRES_PASSWORD,
     BATCH_SIZE,
     MAX_CONCURRENT_BATCHES,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
 )
-from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
-from shared.address import extract_address_components, build_full_address, has_address
-from shared.centroid import centroid_latlon
+from shared.logging import get_logger
+from shared.nats_client import (
+    connect,
+    is_connection_error,
+    is_transient_error,
+    reconnect,
+    subscribe,
+)
 
-TABLE         = "osm_geometries"
+logger = get_logger("postgis-inserter")
+
+TABLE = "osm_geometries"
 ADDRESS_TABLE = "osm_addresses"
 
 
@@ -53,22 +62,24 @@ def _geojson_to_wkt(geom: dict, osm_id: str = "") -> str | None:
     try:
         gtype = geom.get("type")
         coords = geom.get("coordinates")
-        
+
         if not gtype or coords is None:
-            print(f"[postgis-inserter] Invalid geometry for {osm_id}: missing type or coordinates")
+            logger.warning(
+                f"[postgis-inserter] Invalid geometry for {osm_id}: missing type or coordinates"
+            )
             return None
-            
+
         if gtype == "Point":
             return f"POINT({coords[0]} {coords[1]})"
         if gtype == "LineString":
             if not coords:
-                print(f"[postgis-inserter] Empty LineString for {osm_id}")
+                logger.info(f"[postgis-inserter] Empty LineString for {osm_id}")
                 return None
             pts = ", ".join(f"{c[0]} {c[1]}" for c in coords)
             return f"LINESTRING({pts})"
         if gtype == "Polygon":
             if not coords:
-                print(f"[postgis-inserter] Empty Polygon for {osm_id}")
+                logger.info(f"[postgis-inserter] Empty Polygon for {osm_id}")
                 return None
             rings = []
             for ring in coords:
@@ -77,7 +88,7 @@ def _geojson_to_wkt(geom: dict, osm_id: str = "") -> str | None:
             return f"POLYGON({', '.join(rings)})"
         if gtype == "MultiPolygon":
             if not coords:
-                print(f"[postgis-inserter] Empty MultiPolygon for {osm_id}")
+                logger.info(f"[postgis-inserter] Empty MultiPolygon for {osm_id}")
                 return None
             polygons = []
             for polygon in coords:
@@ -87,11 +98,11 @@ def _geojson_to_wkt(geom: dict, osm_id: str = "") -> str | None:
                     rings.append(f"({pts})")
                 polygons.append(f"({', '.join(rings)})")
             return f"MULTIPOLYGON({', '.join(polygons)})"
-        
-        print(f"[postgis-inserter] Unsupported geometry type '{gtype}' for {osm_id}")
+
+        logger.info(f"[postgis-inserter] Unsupported geometry type '{gtype}' for {osm_id}")
         return None
     except Exception as e:
-        print(f"[postgis-inserter] Error converting geometry for {osm_id}: {e}")
+        logger.error(f"[postgis-inserter] Error converting geometry for {osm_id}: {e}")
         return None
 
 
@@ -109,24 +120,30 @@ async def _executemany_with_retry(pool, sql, data, label, worker_id):
             async with pool.acquire() as conn:
                 await conn.executemany(sql, data)
             return
-        except (asyncpg.exceptions.DeadlockDetectedError,
-                asyncpg.exceptions.SerializationError) as e:
+        except (
+            asyncpg.exceptions.DeadlockDetectedError,
+            asyncpg.exceptions.SerializationError,
+        ) as e:
             if attempt == 4:
-                print(f"[postgis-inserter] Worker {worker_id}: {label} failed after retries: {e}", flush=True)
+                logger.error(
+                    f"[postgis-inserter] Worker {worker_id}: {label} failed after retries: {e}",
+                )
                 raise
-            delay = 0.1 * (2 ** attempt) + random.uniform(0, 0.1)
-            print(f"[postgis-inserter] Worker {worker_id}: {label} deadlock, retrying in {delay:.2f}s (attempt {attempt + 1}/5)", flush=True)
+            delay = 0.1 * (2**attempt) + random.uniform(0, 0.1)
+            logger.warning(
+                f"[postgis-inserter] Worker {worker_id}: {label} deadlock, retrying in {delay:.2f}s (attempt {attempt + 1}/5)",
+            )
             await asyncio.sleep(delay)
 
 
 async def ensure_table(pool: asyncpg.Pool):
     try:
         async with pool.acquire() as conn:
-            print(f"[postgis-inserter] Creating PostGIS extension...")
+            logger.info("[postgis-inserter] Creating PostGIS extension...")
             await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis")
-            print(f"[postgis-inserter] PostGIS extension created")
-            
-            print(f"[postgis-inserter] Creating table {TABLE}...")
+            logger.info("[postgis-inserter] PostGIS extension created")
+
+            logger.info(f"[postgis-inserter] Creating table {TABLE}...")
             await conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {TABLE} (
@@ -136,12 +153,12 @@ async def ensure_table(pool: asyncpg.Pool):
                 )
                 """
             )
-            print(f"[postgis-inserter] Table {TABLE} created")
-            
+            logger.info(f"[postgis-inserter] Table {TABLE} created")
+
             await conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_geom ON {TABLE} USING GIST (geom)"
             )
-            print(f"[postgis-inserter] Index idx_{TABLE}_geom created")
+            logger.info(f"[postgis-inserter] Index idx_{TABLE}_geom created")
 
             # Partial functional GiST index over the polygon built from closed
             # ways. The enrichment "enclosing closed-line" query filters on
@@ -155,10 +172,10 @@ async def ensure_table(pool: asyncpg.Pool):
                 f" WHERE ST_GeometryType(geom) = 'ST_LineString'"
                 f"   AND ST_IsClosed(geom) AND ST_NPoints(geom) >= 4"
             )
-            print(f"[postgis-inserter] Index idx_{TABLE}_closedpoly created")
+            logger.info(f"[postgis-inserter] Index idx_{TABLE}_closedpoly created")
 
             # ── address table ─────────────────────────────────────────────────
-            print(f"[postgis-inserter] Creating table {ADDRESS_TABLE}...")
+            logger.info(f"[postgis-inserter] Creating table {ADDRESS_TABLE}...")
             await conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {ADDRESS_TABLE} (
@@ -174,8 +191,8 @@ async def ensure_table(pool: asyncpg.Pool):
                 )
                 """
             )
-            print(f"[postgis-inserter] Table {ADDRESS_TABLE} created")
-            
+            logger.info(f"[postgis-inserter] Table {ADDRESS_TABLE} created")
+
             await conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{ADDRESS_TABLE}_geom"
                 f" ON {ADDRESS_TABLE} USING GIST (geom)"
@@ -188,18 +205,19 @@ async def ensure_table(pool: asyncpg.Pool):
                 f"CREATE INDEX IF NOT EXISTS idx_{ADDRESS_TABLE}_postcode"
                 f" ON {ADDRESS_TABLE} (postcode)"
             )
-            print(f"[postgis-inserter] Address table indexes created")
-            
+            logger.info("[postgis-inserter] Address table indexes created")
+
             # Verify tables exist
             result = await conn.fetch(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ($1, $2)",
-                TABLE, ADDRESS_TABLE
+                TABLE,
+                ADDRESS_TABLE,
             )
-            existing_tables = [row['tablename'] for row in result]
-            print(f"[postgis-inserter] Verified tables exist: {existing_tables}")
-            
+            existing_tables = [row["tablename"] for row in result]
+            logger.info(f"[postgis-inserter] Verified tables exist: {existing_tables}")
+
     except Exception as e:
-        print(f"[postgis-inserter] ERROR ensuring tables: {e}", flush=True)
+        logger.error(f"[postgis-inserter] ERROR ensuring tables: {e}")
         raise
 
 
@@ -220,9 +238,9 @@ async def run():
     nc, js = await connect()
     try:
         sub = await subscribe(js, "postgis-consumer")
-        print("[postgis-inserter] Listening for messages ...")
+        logger.info("[postgis-inserter] Listening for messages ...")
     except Exception as e:
-        print(f"[postgis-inserter] Failed to create subscription: {e}", flush=True)
+        logger.error(f"[postgis-inserter] Failed to create subscription: {e}")
         raise
 
     # Use mutable containers for connection objects so workers can update them
@@ -243,7 +261,7 @@ async def run():
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     break
-                except (nats.errors.TimeoutError, asyncio.TimeoutError):
+                except (TimeoutError, nats.errors.TimeoutError):
                     # Bare asyncio.TimeoutError (str == '') is raised by nats-py's
                     # fetch() internals on some no-message paths and is NOT a
                     # subclass-catch of nats.errors.TimeoutError's parent — handle
@@ -253,23 +271,33 @@ async def run():
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[postgis-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {type(e).__name__}: {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
+                    logger.error(
+                        f"[postgis-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {type(e).__name__}: {e} (transient: {is_transient}, conn: {is_conn_err})",
+                    )
 
                     if is_conn_err:
                         async with reconnect_lock:
                             try:
                                 if conn_state["nc"].is_closed:
-                                    print("[postgis-inserter] Fetcher: Reconnecting...", flush=True)
-                                    conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
-                                conn_state["sub"] = await subscribe(conn_state["js"], "postgis-consumer")
-                                print("[postgis-inserter] Fetcher: Reconnected / resubscribed", flush=True)
+                                    logger.warning("[postgis-inserter] Fetcher: Reconnecting...")
+                                    conn_state["nc"], conn_state["js"] = await reconnect(
+                                        conn_state["nc"], conn_state["js"]
+                                    )
+                                conn_state["sub"] = await subscribe(
+                                    conn_state["js"], "postgis-consumer"
+                                )
+                                logger.warning(
+                                    "[postgis-inserter] Fetcher: Reconnected / resubscribed",
+                                )
                             except Exception as reconnect_err:
-                                print(f"[postgis-inserter] Fetcher: Reconnection failed: {reconnect_err}", flush=True)
+                                logger.error(
+                                    f"[postgis-inserter] Fetcher: Reconnection failed: {reconnect_err}",
+                                )
                                 await asyncio.sleep(5)
                                 continue
                         break
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
-                        delay = min(2 * (2 ** fetch_attempt), 15)
+                        delay = min(2 * (2**fetch_attempt), 15)
                         await asyncio.sleep(delay)
                     else:
                         await asyncio.sleep(10)
@@ -291,9 +319,9 @@ async def run():
 
             for msg in msgs:
                 elem = json.loads(msg.data)
-                osm_id   = elem.get("osm_id", "unknown")
+                osm_id = elem.get("osm_id", "unknown")
                 osm_type = elem.get("osm_type", "")
-                geom     = elem.get("geom")
+                geom = elem.get("geom")
 
                 if not geom:
                     continue
@@ -307,22 +335,24 @@ async def run():
                 # Build address row when addr:* tags are present
                 tags = elem.get("tags", {})
                 if has_address(tags):
-                    addr  = extract_address_components(tags)
+                    addr = extract_address_components(tags)
                     faddr = build_full_address(tags)
                     # Use centroid as the spatial point for addresses
-                    c   = centroid_latlon(geom)
+                    c = centroid_latlon(geom)
                     cwkt = f"POINT({c['lon']} {c['lat']})" if c else wkt
-                    addr_rows.append((
-                        osm_id,
-                        osm_type,
-                        addr.get("housenumber", ""),
-                        addr.get("street", ""),
-                        addr.get("city", ""),
-                        addr.get("postcode", ""),
-                        addr.get("country", ""),
-                        faddr,
-                        cwkt,
-                    ))
+                    addr_rows.append(
+                        (
+                            osm_id,
+                            osm_type,
+                            addr.get("housenumber", ""),
+                            addr.get("street", ""),
+                            addr.get("city", ""),
+                            addr.get("postcode", ""),
+                            addr.get("country", ""),
+                            faddr,
+                            cwkt,
+                        )
+                    )
 
             # Deduplicate (keep last) and sort by osm_id so EVERY worker acquires
             # row locks in the same order. A consistent global lock ordering is
@@ -340,7 +370,9 @@ async def run():
                         osm_type = EXCLUDED.osm_type,
                         geom     = EXCLUDED.geom
                     """,
-                    rows, "geom upsert", worker_id,
+                    rows,
+                    "geom upsert",
+                    worker_id,
                 )
 
             if addr_rows:
@@ -363,7 +395,9 @@ async def run():
                         full_address = EXCLUDED.full_address,
                         geom         = EXCLUDED.geom
                     """,
-                    addr_rows, "address upsert", worker_id,
+                    addr_rows,
+                    "address upsert",
+                    worker_id,
                 )
 
             # Ack messages only after successful processing
@@ -372,14 +406,18 @@ async def run():
 
             elapsed = _time.monotonic() - batch_start
             throughput = len(rows) / elapsed if elapsed > 0 else 0
-            print(f"[postgis-inserter] Worker {worker_id}: Inserted {len(rows)} geoms + {len(addr_rows)} addrs in {elapsed:.2f}s ({throughput:.0f} rows/s)", flush=True)
+            logger.info(
+                f"[postgis-inserter] Worker {worker_id}: Inserted {len(rows)} geoms + {len(addr_rows)} addrs in {elapsed:.2f}s ({throughput:.0f} rows/s)",
+            )
             work_queue.task_done()
 
     # Spawn one fetcher + multiple processing workers
     tasks = [asyncio.create_task(fetcher())]
     tasks += [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
-    print(f"[postgis-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)", flush=True)
-    
+    logger.info(
+        f"[postgis-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)",
+    )
+
     # Wait for all tasks (they run indefinitely)
     await asyncio.gather(*tasks)
 

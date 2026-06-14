@@ -8,17 +8,17 @@ import tempfile
 # Ensure project root is on path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from services.gn_watcher import _parse_geonames_row
 from services.oa_watcher import (
+    _is_ndjson,
     _parse_csv_row,
     _parse_geojson_feature,
     _source_hash,
-    _is_ndjson,
 )
-from services.gn_watcher import _parse_geonames_row
 from shared.progress import ProgressTracker
 
-
 # ── OA ID collision fix ────────────────────────────────────────────────────
+
 
 def test_oa_csv_id_uses_source_hash_when_no_hash():
     """Without HASH column, IDs include source_hash to prevent cross-file collisions."""
@@ -58,6 +58,7 @@ def test_source_hash_deterministic():
 
 # ── OA parsing edge cases ─────────────────────────────────────────────────
 
+
 def test_oa_csv_missing_coords():
     row = {"LON": "", "LAT": "43.7", "NUMBER": "10", "STREET": "Main St"}
     assert _parse_csv_row(row, 0) is None
@@ -85,9 +86,19 @@ def test_oa_geojson_invalid_coord_type():
 
 # ── NDJSON detection ───────────────────────────────────────────────────────
 
+
 def test_ndjson_detection_true():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".geojson", delete=False) as f:
-        f.write(json.dumps({"type": "Feature", "geometry": {"type": "Point", "coordinates": [0, 0]}, "properties": {}}) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [0, 0]},
+                    "properties": {},
+                }
+            )
+            + "\n"
+        )
         f.flush()
         assert _is_ndjson(f.name) is True
     os.unlink(f.name)
@@ -111,30 +122,62 @@ def test_ndjson_detection_false_empty():
 
 # ── GeoNames parsing ──────────────────────────────────────────────────────
 
+
 def _make_gn_row(**overrides) -> list[str]:
     """Build a 19-column GeoNames TSV row."""
     defaults = [
-        "6295630", "Earth", "Earth", "",           # geonameid, name, ascii, altnames
-        "0.0", "0.0",                               # lat, lon
-        "L", "AREA",                                # feature_class, feature_code
-        "", "",                                     # country_code, cc2
-        "", "", "", "",                             # admin1-4
-        "7800000000", "", "", "UTC",                # population, elevation, dem, tz
-        "2023-01-01",                               # modification_date
+        "6295630",
+        "Earth",
+        "Earth",
+        "",  # geonameid, name, ascii, altnames
+        "0.0",
+        "0.0",  # lat, lon
+        "L",
+        "AREA",  # feature_class, feature_code
+        "",
+        "",  # country_code, cc2
+        "",
+        "",
+        "",
+        "",  # admin1-4
+        "7800000000",
+        "",
+        "",
+        "UTC",  # population, elevation, dem, tz
+        "2023-01-01",  # modification_date
     ]
     for k, v in overrides.items():
-        idx = int(k) if k.isdigit() else {
-            "geonameid": 0, "name": 1, "asciiname": 2, "alternatenames": 3,
-            "latitude": 4, "longitude": 5, "feature_class": 6, "feature_code": 7,
-            "country_code": 8, "population": 14,
-        }[k]
+        idx = (
+            int(k)
+            if k.isdigit()
+            else {
+                "geonameid": 0,
+                "name": 1,
+                "asciiname": 2,
+                "alternatenames": 3,
+                "latitude": 4,
+                "longitude": 5,
+                "feature_class": 6,
+                "feature_code": 7,
+                "country_code": 8,
+                "population": 14,
+            }[k]
+        )
         defaults[idx] = v
     return defaults
 
 
 def test_gn_basic_parsing():
-    fields = _make_gn_row(geonameid="123", name="Ottawa", latitude="45.4", longitude="-75.7",
-                          feature_class="P", feature_code="PPLC", country_code="CA", population="1000000")
+    fields = _make_gn_row(
+        geonameid="123",
+        name="Ottawa",
+        latitude="45.4",
+        longitude="-75.7",
+        feature_class="P",
+        feature_code="PPLC",
+        country_code="CA",
+        population="1000000",
+    )
     msg = _parse_geonames_row(fields)
     assert msg is not None
     assert msg["osm_id"] == "gn123"
@@ -192,6 +235,7 @@ def test_gn_too_few_columns():
 
 # ── ProgressTracker ────────────────────────────────────────────────────────
 
+
 def test_progress_tracker_counts():
     p = ProgressTracker("test", total=100, log_interval=999)
     p.update(5)
@@ -204,6 +248,7 @@ def test_progress_tracker_counts():
 
 if __name__ == "__main__":
     import traceback
+
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = failed = 0
     for t in tests:

@@ -18,6 +18,7 @@ Env:
   PROVISION_OUT          where to write config.json (default ./billing/frontend/public/runtime/config.json)
   ADMIN_LOGIN_NAME       bootstrap human admin to grant the `admin` role
 """
+
 from __future__ import annotations
 
 import json
@@ -29,8 +30,9 @@ import httpx
 
 API = os.getenv("ZITADEL_API_URL", "http://localhost:8085").rstrip("/")
 OUT = os.getenv("PROVISION_OUT", "billing/frontend/public/runtime/config.json")
-REDIRECTS = os.getenv("SPA_REDIRECT_URIS",
-                      "http://localhost:8088/callback,http://localhost:8088/").split(",")
+REDIRECTS = os.getenv(
+    "SPA_REDIRECT_URIS", "http://localhost:8088/callback,http://localhost:8088/"
+).split(",")
 LOGOUTS = os.getenv("SPA_LOGOUT_URIS", "http://localhost:8088/").split(",")
 ADMIN_LOGIN = os.getenv("ADMIN_LOGIN_NAME", "zitadel-admin@zitadel.localhost")
 
@@ -58,8 +60,7 @@ def _wait_ready(tries: int = 90) -> str:
     for i in range(tries):
         try:
             pat = _token(pat_file)
-            headers = {"Authorization": f"Bearer {pat}",
-                       "Content-Type": "application/json"}
+            headers = {"Authorization": f"Bearer {pat}", "Content-Type": "application/json"}
             host = os.getenv("ZITADEL_HOST_HEADER", "")
             if host:
                 headers["Host"] = host
@@ -68,7 +69,7 @@ def _wait_ready(tries: int = 90) -> str:
                     if probe.get(f"{API}/auth/v1/users/me").status_code == 200:
                         return pat
                     if i % 5 == 0:
-                        print(f"Zitadel OIDC up but PAT not yet accepted, retrying…")
+                        print("Zitadel OIDC up but PAT not yet accepted, retrying…")
         except (httpx.HTTPError, OSError):
             pass
         time.sleep(2)
@@ -85,7 +86,7 @@ def _post(c, path, body):
 
 
 def main() -> None:
-    pat = _wait_ready()   # blocks until Zitadel is up and the PAT is accepted
+    pat = _wait_ready()  # blocks until Zitadel is up and the PAT is accepted
     headers = {"Authorization": f"Bearer {pat}", "Content-Type": "application/json"}
     host_override = os.getenv("ZITADEL_HOST_HEADER", "")
     if host_override:
@@ -99,16 +100,26 @@ def main() -> None:
         print("loginV2 disabled:", r.status_code)
 
         # 1) project (assert project roles into tokens)
-        r = _post(c, "/management/v1/projects",
-                  {"name": "geocoder-billing", "projectRoleAssertion": True,
-                   "projectRoleCheck": False, "hasProjectCheck": False})
+        r = _post(
+            c,
+            "/management/v1/projects",
+            {
+                "name": "geocoder-billing",
+                "projectRoleAssertion": True,
+                "projectRoleCheck": False,
+                "hasProjectCheck": False,
+            },
+        )
         project_id = _find_project_id(c, r)
         print("project:", project_id)
 
         # 2) roles
         for key, name in (("admin", "Platform Admin"), ("tenant_user", "Tenant User")):
-            _post(c, f"/management/v1/projects/{project_id}/roles",
-                  {"roleKey": key, "displayName": name, "group": "billing"})
+            _post(
+                c,
+                f"/management/v1/projects/{project_id}/roles",
+                {"roleKey": key, "displayName": name, "group": "billing"},
+            )
 
         # 3) public SPA OIDC client (PKCE, no secret)
         client_id = _ensure_spa(c, project_id)
@@ -122,11 +133,15 @@ def main() -> None:
         _configure_login_policy(c)
 
         # 5) write SPA runtime config (incl. the API/gateway base URLs the SPA calls)
-        cfg = {"issuer": issuer, "clientId": client_id, "projectId": project_id,
-               "scope": f"openid profile email urn:zitadel:iam:org:project:id:{project_id}:aud "
-                        f"urn:zitadel:iam:user:metadata",
-               "apiBase": os.getenv("API_BASE", "http://localhost:8100"),
-               "gatewayBase": os.getenv("GATEWAY_BASE", "http://localhost:8080")}
+        cfg = {
+            "issuer": issuer,
+            "clientId": client_id,
+            "projectId": project_id,
+            "scope": f"openid profile email urn:zitadel:iam:org:project:id:{project_id}:aud "
+            f"urn:zitadel:iam:user:metadata",
+            "apiBase": os.getenv("API_BASE", "http://localhost:8100"),
+            "gatewayBase": os.getenv("GATEWAY_BASE", "http://localhost:8080"),
+        }
         os.makedirs(os.path.dirname(OUT), exist_ok=True)
         with open(OUT, "w") as f:
             json.dump(cfg, f, indent=2)
@@ -137,9 +152,14 @@ def _find_project_id(c, create_resp) -> str:
     if create_resp.status_code < 300:
         return create_resp.json()["id"]
     # already exists → look it up by name
-    r = c.post("{}/management/v1/projects/_search".format(API),
-               json={"queries": [{"nameQuery": {"name": "geocoder-billing",
-                     "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+    r = c.post(
+        f"{API}/management/v1/projects/_search",
+        json={
+            "queries": [
+                {"nameQuery": {"name": "geocoder-billing", "method": "TEXT_QUERY_METHOD_EQUALS"}}
+            ]
+        },
+    )
     return r.json()["result"][0]["id"]
 
 
@@ -163,9 +183,14 @@ def _ensure_spa(c, project_id) -> str:
     if r.status_code < 300:
         return r.json()["clientId"]
     # already exists → find it
-    apps = c.post(f"{API}/management/v1/projects/{project_id}/apps/_search",
-                  json={"queries": [{"nameQuery": {"name": "billing-console",
-                        "method": "TEXT_QUERY_METHOD_EQUALS"}}]}).json()
+    apps = c.post(
+        f"{API}/management/v1/projects/{project_id}/apps/_search",
+        json={
+            "queries": [
+                {"nameQuery": {"name": "billing-console", "method": "TEXT_QUERY_METHOD_EQUALS"}}
+            ]
+        },
+    ).json()
     app_id = apps["result"][0]["id"]
     detail = c.get(f"{API}/management/v1/projects/{project_id}/apps/{app_id}").json()
     return detail["app"]["oidcConfig"]["clientId"]
@@ -176,24 +201,37 @@ def _configure_login_policy(c) -> None:
     try:
         # remove U2F second + multi factor (idempotent; 404/Method-Not-Allowed ok)
         c.delete(f"{API}/admin/v1/policies/login/second_factors/SECOND_FACTOR_TYPE_U2F")
-        c.delete(f"{API}/admin/v1/policies/login/multi_factors/"
-                 f"MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION")
+        c.delete(
+            f"{API}/admin/v1/policies/login/multi_factors/MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION"
+        )
         # ensure TOTP present
-        c.post(f"{API}/admin/v1/policies/login/second_factors",
-               json={"type": "SECOND_FACTOR_TYPE_OTP"})
+        c.post(
+            f"{API}/admin/v1/policies/login/second_factors", json={"type": "SECOND_FACTOR_TYPE_OTP"}
+        )
         # disable passwordless/passkey prompts
-        c.put(f"{API}/admin/v1/policies/login", json={
-            # registration disabled: only admin-provisioned users can log in.
-            # forceMfa + mfaInitSkipLifetime=0s => authenticator-app (TOTP) setup
-            # is mandatory on first login and required on every subsequent login.
-            "allowUsernamePassword": True, "allowRegister": False, "allowExternalIdp": True,
-            "forceMfa": True, "forceMfaLocalOnly": False,
-            "passwordlessType": "PASSWORDLESS_TYPE_NOT_ALLOWED",
-            "hidePasswordReset": False, "ignoreUnknownUsernames": False,
-            "allowDomainDiscovery": True, "passwordCheckLifetime": "864000s",
-            "externalLoginCheckLifetime": "864000s", "mfaInitSkipLifetime": "0s",
-            "secondFactorCheckLifetime": "64800s", "multiFactorCheckLifetime": "43200s",
-            "defaultRedirectUri": ""})
+        c.put(
+            f"{API}/admin/v1/policies/login",
+            json={
+                # registration disabled: only admin-provisioned users can log in.
+                # forceMfa + mfaInitSkipLifetime=0s => authenticator-app (TOTP) setup
+                # is mandatory on first login and required on every subsequent login.
+                "allowUsernamePassword": True,
+                "allowRegister": False,
+                "allowExternalIdp": True,
+                "forceMfa": True,
+                "forceMfaLocalOnly": False,
+                "passwordlessType": "PASSWORDLESS_TYPE_NOT_ALLOWED",
+                "hidePasswordReset": False,
+                "ignoreUnknownUsernames": False,
+                "allowDomainDiscovery": True,
+                "passwordCheckLifetime": "864000s",
+                "externalLoginCheckLifetime": "864000s",
+                "mfaInitSkipLifetime": "0s",
+                "secondFactorCheckLifetime": "64800s",
+                "multiFactorCheckLifetime": "43200s",
+                "defaultRedirectUri": "",
+            },
+        )
         print("login policy: TOTP-only, forced MFA, passwordless disabled")
     except Exception as e:  # noqa: BLE001 - best effort
         print("WARN login policy config failed:", e)
@@ -201,16 +239,28 @@ def _configure_login_policy(c) -> None:
 
 def _grant_admin(c, project_id) -> None:
     try:
-        users = c.post(f"{API}/management/v1/users/_search",
-                       json={"queries": [{"userNameQuery": {"userName": ADMIN_LOGIN,
-                             "method": "TEXT_QUERY_METHOD_EQUALS"}}]}).json()
+        users = c.post(
+            f"{API}/management/v1/users/_search",
+            json={
+                "queries": [
+                    {
+                        "userNameQuery": {
+                            "userName": ADMIN_LOGIN,
+                            "method": "TEXT_QUERY_METHOD_EQUALS",
+                        }
+                    }
+                ]
+            },
+        ).json()
         result = users.get("result") or []
         if not result:
             print("WARN admin user not found for grant:", ADMIN_LOGIN)
             return
         uid = result[0]["id"]
-        c.post(f"{API}/management/v1/users/{uid}/grants",
-               json={"projectId": project_id, "roleKeys": ["admin"]})
+        c.post(
+            f"{API}/management/v1/users/{uid}/grants",
+            json={"projectId": project_id, "roleKeys": ["admin"]},
+        )
         print("granted admin role to", ADMIN_LOGIN)
     except Exception as e:  # noqa: BLE001 - best effort
         print("WARN admin grant failed:", e)

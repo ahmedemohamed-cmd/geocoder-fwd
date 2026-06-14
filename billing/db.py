@@ -1,4 +1,5 @@
 """asyncpg pool, schema DDL and idempotent seeding."""
+
 import asyncpg
 
 from . import config, security
@@ -80,9 +81,9 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 DEFAULT_PLANS = [
     # id,       name,       quota,   base_cents, overage_per_unit, hard_cap
-    ("free",    "Free",        1000,        0,   0.0,   True),
-    ("starter", "Starter",    50000,     2900,   0.05,  False),
-    ("pro",     "Pro",      1000000,    29900,   0.02,  False),
+    ("free", "Free", 1000, 0, 0.0, True),
+    ("starter", "Starter", 50000, 2900, 0.05, False),
+    ("pro", "Pro", 1000000, 29900, 0.02, False),
 ]
 
 
@@ -110,7 +111,8 @@ async def init_schema(pool: asyncpg.Pool) -> None:
         # idempotent migrations for pre-existing databases
         await conn.execute("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_enc TEXT")
         await conn.execute(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'")
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'"
+        )
 
 
 async def seed_plans(pool: asyncpg.Pool) -> None:
@@ -121,7 +123,12 @@ async def seed_plans(pool: asyncpg.Pool) -> None:
                        (id, name, monthly_quota, base_price_cents, overage_cents_per_unit, hard_cap)
                    VALUES ($1,$2,$3,$4,$5,$6)
                    ON CONFLICT (id) DO NOTHING""",
-                pid, name, quota, base, overage, hard,
+                pid,
+                name,
+                quota,
+                base,
+                overage,
+                hard,
             )
 
 

@@ -5,6 +5,7 @@ The bearer token is a JWT with the Zitadel-compatible claim shape
 security.issue_token); in production Zitadel issues it and only decode_token's
 verification config changes.
 """
+
 import base64
 
 import jwt
@@ -24,8 +25,7 @@ def identity_from_claims(claims: dict) -> Identity:
     under the project-roles grant claim and the tenant UUID in user metadata.
     """
     if "role" in claims:  # dev issuer
-        return Identity(sub=claims["sub"], role=claims["role"],
-                        tenant_id=claims.get("tenant_id"))
+        return Identity(sub=claims["sub"], role=claims["role"], tenant_id=claims.get("tenant_id"))
 
     # Zitadel: role from the project-roles grant; admin wins if both present.
     roles = claims.get(config.ZITADEL_ROLES_CLAIM) or {}
@@ -34,8 +34,7 @@ def identity_from_claims(claims: dict) -> Identity:
     elif config.ROLE_TENANT in roles:
         role = config.ROLE_TENANT
     else:
-        raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "token has no recognised billing role")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "token has no recognised billing role")
 
     tenant_id = None
     meta = claims.get(config.ZITADEL_METADATA_CLAIM) or {}
@@ -52,7 +51,7 @@ def current_identity(creds: HTTPAuthorizationCredentials = Depends(_bearer)) -> 
     try:
         claims = security.decode_token(creds.credentials)
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {exc}")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {exc}") from exc
     return identity_from_claims(claims)
 
 

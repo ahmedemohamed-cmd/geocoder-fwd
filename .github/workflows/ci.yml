@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format --check
+        run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    # The billing suite talks to a real Postgres (its conftest creates/drops the
+    # schema in an isolated `billing_test` DB). Everything else is infra-free.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        # The infra-free suite needs only the light runtime libs (see the `test`
+        # extra); the full requirements.txt (torch, osmium) is intentionally not
+        # installed here.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,test]"
+      - name: Create billing_test database
+        run: PGPASSWORD=postgres createdb -h localhost -U postgres billing_test
+      - name: Run unit + smoke tests (no integration)
+        # pyproject sets `addopts = -m 'not integration'`, so the slow
+        # docker-stack suite is skipped here.
+        run: pytest -q

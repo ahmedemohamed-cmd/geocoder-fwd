@@ -5,6 +5,7 @@ against the existing docker-compose Postgres/Redis during development. The
 subsystem uses its own Postgres database (``billing``) to keep its tables
 isolated from the geocoding data.
 """
+
 import os
 
 
@@ -41,10 +42,10 @@ REDIS_PORT = _int("BILLING_REDIS_PORT", _int("REDIS_PORT", 6379))
 REDIS_DB = _int("BILLING_REDIS_DB", 1)  # separate logical db from the geocoder cache
 
 # Redis keys (shared across all gateway replicas → cluster-wide state)
-KEYCACHE_PREFIX = "apikey:"          # apikey:<hash> -> json{key_id,tenant_id,status}
+KEYCACHE_PREFIX = "apikey:"  # apikey:<hash> -> json{key_id,tenant_id,status}
 LIVE_TENANT_PREFIX = "live:tenant:"  # live:tenant:<tenant>:<period> -> int
-LIVE_KEY_PREFIX = "live:key:"        # live:key:<key_id>:<period>    -> int
-USAGE_EVENTS_LIST = "usage:events"   # durable buffer drained into Postgres rollups
+LIVE_KEY_PREFIX = "live:key:"  # live:key:<key_id>:<period>    -> int
+USAGE_EVENTS_LIST = "usage:events"  # durable buffer drained into Postgres rollups
 KEYCACHE_TTL = _int("BILLING_KEYCACHE_TTL", 300)  # seconds; cache miss falls back to PG
 
 # ── Auth ───────────────────────────────────────────────────────────────────
@@ -70,6 +71,8 @@ ZITADEL_JWKS_URL = os.getenv("ZITADEL_JWKS_URL", f"{ZITADEL_ISSUER}/oauth/v2/key
 ZITADEL_HOST_HEADER = os.getenv("ZITADEL_HOST_HEADER", "")
 # Audience to require in the token (the SPA client/project id). Empty = skip aud.
 ZITADEL_AUDIENCE = os.getenv("ZITADEL_AUDIENCE", "")
+
+
 def _provision_project_id() -> str:
     """Read projectId from the config.json written by billing-zitadel-init.
 
@@ -80,10 +83,12 @@ def _provision_project_id() -> str:
     cfg_path = os.getenv("PROVISION_CONFIG_PATH", "/runtime/config.json")
     try:
         import json as _json
+
         with open(cfg_path) as _f:
             return _json.load(_f).get("projectId", "")
     except (OSError, ValueError):
         return ""
+
 
 ZITADEL_PROJECT_ID = _provision_project_id()
 # Zitadel role-grant claim and our two role keys within the project.
@@ -91,6 +96,7 @@ ZITADEL_ROLES_CLAIM = "urn:zitadel:iam:org:project:roles"
 ZITADEL_METADATA_CLAIM = "urn:zitadel:iam:user:metadata"
 # Metadata key (set per tenant user in Zitadel) that carries our tenant UUID.
 ZITADEL_TENANT_METADATA_KEY = os.getenv("ZITADEL_TENANT_METADATA_KEY", "tenant_id")
+
 
 # Service-account PAT used by the control plane to provision Zitadel users/metadata
 # when AUTH_MODE=zitadel (optional; tenant provisioning falls back to no-op if unset).
@@ -105,6 +111,7 @@ def _service_token() -> str:
         except OSError:
             pass
     return ""
+
 
 ZITADEL_SERVICE_TOKEN = _service_token()
 ZITADEL_API_URL = os.getenv("ZITADEL_API_URL", ZITADEL_ISSUER)
@@ -123,7 +130,7 @@ GATEWAY_API_KEY_HEADER = os.getenv("BILLING_API_KEY_HEADER", "X-API-Key")
 # When configured, the control plane manages APISIX consumers (key-auth) and
 # per-tenant consumer-groups (limit-count/redis) via the Admin API. No-op when
 # unset, so dev/tests are unaffected.
-APISIX_ADMIN_URL = os.getenv("APISIX_ADMIN_URL", "")        # e.g. http://apisix:9180
+APISIX_ADMIN_URL = os.getenv("APISIX_ADMIN_URL", "")  # e.g. http://apisix:9180
 APISIX_ADMIN_KEY = os.getenv("APISIX_ADMIN_KEY", "")
 APISIX_KEY_HEADER = os.getenv("APISIX_KEY_HEADER", "X-API-Key")
 APISIX_UPSTREAM = os.getenv("APISIX_UPSTREAM", "geocoder:8000")
@@ -141,7 +148,7 @@ APISIX_LIMIT_WINDOW = _int("APISIX_LIMIT_WINDOW", 2764800)
 
 # Usage sink: APISIX http-logger posts request logs here; the control plane
 # turns them into Redis live counters + durable events.
-USAGE_SINK_URL = os.getenv("USAGE_SINK_URL", "")           # http://billing-control-plane:8100/internal/usage
+USAGE_SINK_URL = os.getenv("USAGE_SINK_URL", "")  # http://billing-control-plane:8100/internal/usage
 USAGE_SINK_SECRET = os.getenv("USAGE_SINK_SECRET", "")
 
 # Encryption-at-rest for API keys (Fernet). The gateway (APISIX) needs the key
@@ -153,5 +160,10 @@ ROLE_ADMIN = "admin"
 ROLE_TENANT = "tenant_user"
 
 # CORS: the SPA origin(s) allowed to call the control plane (comma-separated).
-CORS_ORIGINS = [o.strip() for o in os.getenv(
-    "BILLING_CORS_ORIGINS", "http://localhost:8088,http://127.0.0.1:8088").split(",") if o.strip()]
+CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("BILLING_CORS_ORIGINS", "http://localhost:8088,http://127.0.0.1:8088").split(
+        ","
+    )
+    if o.strip()
+]

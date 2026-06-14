@@ -2,6 +2,10 @@
 
 import time
 
+from shared.logging import get_logger
+
+logger = get_logger("progress")
+
 
 class ProgressTracker:
     """Simple progress tracker that logs updates at regular intervals."""
@@ -31,23 +35,20 @@ class ProgressTracker:
         rate = processed / elapsed if elapsed > 0 else 0
         if self.total > 0:
             pct = processed / self.total * 100
-            print(
+            logger.info(
                 f"[{self.description}] {processed}/{self.total} ({pct:.1f}%) "
                 f"- {rate:.0f} items/sec  ({self.count} published, {self.skipped} skipped)",
-                flush=True,
             )
         else:
-            print(
+            logger.info(
                 f"[{self.description}] {self.count} published - {rate:.0f} items/sec"
                 f"  ({self.skipped} skipped)",
-                flush=True,
             )
 
     def close(self):
         self._log()
         elapsed = time.time() - self.start_time
-        print(
+        logger.info(
             f"[{self.description}] Completed in {elapsed:.1f}s -- "
             f"{self.count} published, {self.skipped} skipped",
-            flush=True,
         )

@@ -21,31 +21,34 @@ import json
 import math
 import time
 
+import httpx
 import nats.errors
 import redis.asyncio as aioredis
-import httpx
 
 from shared.config import (
     REDIS_HOST,
     REDIS_PORT,
-    VALHALLA_URL,
-    TRAFFIC_EWMA_ALPHA,
     TRAFFIC_EDGE_TTL,
-    TRAFFIC_MIN_SAMPLES,
+    TRAFFIC_EWMA_ALPHA,
     TRAFFIC_MAX_TRACE,
+    TRAFFIC_MIN_SAMPLES,
     TRAFFIC_PROVIDER,
     TRAFFIC_PROVIDER_INTERVAL,
     TRAFFIC_PROVIDER_WEIGHT,
+    VALHALLA_URL,
 )
+from shared.logging import get_logger
 from shared.nats_client import (
+    TRAFFIC_STREAM_CFG,
     connect_traffic,
-    subscribe_traffic,
-    reconnect,
     is_connection_error,
     is_transient_error,
-    TRAFFIC_STREAM_CFG,
+    reconnect,
+    subscribe_traffic,
 )
 from shared.traffic_providers import get_provider
+
+logger = get_logger("traffic-aggregator")
 
 _INDEX_KEY = "tf:idx"
 
@@ -78,7 +81,7 @@ return n
 
 
 def _log(msg: str) -> None:
-    print(f"[traffic-aggregator] {msg}", flush=True)
+    logger.info(f"[traffic-aggregator] {msg}")
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -106,11 +109,15 @@ async def _update_edge(r: aioredis.Redis, gid: int, kph: float, weight: float, n
     # Atomic server-side fold — see _EWMA_LUA. Safe under concurrent writers.
     await r.eval(
         _EWMA_LUA,
-        2,                          # numkeys
-        key, _INDEX_KEY,            # KEYS
-        f"{alpha}", f"{kph}", f"{now:.0f}",
+        2,  # numkeys
+        key,
+        _INDEX_KEY,  # KEYS
+        f"{alpha}",
+        f"{kph}",
+        f"{now:.0f}",
         f"{TRAFFIC_EDGE_TTL * 2}",  # GC safety net; writer drives real expiry via zset
-        f"{TRAFFIC_MIN_SAMPLES}", str(gid),
+        f"{TRAFFIC_MIN_SAMPLES}",
+        str(gid),
     )
 
 
@@ -177,7 +184,7 @@ def _edge_speeds_from_match(points: list[dict], match: dict) -> dict[int, float]
     # Fallback: distance/time over the whole trace, assigned to all matched edges.
     dist = 0.0
     dt = 0.0
-    for a, b in zip(points, points[1:]):
+    for a, b in zip(points, points[1:], strict=False):
         dist += _haversine_m(a["lat"], a["lon"], b["lat"], b["lon"])
         if a.get("ts") is not None and b.get("ts") is not None:
             dt += max(0.0, float(b["ts"]) - float(a["ts"]))
@@ -234,7 +241,7 @@ async def _probe_consumer(r: aioredis.Redis, client: httpx.AsyncClient):
     while True:
         try:
             msgs = await state["sub"].fetch(batch=100, timeout=5)
-        except (nats.errors.TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, nats.errors.TimeoutError):
             # nats-py's fetch() raises a BARE asyncio.TimeoutError (str == '')
             # from its internal wait_for on some no-message paths, not only the
             # nats-specific TimeoutError. Both just mean "no probes this window".
@@ -243,7 +250,9 @@ async def _probe_consumer(r: aioredis.Redis, client: httpx.AsyncClient):
             _log(f"fetch error: {type(e).__name__}: {e}")
             if is_connection_error(e):
                 try:
-                    state["nc"], state["js"] = await reconnect(state["nc"], state["js"], TRAFFIC_STREAM_CFG)
+                    state["nc"], state["js"] = await reconnect(
+                        state["nc"], state["js"], TRAFFIC_STREAM_CFG
+                    )
                     state["sub"] = await subscribe_traffic(state["js"], "traffic-aggregator")
                     _log("reconnected / resubscribed")
                 except Exception as re:
@@ -284,14 +293,16 @@ async def _provider_poller(r: aioredis.Redis, client: httpx.AsyncClient):
                 now = time.time()
                 updated = 0
                 if located:
-                    for o, res in zip(obs, located):
+                    for o, res in zip(obs, located, strict=False):
                         edges = (res.get("edges") if isinstance(res, dict) else None) or []
                         if not edges:
                             continue
                         gid = edges[0].get("edge_id", {}).get("value")
                         if gid is None:
                             continue
-                        await _update_edge(r, int(gid), o["kph"], weight=TRAFFIC_PROVIDER_WEIGHT, now=now)
+                        await _update_edge(
+                            r, int(gid), o["kph"], weight=TRAFFIC_PROVIDER_WEIGHT, now=now
+                        )
                         updated += 1
                 _log(f"provider '{provider.name}': {len(obs)} samples -> {updated} edges")
         except Exception as e:
@@ -300,7 +311,9 @@ async def _provider_poller(r: aioredis.Redis, client: httpx.AsyncClient):
 
 
 async def run():
-    _log(f"Starting. valhalla={VALHALLA_URL} min_samples={TRAFFIC_MIN_SAMPLES} ewma_alpha={TRAFFIC_EWMA_ALPHA}")
+    _log(
+        f"Starting. valhalla={VALHALLA_URL} min_samples={TRAFFIC_MIN_SAMPLES} ewma_alpha={TRAFFIC_EWMA_ALPHA}"
+    )
     r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     # One shared HTTP client; generous timeout because map-matching long traces
     # is the slow path.

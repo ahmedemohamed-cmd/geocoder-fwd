@@ -10,6 +10,7 @@ our tenant model.
 If no service token is configured the client is a no-op, so dev mode and tests
 are unaffected.
 """
+
 from __future__ import annotations
 
 import base64
@@ -28,15 +29,18 @@ def enabled() -> bool:
 
 
 def _client() -> httpx.AsyncClient:
-    headers = {"Authorization": f"Bearer {config.ZITADEL_SERVICE_TOKEN}",
-               "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {config.ZITADEL_SERVICE_TOKEN}",
+        "Content-Type": "application/json",
+    }
     if config.ZITADEL_HOST_HEADER:
         headers["Host"] = config.ZITADEL_HOST_HEADER
     return httpx.AsyncClient(base_url=config.ZITADEL_API_URL, headers=headers, timeout=30)
 
 
-async def provision_tenant_user(*, email: str, password: str, tenant_id: str,
-                                display_name: str) -> str | None:
+async def provision_tenant_user(
+    *, email: str, password: str, tenant_id: str, display_name: str
+) -> str | None:
     """Create the tenant's user in Zitadel, grant the role, set tenant metadata.
     Returns the Zitadel user id (or None if the client is disabled)."""
     if not enabled():
@@ -48,13 +52,16 @@ async def provision_tenant_user(*, email: str, password: str, tenant_id: str,
         # verification step) to an unverified email, so "active + no email step"
         # requires isEmailVerified=true — the two cannot both hold. We honour the
         # primary requirement (no email step) here.
-        r = await c.post("/management/v1/users/human/_import", json={
-            "userName": email,
-            "profile": {"firstName": first or email, "lastName": last or "user"},
-            "email": {"email": email, "isEmailVerified": True},
-            "password": password,
-            "passwordChangeRequired": False,
-        })
+        r = await c.post(
+            "/management/v1/users/human/_import",
+            json={
+                "userName": email,
+                "profile": {"firstName": first or email, "lastName": last or "user"},
+                "email": {"email": email, "isEmailVerified": True},
+                "password": password,
+                "passwordChangeRequired": False,
+            },
+        )
         if r.status_code < 300:
             user_id = r.json().get("userId") or r.json().get("id")
         elif r.status_code == 409 or "already exist" in r.text.lower():
@@ -65,28 +72,40 @@ async def provision_tenant_user(*, email: str, password: str, tenant_id: str,
             user_id = await _find_user_id(c, email)
             if not user_id:
                 raise ZitadelError(f"create user failed: {r.status_code} {r.text[:300]}")
-            pr = await c.post(f"/v2/users/{user_id}/password", json={
-                "newPassword": {"password": password, "changeRequired": False}})
+            pr = await c.post(
+                f"/v2/users/{user_id}/password",
+                json={"newPassword": {"password": password, "changeRequired": False}},
+            )
             if pr.status_code >= 300:
                 raise ZitadelError(
-                    f"adopting existing user failed: {pr.status_code} {pr.text[:200]}")
+                    f"adopting existing user failed: {pr.status_code} {pr.text[:200]}"
+                )
         else:
             raise ZitadelError(f"create user failed: {r.status_code} {r.text[:300]}")
 
         meta_val = base64.b64encode(tenant_id.encode()).decode()
-        await c.post(f"/management/v1/users/{user_id}/metadata/"
-                     f"{config.ZITADEL_TENANT_METADATA_KEY}", json={"value": meta_val})
+        await c.post(
+            f"/management/v1/users/{user_id}/metadata/{config.ZITADEL_TENANT_METADATA_KEY}",
+            json={"value": meta_val},
+        )
 
         if config.ZITADEL_PROJECT_ID:
-            await c.post(f"/management/v1/users/{user_id}/grants", json={
-                "projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_TENANT]})
+            await c.post(
+                f"/management/v1/users/{user_id}/grants",
+                json={"projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_TENANT]},
+            )
         return user_id
 
 
 async def _find_user_id(c: httpx.AsyncClient, email: str) -> str | None:
-    found = await c.post("/management/v1/users/_search", json={
-        "queries": [{"userNameQuery": {"userName": email,
-                     "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+    found = await c.post(
+        "/management/v1/users/_search",
+        json={
+            "queries": [
+                {"userNameQuery": {"userName": email, "method": "TEXT_QUERY_METHOD_EQUALS"}}
+            ]
+        },
+    )
     result = (found.json().get("result") or []) if found.status_code < 300 else []
     return result[0]["id"] if result else None
 
@@ -125,18 +144,24 @@ async def provision_admin_user(*, email: str, password: str, display_name: str) 
         return None
     first, _, last = display_name.partition(" ")
     async with _client() as c:
-        r = await c.post("/management/v1/users/human/_import", json={
-            "userName": email,
-            "profile": {"firstName": first or email, "lastName": last or "admin"},
-            "email": {"email": email, "isEmailVerified": True},
-            "password": password, "passwordChangeRequired": False,
-        })
+        r = await c.post(
+            "/management/v1/users/human/_import",
+            json={
+                "userName": email,
+                "profile": {"firstName": first or email, "lastName": last or "admin"},
+                "email": {"email": email, "isEmailVerified": True},
+                "password": password,
+                "passwordChangeRequired": False,
+            },
+        )
         if r.status_code >= 300:
             raise ZitadelError(f"create admin failed: {r.status_code} {r.text[:300]}")
         user_id = r.json().get("userId") or r.json().get("id")
         if config.ZITADEL_PROJECT_ID:
-            await c.post(f"/management/v1/users/{user_id}/grants", json={
-                "projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_ADMIN]})
+            await c.post(
+                f"/management/v1/users/{user_id}/grants",
+                json={"projectId": config.ZITADEL_PROJECT_ID, "roleKeys": [config.ROLE_ADMIN]},
+            )
         return user_id
 
 
@@ -145,15 +170,22 @@ async def set_user_password(*, email: str, password: str) -> bool:
     if not enabled():
         return False
     async with _client() as c:
-        found = await c.post("/management/v1/users/_search", json={
-            "queries": [{"userNameQuery": {"userName": email,
-                         "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+        found = await c.post(
+            "/management/v1/users/_search",
+            json={
+                "queries": [
+                    {"userNameQuery": {"userName": email, "method": "TEXT_QUERY_METHOD_EQUALS"}}
+                ]
+            },
+        )
         result = (found.json().get("result") or []) if found.status_code < 300 else []
         if not result:
             raise ZitadelError(f"user {email!r} not found in the IdP")
         uid = result[0]["id"]
-        r = await c.post(f"/v2/users/{uid}/password", json={
-            "newPassword": {"password": password, "changeRequired": False}})
+        r = await c.post(
+            f"/v2/users/{uid}/password",
+            json={"newPassword": {"password": password, "changeRequired": False}},
+        )
         if r.status_code >= 300:
             raise ZitadelError(f"set password failed: {r.status_code} {r.text[:200]}")
         return True

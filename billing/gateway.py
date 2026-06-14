@@ -13,6 +13,7 @@ Per request:
   4. meter              → INCR per-key counter + push durable usage event
   5. proxy              → forward to the upstream geocoder, return its response
 """
+
 from __future__ import annotations
 
 import httpx
@@ -20,8 +21,14 @@ from fastapi import FastAPI, Request, Response
 
 from . import config, repo, security, usage
 
-_HOP_BY_HOP = {"content-length", "transfer-encoding", "content-encoding",
-               "connection", "keep-alive", "host"}
+_HOP_BY_HOP = {
+    "content-length",
+    "transfer-encoding",
+    "content-encoding",
+    "connection",
+    "keep-alive",
+    "host",
+}
 
 
 def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = None) -> FastAPI:
@@ -34,8 +41,9 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
     async def healthz():
         return {"status": "ok"}
 
-    @app.api_route("/{path:path}",
-                   methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+    @app.api_route(
+        "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+    )
     async def proxy(path: str, request: Request):
         pool, redis = app.state.pool, app.state.redis
         if app.state.http_client is None:  # lazy init when run without a lifespan
@@ -83,8 +91,14 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
             await usage.decr_tenant(redis, info["tenant_id"], period)
             return resp
         await usage.incr_key(redis, info["key_id"], period)
-        await usage.push_event(redis, tenant_id=info["tenant_id"], key_id=info["key_id"],
-                               endpoint=endpoint, period=period, day=day)
+        await usage.push_event(
+            redis,
+            tenant_id=info["tenant_id"],
+            key_id=info["key_id"],
+            endpoint=endpoint,
+            period=period,
+            day=day,
+        )
         return resp
 
     return app
@@ -97,13 +111,20 @@ async def _resolve_key(pool, redis, key_hash: str) -> dict | None:
     info = await repo.get_key_by_hash(pool, key_hash)
     if info is None:
         return None
-    plan = await repo.tenant_with_plan(pool, info["tenant_id"]) if \
-        info["tenant_status"] != "deleted" else {}
+    plan = (
+        await repo.tenant_with_plan(pool, info["tenant_id"])
+        if info["tenant_status"] != "deleted"
+        else {}
+    )
     payload = {
-        "key_id": info["key_id"], "tenant_id": info["tenant_id"],
-        "key_status": info["key_status"], "tenant_status": info["tenant_status"],
-        "scopes": info["scopes"], "quota": int(plan.get("monthly_quota") or 0),
-        "hard_cap": bool(plan.get("hard_cap")), "plan_id": plan.get("plan_id"),
+        "key_id": info["key_id"],
+        "tenant_id": info["tenant_id"],
+        "key_status": info["key_status"],
+        "tenant_status": info["tenant_status"],
+        "scopes": info["scopes"],
+        "quota": int(plan.get("monthly_quota") or 0),
+        "hard_cap": bool(plan.get("hard_cap")),
+        "plan_id": plan.get("plan_id"),
     }
     await usage.cache_key(redis, key_hash, payload)
     return payload
@@ -111,22 +132,32 @@ async def _resolve_key(pool, redis, key_hash: str) -> dict | None:
 
 async def _forward(client: httpx.AsyncClient, request: Request, path: str) -> Response:
     body = await request.body()
-    fwd_headers = {k: v for k, v in request.headers.items()
-                   if k.lower() not in _HOP_BY_HOP
-                   and k.lower() != config.GATEWAY_API_KEY_HEADER.lower()}
+    fwd_headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in _HOP_BY_HOP and k.lower() != config.GATEWAY_API_KEY_HEADER.lower()
+    }
     try:
         upstream = await client.request(
-            request.method, "/" + path, params=request.query_params,
-            content=body, headers=fwd_headers)
+            request.method,
+            "/" + path,
+            params=request.query_params,
+            content=body,
+            headers=fwd_headers,
+        )
     except httpx.HTTPError as exc:
         return _err(502, f"upstream error: {exc}")
-    resp_headers = {k: v for k, v in upstream.headers.items()
-                    if k.lower() not in _HOP_BY_HOP}
-    return Response(content=upstream.content, status_code=upstream.status_code,
-                    headers=resp_headers)
+    resp_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_BY_HOP}
+    return Response(
+        content=upstream.content, status_code=upstream.status_code, headers=resp_headers
+    )
 
 
 def _err(status_code: int, detail: str) -> Response:
     import json
-    return Response(content=json.dumps({"error": detail}), status_code=status_code,
-                    media_type="application/json")
+
+    return Response(
+        content=json.dumps({"error": detail}),
+        status_code=status_code,
+        media_type="application/json",
+    )

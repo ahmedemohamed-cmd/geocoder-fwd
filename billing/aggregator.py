@@ -4,6 +4,7 @@ rollups on a loop. Runs as its own service so it's independent of the data plane
 
     python -m billing.aggregator
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,10 +31,13 @@ async def reproject_quotas_for_new_period(pool) -> bool:
                 await apisix_admin.ensure_consumer_group(
                     str(spec["tenant_id"]),
                     quota=int(spec.get("monthly_quota") or 0),
-                    hard_cap=bool(spec.get("hard_cap")), period=period)
+                    hard_cap=bool(spec.get("hard_cap")),
+                    period=period,
+                )
             except Exception as e:  # noqa: BLE001 - reconciler heals drift later
-                _log.warning("quota reprojection for tenant %s failed: %s",
-                             spec.get("tenant_id"), e)
+                _log.warning(
+                    "quota reprojection for tenant %s failed: %s", spec.get("tenant_id"), e
+                )
     _last_quota_period = period
     return True
 

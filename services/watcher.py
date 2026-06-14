@@ -6,17 +6,19 @@ import json
 import math
 import os
 import queue
-import sys
 import threading
 import time
 
 import osmium
 import redis
 
-from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
 from shared import nats_client
-from shared.processed import load_processed, is_processed, record_processed
+from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
+from shared.logging import get_logger
+from shared.processed import is_processed, load_processed, record_processed
 from shared.valhalla import link_pbf_for_valhalla
+
+logger = get_logger("watcher")
 
 SENTINEL = object()
 BATCH_PUBLISH = 50  # Reduced from 100 to reduce load on NATS stream
@@ -33,6 +35,7 @@ _NATS_TARGET_BYTES = 30 * 1024 * 1024
 # Geometry simplification helpers (no external dependencies)
 # Used only for very large relation geometries that approach the NATS limit.
 # ---------------------------------------------------------------------------
+
 
 def _round_coords(obj, decimals: int):
     """Recursively round every float in a GeoJSON coordinates tree."""
@@ -81,7 +84,7 @@ def _simplify_geom(geom: dict, osm_id: str) -> dict | None:
     Returns the simplified geometry, or None if the target cannot be met
     (caller will then skip the element and log a warning).
     """
-    TARGET = _NATS_TARGET_BYTES - 512   # 512 B headroom for the rest of the message
+    TARGET = _NATS_TARGET_BYTES - 512  # 512 B headroom for the rest of the message
     gtype = geom.get("type", "")
     coords = geom.get("coordinates")
     if not coords:
@@ -98,24 +101,23 @@ def _simplify_geom(geom: dict, osm_id: str) -> dict | None:
         candidate = {"type": gtype, "coordinates": coords}
         sz = len(json.dumps(candidate).encode())
         if sz <= TARGET:
-            print(
+            logger.info(
                 f"[watcher] {osm_id}: geometry simplified to {sz / 1_048_576:.1f} MB "
                 f"(3 dp, stride {stride})",
-                flush=True,
             )
             return candidate
 
     final_sz = len(json.dumps({"type": gtype, "coordinates": coords}).encode())
-    print(
+    logger.warning(
         f"[watcher] {osm_id}: geometry still {final_sz / 1_048_576:.1f} MB after "
         f"maximum simplification — element will be skipped",
-        flush=True,
     )
     return None
 
 
 class ProgressTracker:
     """Simple progress tracker that logs updates at regular intervals."""
+
     def __init__(self, description: str, total: int = None, log_interval: int = 5):
         self.description = description
         self.total = total
@@ -138,16 +140,18 @@ class ProgressTracker:
         if self.total and self.total > 0:
             percentage = (self.count / self.total) * 100
             rate = self.count / elapsed if elapsed > 0 else 0
-            print(f"[{self.description}] {self.count}/{self.total} ({percentage:.1f}%) - {rate:.1f} items/sec")
+            logger.info(
+                f"[{self.description}] {self.count}/{self.total} ({percentage:.1f}%) - {rate:.1f} items/sec"
+            )
         else:
             rate = self.count / elapsed if elapsed > 0 else 0
-            print(f"[{self.description}] {self.count} items processed - {rate:.1f} items/sec")
+            logger.info(f"[{self.description}] {self.count} items processed - {rate:.1f} items/sec")
 
     def close(self):
         """Final log when done."""
         self._log_progress()
         elapsed = time.time() - self.start_time
-        print(f"[{self.description}] Completed in {elapsed:.1f} seconds")
+        logger.info(f"[{self.description}] Completed in {elapsed:.1f} seconds")
 
 
 def _safe_admin_level(tags: dict) -> int | None:
@@ -168,26 +172,45 @@ def _has_identifiable_tags(tags: dict) -> bool:
 
     # Check for name tags (any language, anywhere in key)
     for key in tags:
-        if 'name' in key:
+        if "name" in key:
             return True
 
     # Check for address tags
-    address_tags = ['addr:housenumber', 'addr:street', 'addr:postcode',
-                    'addr:housename']
+    address_tags = ["addr:housenumber", "addr:street", "addr:postcode", "addr:housename"]
     for tag in address_tags:
         if tag in tags:
             return True
 
     # Check for reference tags
-    ref_tags = ['ref', 'ref:1', 'ref:2', 'local_ref', 'nat_ref', 'int_ref',
-                'iata', 'icao', 'pcode', 'phone', 'website', 'email']
+    ref_tags = [
+        "ref",
+        "ref:1",
+        "ref:2",
+        "local_ref",
+        "nat_ref",
+        "int_ref",
+        "iata",
+        "icao",
+        "pcode",
+        "phone",
+        "website",
+        "email",
+    ]
     for tag in ref_tags:
         if tag in tags:
             return True
 
     # Check for other identifiable tags
-    identifiable_tags = ['operator', 'brand', 'brand:wikidata', 'operator:wikidata',
-                        'wikipedia', 'wikidata', 'description', 'note']
+    identifiable_tags = [
+        "operator",
+        "brand",
+        "brand:wikidata",
+        "operator:wikidata",
+        "wikipedia",
+        "wikidata",
+        "description",
+        "note",
+    ]
     for tag in identifiable_tags:
         if tag in tags:
             return True
@@ -312,7 +335,7 @@ def _assemble_multipolygon(
             coords = way_coords[member.ref]
             if member.role == "inner":
                 inner_ways.append(coords)
-            else:                       # "outer" or "" (default to outer)
+            else:  # "outer" or "" (default to outer)
                 outer_ways.append(coords)
 
     if not outer_ways:
@@ -348,8 +371,13 @@ def _assemble_multipolygon(
 # OSM PBF handler – pushes parsed elements into a thread-safe queue
 # ---------------------------------------------------------------------------
 class OSMHandler(osmium.SimpleHandler):
-    def __init__(self, q: queue.Queue, redis_client, progress_tracker=None,
-                 relation_way_ids: set[int] | None = None):
+    def __init__(
+        self,
+        q: queue.Queue,
+        redis_client,
+        progress_tracker=None,
+        relation_way_ids: set[int] | None = None,
+    ):
         super().__init__()
         self.q = q
         self.count = 0
@@ -374,7 +402,7 @@ class OSMHandler(osmium.SimpleHandler):
             value = json.dumps({"lon": lon, "lat": lat})
             self.redis.set(key, value)
         except Exception as e:
-            print(f"[watcher] Error caching node {node_id} in Redis: {e}")
+            logger.error(f"[watcher] Error caching node {node_id} in Redis: {e}")
 
     def _get_node_location(self, node_id: int) -> tuple[float, float] | None:
         """Get node location from Redis."""
@@ -385,14 +413,14 @@ class OSMHandler(osmium.SimpleHandler):
                 data = json.loads(value)
                 return data["lon"], data["lat"]
         except Exception as e:
-            print(f"[watcher] Error getting node {node_id} from Redis: {e}")
+            logger.error(f"[watcher] Error getting node {node_id} from Redis: {e}")
         return None
 
     def node(self, n):
         if self.node_count == 0:
-            print(f"[watcher] First node encountered: {n.id}")
+            logger.info(f"[watcher] First node encountered: {n.id}")
         if self.node_count > 0 and self.node_count % 100000 == 0:
-            print(f"[watcher] Processed {self.node_count} nodes...")
+            logger.info(f"[watcher] Processed {self.node_count} nodes...")
 
         if not n.location.valid():
             return
@@ -428,7 +456,7 @@ class OSMHandler(osmium.SimpleHandler):
     def way(self, w):
         try:
             if self.way_count == 0:
-                print(f"[watcher] First way encountered: {w.id}")
+                logger.info(f"[watcher] First way encountered: {w.id}")
 
             # --- Extract coordinates first (needed for relation-member caching) ---
             coords: list[tuple[float, float]] = []
@@ -458,11 +486,13 @@ class OSMHandler(osmium.SimpleHandler):
 
             if len(coords) < 2:
                 if self.way_count < 10:
-                    print(f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})")
+                    logger.warning(
+                        f"[watcher] Way {w.id}: Skipped (not enough coordinates: {len(coords)})"
+                    )
                 self.skipped_way_count += 1
                 return
         except Exception as e:
-            print(f"[watcher] Error processing way {w.id}: {e}")
+            logger.error(f"[watcher] Error processing way {w.id}: {e}")
             return
 
         closed = len(coords) >= 4 and coords[0] == coords[-1]
@@ -485,19 +515,19 @@ class OSMHandler(osmium.SimpleHandler):
         self.count += 1
         self.way_count += 1
         if self.way_count <= 5:
-            print(f"[watcher] Way {w.id}: Added to queue (total ways: {self.way_count})")
+            logger.info(f"[watcher] Way {w.id}: Added to queue (total ways: {self.way_count})")
         if self.progress_tracker is not None:
             self.progress_tracker.update(1)
 
     def relation(self, r):
         if self.relation_count == 0:
-            print(f"[watcher] First relation encountered: {r.id}")
+            logger.info(f"[watcher] First relation encountered: {r.id}")
         tags = dict(r.tags) if r.tags else {}
 
         rel_type = tags.get("type", "")
         if rel_type not in ("multipolygon", "boundary"):
             if self.relation_count < 10:
-                print(f"[watcher] Relation {r.id}: Skipped (type={rel_type})")
+                logger.info(f"[watcher] Relation {r.id}: Skipped (type={rel_type})")
             self.skipped_relation_count += 1
             return
 
@@ -505,7 +535,7 @@ class OSMHandler(osmium.SimpleHandler):
         try:
             geom, area = _assemble_multipolygon(r.members, self.way_coords)
         except Exception as e:
-            print(f"[watcher] Relation {r.id}: Error assembling geometry: {e}")
+            logger.error(f"[watcher] Relation {r.id}: Error assembling geometry: {e}")
             geom, area = None, 0.0
 
         # Fallback: if full polygon assembly failed, compute a centroid from
@@ -524,7 +554,7 @@ class OSMHandler(osmium.SimpleHandler):
                 area = 0.0
             else:
                 if self.relation_count < 10:
-                    print(f"[watcher] Relation {r.id}: No way coords available, skipping")
+                    logger.warning(f"[watcher] Relation {r.id}: No way coords available, skipping")
                 self.skipped_relation_count += 1
                 return
 
@@ -541,7 +571,9 @@ class OSMHandler(osmium.SimpleHandler):
         self.count += 1
         self.relation_count += 1
         if self.relation_count <= 5:
-            print(f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})")
+            logger.info(
+                f"[watcher] Relation {r.id}: Added to queue (total relations: {self.relation_count})"
+            )
         if self.progress_tracker is not None:
             self.progress_tracker.update(1)
 
@@ -551,14 +583,15 @@ class OSMHandler(osmium.SimpleHandler):
 # ---------------------------------------------------------------------------
 async def publish_file(filepath: str):
     nc, js = await nats_client.connect()
-    
+
     # Ensure stream exists before publishing
     try:
         await js.stream_info(nats_client.NATS_STREAM)
-        print(f"[watcher] Stream {nats_client.NATS_STREAM} already exists")
+        logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} already exists")
     except Exception:
-        print(f"[watcher] Stream {nats_client.NATS_STREAM} does not exist, creating it...")
-        from nats.js.api import StreamConfig, RetentionPolicy
+        logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} does not exist, creating it...")
+        from nats.js.api import RetentionPolicy, StreamConfig
+
         try:
             await js.add_stream(
                 StreamConfig(
@@ -572,12 +605,12 @@ async def publish_file(filepath: str):
                     discard="old",  # Discard old messages when limits are reached
                 )
             )
-            print(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
+            logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
         except Exception as e:
-            print(f"[watcher] Failed to create stream {nats_client.NATS_STREAM}: {e}")
+            logger.error(f"[watcher] Failed to create stream {nats_client.NATS_STREAM}: {e}")
             # Try to delete and recreate if it exists in a bad state
             try:
-                print(f"[watcher] Attempting to delete and recreate stream...")
+                logger.info("[watcher] Attempting to delete and recreate stream...")
                 await js.delete_stream(nats_client.NATS_STREAM)
                 await js.add_stream(
                     StreamConfig(
@@ -591,50 +624,56 @@ async def publish_file(filepath: str):
                         discard="old",
                     )
                 )
-                print(f"[watcher] Stream {nats_client.NATS_STREAM} recreated successfully")
+                logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} recreated successfully")
             except Exception as e2:
-                print(f"[watcher] Failed to recreate stream: {e2}")
+                logger.error(f"[watcher] Failed to recreate stream: {e2}")
                 raise
-    
+
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
     # Initialize Redis client
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     try:
         redis_client.ping()
-        print(f"[watcher] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+        logger.info(f"[watcher] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
     except Exception as e:
-        print(f"[watcher] Warning: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}: {e}")
-        print(f"[watcher] Continuing without Redis caching")
+        logger.warning(
+            f"[watcher] Warning: Could not connect to Redis at {REDIS_HOST}:{REDIS_PORT}: {e}"
+        )
+        logger.info("[watcher] Continuing without Redis caching")
 
     # ------------------------------------------------------------------
     # PASS 1 — lightweight scan of relations to collect member way IDs
     # ------------------------------------------------------------------
-    print(f"[watcher] Pass 1: scanning relations in {os.path.basename(filepath)} ...")
+    logger.info(f"[watcher] Pass 1: scanning relations in {os.path.basename(filepath)} ...")
     collector = RelationMemberCollector()
     collector.apply_file(filepath)
     relation_way_ids = collector.way_ids
-    print(f"[watcher] Pass 1 complete: {collector.relation_count} boundary/multipolygon "
-          f"relations reference {len(relation_way_ids)} unique ways")
+    logger.info(
+        f"[watcher] Pass 1 complete: {collector.relation_count} boundary/multipolygon "
+        f"relations reference {len(relation_way_ids)} unique ways"
+    )
 
     # ------------------------------------------------------------------
     # PASS 2 — full parse (nodes + ways + relations) with location index
     # ------------------------------------------------------------------
     parse_progress = ProgressTracker(f"Parsing {os.path.basename(filepath)}")
 
-    handler = OSMHandler(q, redis_client, progress_tracker=parse_progress,
-                         relation_way_ids=relation_way_ids)
+    handler = OSMHandler(
+        q, redis_client, progress_tracker=parse_progress, relation_way_ids=relation_way_ids
+    )
 
-    parse_error: list[Exception] = []   # mutable container shared with thread
+    parse_error: list[Exception] = []  # mutable container shared with thread
 
     def _parse():
         try:
-            print(f"[watcher] Pass 2: parsing {filepath} ...")
+            logger.info(f"[watcher] Pass 2: parsing {filepath} ...")
             handler.apply_file(filepath, locations=True, idx="flex_mem")
-            print(f"[watcher] Pass 2 complete for {filepath}")
+            logger.info(f"[watcher] Pass 2 complete for {filepath}")
         except Exception as e:
-            print(f"[watcher] Error during parsing: {e}")
+            logger.error(f"[watcher] Error during parsing: {e}")
             import traceback
+
             traceback.print_exc()
             parse_error.append(e)
         finally:
@@ -646,7 +685,7 @@ async def publish_file(filepath: str):
 
     thread = threading.Thread(target=_parse, daemon=True)
     thread.start()
-    print(f"[watcher] Parsing {os.path.basename(filepath)} ...")
+    logger.info(f"[watcher] Parsing {os.path.basename(filepath)} ...")
 
     published = 0
     total_elements = None
@@ -661,7 +700,7 @@ async def publish_file(filepath: str):
             try:
                 item = q.get(timeout=0.5)
                 if item is SENTINEL:
-                    print(f"[watcher] Received SENTINEL, exiting loop")
+                    logger.info("[watcher] Received SENTINEL, exiting loop")
                     break
                 batch.append(item)
                 # drain up to BATCH_PUBLISH
@@ -694,13 +733,13 @@ async def publish_file(filepath: str):
                 # For the vast majority of elements this is just json.dumps.
                 # Only large relation geometries that approach the 64 MB server
                 # ceiling trigger _simplify_geom.
-                messages: list[tuple[bytes, str]] = []   # (payload, osm_id)
+                messages: list[tuple[bytes, str]] = []  # (payload, osm_id)
                 for elem in batch:
                     raw = json.dumps(elem).encode()
                     if len(raw) > _NATS_TARGET_BYTES and elem.get("geom"):
                         simplified = _simplify_geom(elem["geom"], elem.get("osm_id", "?"))
                         if simplified is None:
-                            continue   # too large even after max reduction — skip
+                            continue  # too large even after max reduction — skip
                         raw = json.dumps({**elem, "geom": simplified}).encode()
                     messages.append((raw, elem.get("osm_id", "?")))
 
@@ -718,14 +757,20 @@ async def publish_file(filepath: str):
                                 break  # Success, move to next message
                             else:
                                 consecutive_failures += 1
-                                print(f"[watcher] No ack received for element (attempt {attempt + 1}/{max_retries})", flush=True)
+                                logger.info(
+                                    f"[watcher] No ack received for element (attempt {attempt + 1}/{max_retries})",
+                                )
                                 if consecutive_failures >= max_consecutive_failures:
-                                    print(f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up", flush=True)
+                                    logger.error(
+                                        f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up",
+                                    )
                                     raise Exception("Too many consecutive NATS failures")
                                 if attempt < max_retries - 1:
                                     await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                                 else:
-                                    print(f"[watcher] Failed to publish element after {max_retries} attempts", flush=True)
+                                    logger.error(
+                                        f"[watcher] Failed to publish element after {max_retries} attempts",
+                                    )
                         except Exception as e:
                             err_str = str(e).lower()
                             # Payload-too-large is permanent — skip immediately.
@@ -733,33 +778,39 @@ async def publish_file(filepath: str):
                                 "maximum payload" in err_str
                                 or "payload exceeded" in err_str
                                 or "message size exceeds" in err_str
-                                or "to large" in err_str    # NATS typo in 10077
+                                or "to large" in err_str  # NATS typo in 10077
                                 or "too large" in err_str
                                 or "10054" in err_str
                                 or "10077" in err_str
                             ):
-                                print(
+                                logger.warning(
                                     f"[watcher] {osm_id}: payload too large "
                                     f"({len(msg):,} bytes) — skipping",
-                                    flush=True,
                                 )
                                 break
                             consecutive_failures += 1
-                            print(f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                            logger.error(
+                                f"[watcher] Error publishing element (attempt {attempt + 1}/{max_retries}): {e}",
+                            )
                             if consecutive_failures >= max_consecutive_failures:
-                                print(f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up", flush=True)
+                                logger.error(
+                                    f"[watcher] Too many consecutive failures ({consecutive_failures}), giving up",
+                                )
                                 raise
                             if attempt < max_retries - 1:
                                 await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                             else:
-                                print(f"[watcher] Failed to publish element after {max_retries} attempts: {e}", flush=True)
+                                logger.error(
+                                    f"[watcher] Failed to publish element after {max_retries} attempts: {e}",
+                                )
             except Exception as e:
-                print(f"[watcher] Error in batch publishing: {e}", flush=True)
+                logger.error(f"[watcher] Error in batch publishing: {e}")
                 await asyncio.sleep(0.1)
 
     except Exception as e:
-        print(f"[watcher] Fatal error during publishing: {e}", flush=True)
+        logger.error(f"[watcher] Fatal error during publishing: {e}")
         import traceback
+
         traceback.print_exc()
         # Continue with cleanup even if publishing failed
 
@@ -775,7 +826,9 @@ async def publish_file(filepath: str):
             if len(msg) > _NATS_TARGET_BYTES and item.get("geom"):
                 simplified = _simplify_geom(item["geom"], item.get("osm_id", "?"))
                 if simplified is None:
-                    print(f"[watcher] Flush: {item.get('osm_id', '?')} too large after simplification — skipping", flush=True)
+                    logger.warning(
+                        f"[watcher] Flush: {item.get('osm_id', '?')} too large after simplification — skipping",
+                    )
                     continue
                 msg = json.dumps({**item, "geom": simplified}).encode()
             max_retries = 300
@@ -790,14 +843,20 @@ async def publish_file(filepath: str):
                         break  # Success, move to next item
                     else:
                         consecutive_failures += 1
-                        print(f"[watcher] No ack received during flush (attempt {attempt + 1}/{max_retries})", flush=True)
+                        logger.info(
+                            f"[watcher] No ack received during flush (attempt {attempt + 1}/{max_retries})",
+                        )
                         if consecutive_failures >= max_consecutive_failures:
-                            print(f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items", flush=True)
+                            logger.error(
+                                f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items",
+                            )
                             break  # Skip remaining items in flush
                         if attempt < max_retries - 1:
                             await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                         else:
-                            print(f"[watcher] Failed to publish element during flush after {max_retries} attempts", flush=True)
+                            logger.error(
+                                f"[watcher] Failed to publish element during flush after {max_retries} attempts",
+                            )
                 except Exception as e:
                     err_str = str(e).lower()
                     # Payload-too-large is permanent — skip immediately.
@@ -810,20 +869,28 @@ async def publish_file(filepath: str):
                         or "10054" in err_str
                         or "10077" in err_str
                     ):
-                        print(f"[watcher] Flush: payload too large — skipping", flush=True)
+                        logger.warning("[watcher] Flush: payload too large — skipping")
                         break
                     consecutive_failures += 1
-                    print(f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+                    logger.error(
+                        f"[watcher] Error publishing element during flush (attempt {attempt + 1}/{max_retries}): {e}",
+                    )
                     if consecutive_failures >= max_consecutive_failures:
-                        print(f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items", flush=True)
+                        logger.error(
+                            f"[watcher] Too many consecutive failures during flush ({consecutive_failures}), skipping remaining items",
+                        )
                         break  # Skip remaining items in flush
                     if attempt < max_retries - 1:
                         await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
                     else:
-                        print(f"[watcher] Failed to publish element during flush after {max_retries} attempts: {e}", flush=True)
+                        logger.error(
+                            f"[watcher] Failed to publish element during flush after {max_retries} attempts: {e}",
+                        )
             # If we had too many consecutive failures, break out of flush loop
             if consecutive_failures >= max_consecutive_failures:
-                print(f"[watcher] Skipping remaining items in queue due to consecutive failures", flush=True)
+                logger.error(
+                    "[watcher] Skipping remaining items in queue due to consecutive failures",
+                )
                 break
         except queue.Empty:
             break
@@ -836,16 +903,22 @@ async def publish_file(filepath: str):
 
     skipped_ways = handler.skipped_way_count
     skipped_relations = handler.skipped_relation_count
-    print(f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})")
+    logger.info(
+        f"\n[watcher] {os.path.basename(filepath)}: parsed {handler.count} elements (nodes: {handler.node_count}, ways: {handler.way_count}, relations: {handler.relation_count})"
+    )
     if skipped_ways > 0:
-        print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_ways} ways (insufficient coordinates)")
+        logger.warning(
+            f"[watcher] {os.path.basename(filepath)}: skipped {skipped_ways} ways (insufficient coordinates)"
+        )
     if skipped_relations > 0:
-        print(f"[watcher] {os.path.basename(filepath)}: skipped {skipped_relations} relations (no geometry)")
-    print(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
-    
+        logger.warning(
+            f"[watcher] {os.path.basename(filepath)}: skipped {skipped_relations} relations (no geometry)"
+        )
+    logger.info(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
+
     # Clear Redis cache after processing to free up space
     try:
-        print(f"[watcher] Clearing Redis cache...")
+        logger.info("[watcher] Clearing Redis cache...")
         cursor = 0
         deleted = 0
         while True:
@@ -856,12 +929,12 @@ async def publish_file(filepath: str):
             if cursor == 0:
                 break
         if deleted > 0:
-            print(f"[watcher] Redis cache cleared ({deleted} keys)")
+            logger.info(f"[watcher] Redis cache cleared ({deleted} keys)")
         else:
-            print(f"[watcher] Redis cache was empty")
+            logger.info("[watcher] Redis cache was empty")
     except Exception as e:
-        print(f"[watcher] Error clearing Redis cache: {e}")
-    
+        logger.error(f"[watcher] Error clearing Redis cache: {e}")
+
     await nc.close()
 
     # Propagate parsing errors so the caller knows the file was NOT fully processed
@@ -886,22 +959,22 @@ async def _scan_and_process() -> int:
         try:
             link_pbf_for_valhalla(f, label="watcher")
         except OSError as e:
-            print(f"[watcher] Could not link {os.path.basename(f)} for Valhalla: {e}")
+            logger.warning(f"[watcher] Could not link {os.path.basename(f)} for Valhalla: {e}")
 
     pending = [f for f in existing_files if not is_processed(DATA_DIR, f, done)]
     if not pending:
         return 0
 
-    print(f"[watcher] Found {len(pending)} new PBF file(s) to process")
+    logger.info(f"[watcher] Found {len(pending)} new PBF file(s) to process")
     processed = 0
     for f in pending:
         try:
             await publish_file(f)
             record_processed(DATA_DIR, f, done)
-            print(f"[watcher] Completed {os.path.basename(f)}")
+            logger.info(f"[watcher] Completed {os.path.basename(f)}")
             processed += 1
         except Exception as e:
-            print(f"[watcher] Error processing {os.path.basename(f)}: {e}")
+            logger.error(f"[watcher] Error processing {os.path.basename(f)}: {e}")
             continue
     return processed
 
@@ -913,15 +986,17 @@ async def run():
     bind mount and host-side file drops don't reliably emit inotify events into
     the container.
     """
-    print("[watcher] Starting watcher service...")
+    logger.info("[watcher] Starting watcher service...")
     os.makedirs(DATA_DIR, exist_ok=True)
-    print(f"[watcher] Watching {DATA_DIR} for *.osm.pbf (re-scan every {WATCH_POLL_INTERVAL}s)")
+    logger.info(
+        f"[watcher] Watching {DATA_DIR} for *.osm.pbf (re-scan every {WATCH_POLL_INTERVAL}s)"
+    )
 
     first = True
     while True:
         n = await _scan_and_process()
         if first and n == 0:
-            print(f"[watcher] No new PBF files in {DATA_DIR} yet; will keep watching.")
+            logger.info(f"[watcher] No new PBF files in {DATA_DIR} yet; will keep watching.")
         first = False
         await asyncio.sleep(WATCH_POLL_INTERVAL)
 

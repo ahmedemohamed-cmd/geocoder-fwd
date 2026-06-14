@@ -4,6 +4,7 @@ Postgres: the real docker-compose instance, isolated ``billing_test`` database,
 tables reset per test. Redis: in-process fakeredis (async). Both apps are driven
 over httpx ASGITransport; the gateway proxies to an in-process echo upstream.
 """
+
 import os
 import sys
 
@@ -49,13 +50,13 @@ async def redis():
 
 # ── upstream echo (what the gateway proxies to) ──────────────────────────────
 async def _echo(request):
-    return JSONResponse({"upstream": True, "path": request.url.path,
-                         "method": request.method})
+    return JSONResponse({"upstream": True, "path": request.url.path, "method": request.method})
 
 
 def _upstream_app() -> Starlette:
-    return Starlette(routes=[Route("/{path:path}", _echo,
-                     methods=["GET", "POST", "PUT", "PATCH", "DELETE"])])
+    return Starlette(
+        routes=[Route("/{path:path}", _echo, methods=["GET", "POST", "PUT", "PATCH", "DELETE"])]
+    )
 
 
 @pytest_asyncio.fixture
@@ -69,7 +70,8 @@ async def cp_client(pool, redis):
 @pytest_asyncio.fixture
 async def gw_client(pool, redis):
     upstream = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=_upstream_app()), base_url="http://upstream")
+        transport=httpx.ASGITransport(app=_upstream_app()), base_url="http://upstream"
+    )
     app = gateway.build_app(pool=pool, redis=redis, http_client=upstream)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://gw") as c:
@@ -92,13 +94,26 @@ async def admin_token(client):
     return await login(client, config.BOOTSTRAP_ADMIN_EMAIL, config.BOOTSTRAP_ADMIN_PASSWORD)
 
 
-async def make_tenant(cp_client, *, name="Acme", plan_id="starter",
-                      admin_email="owner@acme.test", admin_password="password123"):
+async def make_tenant(
+    cp_client,
+    *,
+    name="Acme",
+    plan_id="starter",
+    admin_email="owner@acme.test",
+    admin_password="password123",
+):
     """Create a tenant as admin; return (tenant_dict, tenant_user_token)."""
     atok = await admin_token(cp_client)
-    r = await cp_client.post("/admin/tenants", headers=bearer(atok), json={
-        "name": name, "plan_id": plan_id,
-        "admin_email": admin_email, "admin_password": admin_password})
+    r = await cp_client.post(
+        "/admin/tenants",
+        headers=bearer(atok),
+        json={
+            "name": name,
+            "plan_id": plan_id,
+            "admin_email": admin_email,
+            "admin_password": admin_password,
+        },
+    )
     assert r.status_code == 201, r.text
     tenant = r.json()
     ttok = await login(cp_client, admin_email, admin_password)
@@ -114,11 +129,18 @@ async def insert_plan(pool, *, plan_id, quota, base_cents=0, overage=0.0, hard_c
                base_price_cents=EXCLUDED.base_price_cents,
                overage_cents_per_unit=EXCLUDED.overage_cents_per_unit,
                hard_cap=EXCLUDED.hard_cap""",
-        plan_id, plan_id.title(), quota, base_cents, overage, hard_cap)
+        plan_id,
+        plan_id.title(),
+        quota,
+        base_cents,
+        overage,
+        hard_cap,
+    )
 
 
 async def create_key(cp_client, ttok, *, name="k1", scopes=None):
-    r = await cp_client.post("/keys", headers=bearer(ttok),
-                             json={"name": name, "scopes": scopes or []})
+    r = await cp_client.post(
+        "/keys", headers=bearer(ttok), json={"name": name, "scopes": scopes or []}
+    )
     assert r.status_code == 201, r.text
     return r.json()
