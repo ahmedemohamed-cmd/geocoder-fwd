@@ -1,5 +1,6 @@
 """Unit tests for the APISIX integration pieces that don't need a live APISIX:
 key encryption round-trip, consumer-name mapping, and the usage sink endpoint."""
+
 from conftest import bearer, create_key, make_tenant
 
 from billing import apisix_admin, security, usage
@@ -21,8 +22,10 @@ def test_consumer_name_roundtrip():
 
 
 def test_group_id():
-    assert apisix_admin.group_id("11111111-2222-3333-4444-555555555555") == \
-        "tenant_11111111_2222_3333_4444_555555555555"
+    assert (
+        apisix_admin.group_id("11111111-2222-3333-4444-555555555555")
+        == "tenant_11111111_2222_3333_4444_555555555555"
+    )
 
 
 async def test_usage_sink_records_served_only(cp_client, pool, redis):
@@ -31,11 +34,14 @@ async def test_usage_sink_records_served_only(cp_client, pool, redis):
     consumer = apisix_admin.consumer_name(key["id"])
 
     # APISIX http-logger style batch: one served, one rejected (429)
-    r = await cp_client.post("/internal/usage", json=[
-        {"consumer": consumer, "uri": "/geocode", "status": 200},
-        {"consumer": consumer, "uri": "/geocode", "status": 429},
-        {"consumer": "k_unknown", "uri": "/geocode", "status": 200},
-    ])
+    r = await cp_client.post(
+        "/internal/usage",
+        json=[
+            {"consumer": consumer, "uri": "/geocode", "status": 200},
+            {"consumer": consumer, "uri": "/geocode", "status": 429},
+            {"consumer": "k_unknown", "uri": "/geocode", "status": 200},
+        ],
+    )
     assert r.status_code == 200
     assert r.json()["recorded"] == 1  # only the served, known-key request
 
@@ -50,6 +56,7 @@ async def test_usage_sink_records_served_only(cp_client, pool, redis):
 
 async def test_usage_sink_rejects_bad_token(cp_client, monkeypatch):
     from billing import config
+
     monkeypatch.setattr(config, "USAGE_SINK_SECRET", "s3cret")
     r = await cp_client.post("/internal/usage?token=wrong", json=[])
     assert r.status_code == 403

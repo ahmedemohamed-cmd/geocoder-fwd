@@ -11,9 +11,10 @@ that state into APISIX (the data plane):
 
 All functions are no-ops unless APISIX is configured, so dev/tests are unaffected.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -22,7 +23,7 @@ from . import config
 
 def current_period() -> str:
     """Current billing period 'YYYY-MM' in UTC (matches usage.now_parts)."""
-    return datetime.now(timezone.utc).strftime("%Y-%m")
+    return datetime.now(UTC).strftime("%Y-%m")
 
 
 def enabled() -> bool:
@@ -46,7 +47,9 @@ def key_id_from_consumer(name: str) -> str | None:
 def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=config.APISIX_ADMIN_URL.rstrip("/") + "/apisix/admin",
-        headers={"X-API-KEY": config.APISIX_ADMIN_KEY}, timeout=15)
+        headers={"X-API-KEY": config.APISIX_ADMIN_KEY},
+        timeout=15,
+    )
 
 
 def _metered_plugins() -> dict:
@@ -54,7 +57,9 @@ def _metered_plugins() -> dict:
     if config.USAGE_SINK_URL:
         plugins["http-logger"] = {
             "uri": config.USAGE_SINK_URL,
-            "batch_max_size": 50, "inactive_timeout": 2, "buffer_duration": 2,
+            "batch_max_size": 50,
+            "inactive_timeout": 2,
+            "buffer_duration": 2,
             "include_req_body": False,
         }
     return plugins
@@ -65,12 +70,18 @@ async def ensure_route() -> None:
     if not enabled():
         return
     async with _client() as c:
-        await c.put("/plugin_metadata/http-logger", json={
-            "log_format": {"consumer": "$consumer_name", "uri": "$uri", "status": "$status"}})
-        r = await c.put(f"/routes/{config.APISIX_ROUTE_ID}", json={
-            "uri": config.APISIX_ROUTE_URI,
-            "upstream": {"type": "roundrobin", "nodes": {config.APISIX_UPSTREAM: 1}},
-            "plugins": _metered_plugins()})
+        await c.put(
+            "/plugin_metadata/http-logger",
+            json={"log_format": {"consumer": "$consumer_name", "uri": "$uri", "status": "$status"}},
+        )
+        r = await c.put(
+            f"/routes/{config.APISIX_ROUTE_ID}",
+            json={
+                "uri": config.APISIX_ROUTE_URI,
+                "upstream": {"type": "roundrobin", "nodes": {config.APISIX_UPSTREAM: 1}},
+                "plugins": _metered_plugins(),
+            },
+        )
         r.raise_for_status()
 
 
@@ -78,19 +89,30 @@ async def ensure_valhalla_route() -> None:
     """Create/refresh the Valhalla routing route (higher priority than the geocoder wildcard)."""
     if not enabled():
         return
-    valhalla_uris = ["/status", "/route", "/optimized_route",
-                     "/sources_to_targets", "/isochrone", "/locate"]
+    valhalla_uris = [
+        "/status",
+        "/route",
+        "/optimized_route",
+        "/sources_to_targets",
+        "/isochrone",
+        "/locate",
+    ]
     async with _client() as c:
-        r = await c.put(f"/routes/{config.APISIX_VALHALLA_ROUTE_ID}", json={
-            "uris": valhalla_uris,
-            "priority": 10,
-            "upstream": {"type": "roundrobin", "nodes": {config.APISIX_VALHALLA_UPSTREAM: 1}},
-            "plugins": _metered_plugins()})
+        r = await c.put(
+            f"/routes/{config.APISIX_VALHALLA_ROUTE_ID}",
+            json={
+                "uris": valhalla_uris,
+                "priority": 10,
+                "upstream": {"type": "roundrobin", "nodes": {config.APISIX_VALHALLA_UPSTREAM: 1}},
+                "plugins": _metered_plugins(),
+            },
+        )
         r.raise_for_status()
 
 
-async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool,
-                                period: str | None = None) -> bool:
+async def ensure_consumer_group(
+    tenant_id: str, *, quota: int, hard_cap: bool, period: str | None = None
+) -> bool:
     """Create/update (hard-cap) or delete (soft) a tenant's limit-count group.
     Returns True if the group exists (so consumers should join it).
 
@@ -106,12 +128,24 @@ async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool,
     period = period or current_period()
     async with _client() as c:
         if hard_cap and quota > 0:
-            await c.put(f"/consumer_groups/{gid}", json={"plugins": {"limit-count": {
-                "count": quota, "time_window": config.APISIX_LIMIT_WINDOW,
-                "rejected_code": 429, "policy": "redis",
-                "redis_host": config.REDIS_HOST, "redis_port": config.REDIS_PORT,
-                "redis_database": config.REDIS_DB,
-                "key_type": "constant", "key": f"{gid}:{period}"}}})
+            await c.put(
+                f"/consumer_groups/{gid}",
+                json={
+                    "plugins": {
+                        "limit-count": {
+                            "count": quota,
+                            "time_window": config.APISIX_LIMIT_WINDOW,
+                            "rejected_code": 429,
+                            "policy": "redis",
+                            "redis_host": config.REDIS_HOST,
+                            "redis_port": config.REDIS_PORT,
+                            "redis_database": config.REDIS_DB,
+                            "key_type": "constant",
+                            "key": f"{gid}:{period}",
+                        }
+                    }
+                },
+            )
             return True
         await c.delete(f"/consumer_groups/{gid}")
         return False
@@ -120,8 +154,7 @@ async def ensure_consumer_group(tenant_id: str, *, quota: int, hard_cap: bool,
 async def upsert_consumer(key_id: str, *, api_key: str, in_group: bool, tenant_id: str) -> None:
     if not enabled():
         return
-    body: dict = {"username": consumer_name(key_id),
-                  "plugins": {"key-auth": {"key": api_key}}}
+    body: dict = {"username": consumer_name(key_id), "plugins": {"key-auth": {"key": api_key}}}
     if in_group:
         body["group_id"] = group_id(tenant_id)
     async with _client() as c:

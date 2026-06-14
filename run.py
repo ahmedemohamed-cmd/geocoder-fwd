@@ -20,10 +20,14 @@ Services:
 import asyncio
 import sys
 
+from shared.logging import get_logger
+
+logger = get_logger("run")
+
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print(__doc__.strip())
+        logger.info(__doc__.strip())
         sys.exit(0)
 
     service = sys.argv[1]
@@ -60,6 +64,7 @@ def main():
 
     elif service == "geocoder":
         import os
+
         import uvicorn
 
         # The geocoder is stateless (all state lives in ES/PostGIS/Redis/NATS), so
@@ -68,10 +73,10 @@ def main():
         # workers; with >1 uvicorn needs an import string to fork.
         workers = int(os.getenv("GEOCODER_WORKERS", "1"))
         if workers > 1:
-            uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000,
-                        workers=workers)
+            uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000, workers=workers)
         else:
             from services.geocoder import app
+
             uvicorn.run(app, host="0.0.0.0", port=8000)
 
     elif service == "traffic-aggregator":
@@ -90,8 +95,8 @@ def main():
         asyncio.run(clean())
 
     else:
-        print(f"Unknown service: {service}")
-        print("Run  python run.py --help  for available services.")
+        logger.info(f"Unknown service: {service}")
+        logger.info("Run  python run.py --help  for available services.")
         sys.exit(1)
 
 

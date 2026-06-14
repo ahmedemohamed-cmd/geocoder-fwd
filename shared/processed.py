@@ -8,6 +8,7 @@ Legacy per-file ``<file>.processed`` markers are transparently migrated into the
 ledger (and removed) the first time a file is seen, so existing imports are not
 re-processed after the switch.
 """
+
 import os
 
 LEDGER_NAME = ".processed"
@@ -20,7 +21,7 @@ def ledger_path(data_dir: str) -> str:
 def load_processed(data_dir: str) -> set[str]:
     """Return the set of processed file keys recorded in the ledger."""
     try:
-        with open(ledger_path(data_dir), "r", encoding="utf-8") as f:
+        with open(ledger_path(data_dir), encoding="utf-8") as f:
             return {line.strip() for line in f if line.strip()}
     except FileNotFoundError:
         return set()

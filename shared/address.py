@@ -32,16 +32,16 @@ import re
 # ── OSM addr: tag → logical field name ───────────────────────────────────
 ADDR_FIELD_MAP: dict[str, str] = {
     "housenumber": "addr:housenumber",
-    "street":      "addr:street",
-    "suburb":      "addr:suburb",
-    "district":    "addr:district",
-    "city":        "addr:city",
-    "postcode":    "addr:postcode",
-    "state":       "addr:state",
-    "country":     "addr:country",
-    "place":       "addr:place",
-    "unit":        "addr:unit",
-    "floor":       "addr:floor",
+    "street": "addr:street",
+    "suburb": "addr:suburb",
+    "district": "addr:district",
+    "city": "addr:city",
+    "postcode": "addr:postcode",
+    "state": "addr:state",
+    "country": "addr:country",
+    "place": "addr:place",
+    "unit": "addr:unit",
+    "floor": "addr:floor",
 }
 
 # City-level fallback order when addr:city is absent
@@ -49,105 +49,213 @@ _CITY_FALLBACKS = ("addr:city", "addr:town", "addr:village", "addr:hamlet")
 
 # ── Abbreviation / synonym expansion (English) ───────────────────────────
 _EN_ABBREVS: dict[str, str] = {
-    "st":    "street",
-    "str":   "street",
-    "rd":    "road",
-    "ave":   "avenue",
-    "av":    "avenue",
-    "blvd":  "boulevard",
-    "bvd":   "boulevard",
-    "ln":    "lane",
-    "dr":    "drive",
-    "pl":    "place",
-    "ct":    "court",
-    "sq":    "square",
-    "hwy":   "highway",
-    "cres":  "crescent",
-    "terr":  "terrace",
-    "pkwy":  "parkway",
+    "st": "street",
+    "str": "street",
+    "rd": "road",
+    "ave": "avenue",
+    "av": "avenue",
+    "blvd": "boulevard",
+    "bvd": "boulevard",
+    "ln": "lane",
+    "dr": "drive",
+    "pl": "place",
+    "ct": "court",
+    "sq": "square",
+    "hwy": "highway",
+    "cres": "crescent",
+    "terr": "terrace",
+    "pkwy": "parkway",
 }
 
 # ── Arabic street-type normalizations ─────────────────────────────────────
 # Maps common short/variant Arabic street prefixes to canonical forms
 _AR_STREET_TYPES: dict[str, str] = {
-    "ش":     "شارع",
-    "ش.":    "شارع",
-    "شار":   "شارع",
-    "ط":     "طريق",
-    "م":     "ميدان",
+    "ش": "شارع",
+    "ش.": "شارع",
+    "شار": "شارع",
+    "ط": "طريق",
+    "م": "ميدان",
 }
 
 # Arabic tokens that indicate a street/address context
-_AR_STREET_KEYWORDS = frozenset([
-    "شارع", "طريق", "ميدان", "حارة", "زقاق", "كورنيش", "حي",
-    "منطقة", "مدينة", "محافظة", "عمارة", "برج", "مبنى", "عمائر",
-])
+_AR_STREET_KEYWORDS = frozenset(
+    [
+        "شارع",
+        "طريق",
+        "ميدان",
+        "حارة",
+        "زقاق",
+        "كورنيش",
+        "حي",
+        "منطقة",
+        "مدينة",
+        "محافظة",
+        "عمارة",
+        "برج",
+        "مبنى",
+        "عمائر",
+    ]
+)
 
 # Arabic city/area names for detection (common ones)
 # We store both original and normalized forms to match regardless of normalization
 _AR_CITY_KEYWORDS_RAW = [
-    "القاهرة", "الجيزة", "الاسكندرية", "الإسكندرية", "المنصورة",
-    "الزمالك", "المعادي", "مصر الجديدة", "مدينة نصر", "المهندسين",
-    "الدقي", "العجوزة", "شبرا", "حلوان", "المقطم", "التجمع",
-    "الرحاب", "العبور", "أكتوبر", "الشيخ زايد",
+    "القاهرة",
+    "الجيزة",
+    "الاسكندرية",
+    "الإسكندرية",
+    "المنصورة",
+    "الزمالك",
+    "المعادي",
+    "مصر الجديدة",
+    "مدينة نصر",
+    "المهندسين",
+    "الدقي",
+    "العجوزة",
+    "شبرا",
+    "حلوان",
+    "المقطم",
+    "التجمع",
+    "الرحاب",
+    "العبور",
+    "أكتوبر",
+    "الشيخ زايد",
 ]
 
 # ── French street-type normalizations ─────────────────────────────────────
 _FR_STREET_TYPES: dict[str, str] = {
-    "r":     "rue",
-    "r.":    "rue",
-    "av":    "avenue",
-    "av.":   "avenue",
-    "bd":    "boulevard",
-    "bd.":   "boulevard",
-    "blvd":  "boulevard",
-    "pl":    "place",
-    "pl.":   "place",
-    "ch":    "chemin",
-    "ch.":   "chemin",
-    "imp":   "impasse",
-    "imp.":  "impasse",
-    "all":   "allée",
-    "all.":  "allée",
-    "crs":   "cours",
-    "crs.":  "cours",
-    "rte":   "route",
-    "rte.":  "route",
-    "pass":  "passage",
+    "r": "rue",
+    "r.": "rue",
+    "av": "avenue",
+    "av.": "avenue",
+    "bd": "boulevard",
+    "bd.": "boulevard",
+    "blvd": "boulevard",
+    "pl": "place",
+    "pl.": "place",
+    "ch": "chemin",
+    "ch.": "chemin",
+    "imp": "impasse",
+    "imp.": "impasse",
+    "all": "allée",
+    "all.": "allée",
+    "crs": "cours",
+    "crs.": "cours",
+    "rte": "route",
+    "rte.": "route",
+    "pass": "passage",
     "pass.": "passage",
 }
 
 # French tokens that indicate a street/address context
-_FR_STREET_KEYWORDS = frozenset([
-    "rue", "avenue", "boulevard", "place", "square", "chemin",
-    "impasse", "allée", "cour", "cours", "passage", "quai",
-    "route", "rond-point", "carrefour", "voie",
-])
+_FR_STREET_KEYWORDS = frozenset(
+    [
+        "rue",
+        "avenue",
+        "boulevard",
+        "place",
+        "square",
+        "chemin",
+        "impasse",
+        "allée",
+        "cour",
+        "cours",
+        "passage",
+        "quai",
+        "route",
+        "rond-point",
+        "carrefour",
+        "voie",
+    ]
+)
 
 # French city/area names for detection (common ones)
 _FR_CITY_KEYWORDS_RAW = [
-    "Paris", "Lyon", "Marseille", "Toulouse", "Nice", "Nantes",
-    "Strasbourg", "Montpellier", "Bordeaux", "Lille", "Rennes",
-    "Reims", "Toulon", "Grenoble", "Dijon", "Angers", "Nîmes",
-    "Casablanca", "Rabat", "Marrakech", "Fès", "Tanger", "Meknès",
-    "Tunis", "Sfax", "Sousse", "Alger", "Oran", "Constantine",
-    "Dakar", "Abidjan", "Douala", "Yaoundé", "Kinshasa",
-    "Bruxelles", "Genève", "Lausanne", "Montréal", "Québec",
+    "Paris",
+    "Lyon",
+    "Marseille",
+    "Toulouse",
+    "Nice",
+    "Nantes",
+    "Strasbourg",
+    "Montpellier",
+    "Bordeaux",
+    "Lille",
+    "Rennes",
+    "Reims",
+    "Toulon",
+    "Grenoble",
+    "Dijon",
+    "Angers",
+    "Nîmes",
+    "Casablanca",
+    "Rabat",
+    "Marrakech",
+    "Fès",
+    "Tanger",
+    "Meknès",
+    "Tunis",
+    "Sfax",
+    "Sousse",
+    "Alger",
+    "Oran",
+    "Constantine",
+    "Dakar",
+    "Abidjan",
+    "Douala",
+    "Yaoundé",
+    "Kinshasa",
+    "Bruxelles",
+    "Genève",
+    "Lausanne",
+    "Montréal",
+    "Québec",
 ]
 
 # English tokens that indicate a street/address context
-_EN_STREET_KEYWORDS = frozenset([
-    "street", "road", "avenue", "boulevard", "lane", "drive",
-    "place", "court", "square", "highway", "crescent", "terrace",
-    "parkway", "way", "alley", "circle", "trail",
-])
+_EN_STREET_KEYWORDS = frozenset(
+    [
+        "street",
+        "road",
+        "avenue",
+        "boulevard",
+        "lane",
+        "drive",
+        "place",
+        "court",
+        "square",
+        "highway",
+        "crescent",
+        "terrace",
+        "parkway",
+        "way",
+        "alley",
+        "circle",
+        "trail",
+    ]
+)
 
 # English city/area names for detection (common ones)
 _EN_CITY_KEYWORDS_RAW = [
-    "Cairo", "Giza", "Alexandria", "Luxor", "Aswan", "Hurghada",
-    "Sharm El Sheikh", "Mansoura", "Zamalek", "Maadi", "Heliopolis",
-    "Nasr City", "Mohandessin", "Dokki", "Agouza", "Helwan",
-    "New Cairo", "6th of October", "Sheikh Zayed",
+    "Cairo",
+    "Giza",
+    "Alexandria",
+    "Luxor",
+    "Aswan",
+    "Hurghada",
+    "Sharm El Sheikh",
+    "Mansoura",
+    "Zamalek",
+    "Maadi",
+    "Heliopolis",
+    "Nasr City",
+    "Mohandessin",
+    "Dokki",
+    "Agouza",
+    "Helwan",
+    "New Cairo",
+    "6th of October",
+    "Sheikh Zayed",
 ]
 
 
@@ -178,20 +286,17 @@ _AR_CITY_KEYWORDS = frozenset(
 )
 
 # Build French city keyword set (case-insensitive matching via lowercased set)
-_FR_CITY_KEYWORDS = frozenset(
-    _FR_CITY_KEYWORDS_RAW + [c.lower() for c in _FR_CITY_KEYWORDS_RAW]
-)
+_FR_CITY_KEYWORDS = frozenset(_FR_CITY_KEYWORDS_RAW + [c.lower() for c in _FR_CITY_KEYWORDS_RAW])
 
 # Build English city keyword set (case-insensitive matching via lowercased set)
-_EN_CITY_KEYWORDS = frozenset(
-    _EN_CITY_KEYWORDS_RAW + [c.lower() for c in _EN_CITY_KEYWORDS_RAW]
-)
+_EN_CITY_KEYWORDS = frozenset(_EN_CITY_KEYWORDS_RAW + [c.lower() for c in _EN_CITY_KEYWORDS_RAW])
 
 # Combined city keywords for all languages
 _ALL_CITY_KEYWORDS = _AR_CITY_KEYWORDS | _FR_CITY_KEYWORDS | _EN_CITY_KEYWORDS
 
 
 # ── Component extraction ──────────────────────────────────────────────────
+
 
 def has_address(tags: dict) -> bool:
     """Return True when *tags* contains at least one recognised addr:* field."""
@@ -243,8 +348,8 @@ def build_full_address(tags: dict) -> str:
 
     # Street line
     housenumber = addr.get("housenumber", "")
-    street      = addr.get("street", "")
-    place       = addr.get("place", "")
+    street = addr.get("street", "")
+    place = addr.get("place", "")
 
     if housenumber and street:
         parts.append(f"{housenumber} {street}")
@@ -264,6 +369,7 @@ def build_full_address(tags: dict) -> str:
 
 # ── Text normalization ────────────────────────────────────────────────────
 
+
 def normalize_address_text(s: str) -> str:
     """Expand abbreviations, normalize Arabic variants, collapse whitespace.
 
@@ -275,10 +381,10 @@ def normalize_address_text(s: str) -> str:
         return s
 
     # Normalize Arabic characters: remove tatweel, normalize alef/yaa
-    s = s.replace("\u0640", "")              # tatweel
-    s = _RE_ALEF_VARIANTS.sub("ا", s)        # normalize alef variants → bare alef
-    s = s.replace("ى", "ي")                  # alef maqsura → yaa
-    s = s.replace("ة", "ه")                  # taa marbuta → haa (common search behaviour)
+    s = s.replace("\u0640", "")  # tatweel
+    s = _RE_ALEF_VARIANTS.sub("ا", s)  # normalize alef variants → bare alef
+    s = s.replace("ى", "ي")  # alef maqsura → yaa
+    s = s.replace("ة", "ه")  # taa marbuta → haa (common search behaviour)
 
     # Expand Arabic abbreviated street types
     tokens = s.split()
@@ -493,11 +599,9 @@ def parse_address_query(q: str) -> dict:
             street_part_idx = 0
 
     # ── Pass 5: assign remaining parts (city, suburb, state, country) ─────
-    locality_parts = [
-        p for i, p in enumerate(remaining_parts) if i != street_part_idx
-    ]
+    locality_parts = [p for i, p in enumerate(remaining_parts) if i != street_part_idx]
 
-    for i, part in enumerate(locality_parts):
+    for part in locality_parts:
         if not part:
             continue
         # Detect postcodes that slipped through

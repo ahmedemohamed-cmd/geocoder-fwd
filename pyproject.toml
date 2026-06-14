@@ -1,0 +1,81 @@
+[project]
+name = "geocoder-fwd"
+version = "0.1.0"
+description = "OSM geocoding stack (Elasticsearch + PostGIS + NATS) with an API-key billing subsystem"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+# Shared dev/test toolchain so CI and contributors install one consistent set.
+dev = [
+    "ruff>=0.6",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "fakeredis>=2.21",
+]
+# Runtime libs needed to import the apps and run the infra-free test suite.
+# Deliberately excludes the heavy/native-only deps (torch via
+# sentence-transformers, osmium) that the geocoder/watcher load lazily or that
+# the smoke tests never exercise — keeps CI fast and avoids system build deps.
+test = [
+    "fastapi>=0.110,<1.0",
+    "pydantic>=2.0,<3.0",
+    "httpx>=0.27,<1.0",
+    "asyncpg>=0.29,<1.0",
+    "redis>=5.0,<6.0",
+    "nats-py>=2.6,<3.0",
+    "elasticsearch[async]>=8.0,<9.0",
+    "python-dotenv>=1.0,<2.0",
+    "pyjwt[crypto]>=2.8,<3.0",
+]
+
+# ──────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# Generated/vendored or non-source trees.
+extend-exclude = [
+    "models",
+    "data",
+    ".venv-billing",
+    "billing/frontend",
+]
+
+[tool.ruff.lint]
+# Conservative starter set: pyflakes (F), pycodestyle errors (E), import sorting
+# (I), bugbear (B), pyupgrade (UP). Kept lenient to match the existing style;
+# tighten over time rather than churn the whole tree at once.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",   # line length is handled by the formatter, not the linter
+    "B008",   # FastAPI uses `= Query(...)`/`Depends(...)` as defaults by design
+    "E402",   # services do deliberate conditional/lazy imports below the top
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests favour broad fixtures and re-imports; benchmark scripts are throwaway.
+"tests/**" = ["B", "F401", "F811", "E741", "UP031"]
+
+# ──────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Collect the whole tests/ tree (previously pinned to tests/billing only, so the
+# service tests never ran). Benchmark scripts aren't `test_*` so they're skipped.
+testpaths = ["tests"]
+markers = [
+    "integration: requires the live docker-compose stack (ES/PostGIS/etc.); skipped by default in CI",
+]
+# Default to the fast, infra-free suite. Run integration explicitly with
+# `pytest -m integration --override-ini addopts=`.
+addopts = "-m 'not integration'"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+# ──────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+# Non-blocking: a gentle on-ramp. Not wired into CI as a gate yet.
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+exclude = "(^|/)(models|data|\\.venv-billing|billing/frontend)/"

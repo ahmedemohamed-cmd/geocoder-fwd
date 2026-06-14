@@ -61,9 +61,20 @@ def _build_user_prompt(place: dict[str, Any]) -> str:
     # Category from OSM tags
     tags = place.get("tags", {})
     category_keys = [
-        "amenity", "shop", "tourism", "leisure", "building",
-        "office", "place", "natural", "highway", "railway",
-        "aeroway", "waterway", "historic", "landuse",
+        "amenity",
+        "shop",
+        "tourism",
+        "leisure",
+        "building",
+        "office",
+        "place",
+        "natural",
+        "highway",
+        "railway",
+        "aeroway",
+        "waterway",
+        "historic",
+        "landuse",
     ]
     for key in category_keys:
         if key in tags:
@@ -77,8 +88,15 @@ def _build_user_prompt(place: dict[str, Any]) -> str:
 
     # Address
     addr_parts = []
-    for field in ("addr_housenumber", "addr_street", "addr_city",
-                  "addr_suburb", "addr_state", "addr_postcode", "addr_country"):
+    for field in (
+        "addr_housenumber",
+        "addr_street",
+        "addr_city",
+        "addr_suburb",
+        "addr_state",
+        "addr_postcode",
+        "addr_country",
+    ):
         val = place.get(field) or tags.get(field.replace("addr_", "addr:"), "")
         if val:
             addr_parts.append(f"{field.replace('addr_', '')}: {val}")
@@ -137,8 +155,12 @@ async def generate_description(place: dict[str, Any]) -> dict[str, str] | None:
 
         # Validate expected keys
         expected = {
-            "title_en", "title_ar", "title_fr",
-            "description_en", "description_ar", "description_fr",
+            "title_en",
+            "title_ar",
+            "title_fr",
+            "description_en",
+            "description_ar",
+            "description_fr",
         }
         if not expected.issubset(result.keys()):
             logger.warning("LLM response missing keys: %s", expected - result.keys())

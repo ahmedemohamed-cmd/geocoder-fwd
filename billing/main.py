@@ -7,6 +7,7 @@ Both create their own Postgres pool + Redis client on startup. The control plane
 bootstraps the schema/seed data; the gateway runs the background usage aggregator
 that drains the Redis event buffer into Postgres rollups.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,8 +20,9 @@ from . import apisix_admin, config, control_plane, db, gateway, usage
 
 
 def _make_redis() -> aioredis.Redis:
-    return aioredis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT,
-                          db=config.REDIS_DB, decode_responses=True)
+    return aioredis.Redis(
+        host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB, decode_responses=True
+    )
 
 
 async def _aggregator_loop(pool, redis, interval: float = 2.0):
@@ -39,7 +41,7 @@ async def _cp_lifespan(app):
     app.state.pool = await db.create_pool()
     app.state.redis = _make_redis()
     await db.bootstrap(app.state.pool)
-    if apisix_admin.enabled():        # provision the geocoder + valhalla routes
+    if apisix_admin.enabled():  # provision the geocoder + valhalla routes
         try:
             await apisix_admin.ensure_route()
             await apisix_admin.ensure_valhalla_route()
@@ -61,6 +63,7 @@ async def _gw_lifespan(app):
     app.state.redis = _make_redis()
     if app.state.http_client is None:
         import httpx
+
         app.state.http_client = httpx.AsyncClient(base_url=config.PROXY_TARGET, timeout=30)
     agg = asyncio.create_task(_aggregator_loop(app.state.pool, app.state.redis))
     yield

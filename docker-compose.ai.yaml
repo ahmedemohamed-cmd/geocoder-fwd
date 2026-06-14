@@ -1,0 +1,49 @@
+# AI / GPU override for docker-compose.yaml.
+#
+# Use together with the base file (the base is the single source of truth for the
+# full stack — billing/Zitadel/APISIX, port hardening, etc.):
+#
+#     docker compose -f docker-compose.yaml -f docker-compose.ai.yaml up -d
+#
+# This file only carries the GPU + vector/AI deltas; everything else is inherited
+# from the base, so the two can no longer drift.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  es-inserter:
+    environment:
+      - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
+      - ENABLE_VECTORS=true
+      - HF_HOME=/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  geocoder:
+    environment:
+      - EMBEDDING_MODEL=/app/models/paraphrase-multilingual-MiniLM-L12-v2
+      - ENABLE_VECTORS=true
+      - ENABLE_AI=true
+      - HF_HOME=/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  valhalla:
+    healthcheck:
+      start_period: 1800s

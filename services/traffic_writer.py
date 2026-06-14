@@ -20,26 +20,28 @@ falls back to predicted/base speeds, then dropped from the index.
 
 import mmap
 import os
-import struct
 import time
 
 import redis
 
+from shared import traffic_tile as tt
 from shared.config import (
     REDIS_HOST,
     REDIS_PORT,
+    TRAFFIC_EDGE_TTL,
     TRAFFIC_EXTRACT_PATH,
     TRAFFIC_WRITE_INTERVAL,
-    TRAFFIC_EDGE_TTL,
 )
-from shared import traffic_tile as tt
+from shared.logging import get_logger
+
+logger = get_logger("traffic-writer")
 
 _EDGE_KEY_PREFIX = "tf:e:"
 _INDEX_KEY = "tf:idx"
 
 
 def _log(msg: str) -> None:
-    print(f"[traffic-writer] {msg}", flush=True)
+    logger.info(f"[traffic-writer] {msg}")
 
 
 def _wait_for_extract(path: str) -> None:
@@ -93,9 +95,9 @@ def run():
         if edge_index >= edge_count:
             return False  # stale graphid (tiles rebuilt?) — skip rather than corrupt
         off = tt.edge_record_offset(data_off, edge_index)
-        mm[off:off + tt.SPEED_RECORD_SIZE] = tt.speed_to_bytes(kph, congestion)
+        mm[off : off + tt.SPEED_RECORD_SIZE] = tt.speed_to_bytes(kph, congestion)
         # Bump the tile header's last_update so consumers see the refresh.
-        mm[data_off + 8:data_off + 16] = tt.pack_header_last_update()
+        mm[data_off + 8 : data_off + 16] = tt.pack_header_last_update()
         return True
 
     while True:

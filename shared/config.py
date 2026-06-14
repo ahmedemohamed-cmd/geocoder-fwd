@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -104,14 +105,13 @@ TRAFFIC_SUBJECT = "traffic.probes"
 # Path to Valhalla's traffic extract, as seen by the traffic-writer container
 # (shares the ./data bind mounted at /custom_files; Valhalla keeps its files
 # under the valhalla/ subdir via path_extension=valhalla).
-TRAFFIC_EXTRACT_PATH = os.getenv(
-    "TRAFFIC_EXTRACT_PATH", "/custom_files/valhalla/traffic.tar"
-)
+TRAFFIC_EXTRACT_PATH = os.getenv("TRAFFIC_EXTRACT_PATH", "/custom_files/valhalla/traffic.tar")
 
 # Writer cadence and aggregation tuning.
-TRAFFIC_WRITE_INTERVAL = _safe_int("TRAFFIC_WRITE_INTERVAL", 30)   # seconds between flushes
-TRAFFIC_EDGE_TTL = _safe_int("TRAFFIC_EDGE_TTL", 600)             # secs before an edge speed expires
-TRAFFIC_MIN_SAMPLES = _safe_int("TRAFFIC_MIN_SAMPLES", 3)         # min probes before a speed is trusted
+TRAFFIC_WRITE_INTERVAL = _safe_int("TRAFFIC_WRITE_INTERVAL", 30)  # seconds between flushes
+TRAFFIC_EDGE_TTL = _safe_int("TRAFFIC_EDGE_TTL", 600)  # secs before an edge speed expires
+TRAFFIC_MIN_SAMPLES = _safe_int("TRAFFIC_MIN_SAMPLES", 3)  # min probes before a speed is trusted
+
 
 def _safe_float(env_var: str, default: float) -> float:
     raw = os.getenv(env_var, str(default))
@@ -121,14 +121,17 @@ def _safe_float(env_var: str, default: float) -> float:
         logger.warning("Invalid float for %s=%r, using default %s", env_var, raw, default)
         return default
 
-TRAFFIC_EWMA_ALPHA = _safe_float("TRAFFIC_EWMA_ALPHA", 0.3)       # smoothing for per-edge speed
-TRAFFIC_MAX_TRACE = _safe_int("TRAFFIC_MAX_TRACE", 50)           # max probes per map-match call
+
+TRAFFIC_EWMA_ALPHA = _safe_float("TRAFFIC_EWMA_ALPHA", 0.3)  # smoothing for per-edge speed
+TRAFFIC_MAX_TRACE = _safe_int("TRAFFIC_MAX_TRACE", 50)  # max probes per map-match call
 
 # Optional external flow provider (gap-filler / cold-start booster). "none"
 # disables it; "tomtom" needs TOMTOM_API_KEY. Probe data always takes priority.
 TRAFFIC_PROVIDER = os.getenv("TRAFFIC_PROVIDER", "none")
-TRAFFIC_PROVIDER_INTERVAL = _safe_int("TRAFFIC_PROVIDER_INTERVAL", 120)  # secs between provider polls
-TRAFFIC_PROVIDER_WEIGHT = _safe_float("TRAFFIC_PROVIDER_WEIGHT", 0.5)    # confidence vs. fresh probes
+TRAFFIC_PROVIDER_INTERVAL = _safe_int(
+    "TRAFFIC_PROVIDER_INTERVAL", 120
+)  # secs between provider polls
+TRAFFIC_PROVIDER_WEIGHT = _safe_float("TRAFFIC_PROVIDER_WEIGHT", 0.5)  # confidence vs. fresh probes
 # Bounding box the provider polls: "min_lat,min_lon,max_lat,max_lon" (default: Greater Cairo).
 TRAFFIC_PROVIDER_BBOX = os.getenv("TRAFFIC_PROVIDER_BBOX", "29.7,31.0,30.2,31.5")
 # Provider sampling grid: N×N query points across the bbox per poll. Keep small

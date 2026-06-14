@@ -4,6 +4,7 @@ Run for a closed period (e.g. via a CronJob on the 1st of the month) or on
 demand by an admin. Idempotent per (tenant, period): re-running updates a still
 ``pending`` invoice and leaves a ``paid`` one untouched.
 """
+
 from __future__ import annotations
 
 import math
@@ -11,8 +12,9 @@ import math
 from . import repo
 
 
-def compute_charge(*, total_requests: int, base_price_cents: int,
-                   overage_cents_per_unit: float, monthly_quota: int) -> tuple[int, list[dict]]:
+def compute_charge(
+    *, total_requests: int, base_price_cents: int, overage_cents_per_unit: float, monthly_quota: int
+) -> tuple[int, list[dict]]:
     """Return (amount_cents, line_items)."""
     line_items: list[dict] = [
         {"description": "Base subscription", "quantity": 1, "amount_cents": int(base_price_cents)}
@@ -23,18 +25,22 @@ def compute_charge(*, total_requests: int, base_price_cents: int,
     if overage_units > 0 and overage_cents_per_unit > 0:
         overage_cents = math.ceil(overage_units * float(overage_cents_per_unit))
         amount += overage_cents
-        line_items.append({
-            "description": f"Overage ({overage_units} requests over {monthly_quota} included)",
-            "quantity": overage_units,
-            "unit_cents": float(overage_cents_per_unit),
-            "amount_cents": overage_cents,
-        })
+        line_items.append(
+            {
+                "description": f"Overage ({overage_units} requests over {monthly_quota} included)",
+                "quantity": overage_units,
+                "unit_cents": float(overage_cents_per_unit),
+                "amount_cents": overage_cents,
+            }
+        )
     else:
-        line_items.append({
-            "description": f"Included requests ({total_requests}/{monthly_quota})",
-            "quantity": total_requests,
-            "amount_cents": 0,
-        })
+        line_items.append(
+            {
+                "description": f"Included requests ({total_requests}/{monthly_quota})",
+                "quantity": total_requests,
+                "amount_cents": 0,
+            }
+        )
     return amount, line_items
 
 
@@ -47,8 +53,12 @@ async def generate_invoice_for_tenant(pool, tenant: dict, period: str) -> dict:
         monthly_quota=tenant.get("monthly_quota") or 0,
     )
     return await repo.upsert_invoice(
-        pool, tenant_id=tenant["tenant_id"], period=period,
-        total_requests=total, amount_cents=amount, line_items=line_items,
+        pool,
+        tenant_id=tenant["tenant_id"],
+        period=period,
+        total_requests=total,
+        amount_cents=amount,
+        line_items=line_items,
     )
 
 

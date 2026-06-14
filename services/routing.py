@@ -6,30 +6,46 @@ Arabic (any ``ar*`` BCP-47 tag), rewrites every maneuver's instruction fields
 using structured Arabic templates driven by the maneuver ``type`` and the
 ``street_names`` list (which the OSM data already provides in Arabic script).
 """
+
 from __future__ import annotations
 
 import re
 from typing import Any
 
 import httpx
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from shared.config import VALHALLA_URL
 
 # ── Arabic direction words ────────────────────────────────────────────────────
 _DIRECTIONS: dict[str, str] = {
-    "north": "شمالاً", "south": "جنوباً", "east": "شرقاً", "west": "غرباً",
-    "northeast": "شمال شرقاً", "northwest": "شمال غرباً",
-    "southeast": "جنوب شرقاً", "southwest": "جنوب غرباً",
+    "north": "شمالاً",
+    "south": "جنوباً",
+    "east": "شرقاً",
+    "west": "غرباً",
+    "northeast": "شمال شرقاً",
+    "northwest": "شمال غرباً",
+    "southeast": "جنوب شرقاً",
+    "southwest": "جنوب غرباً",
 }
 
 # Arabic ordinals for roundabout exit counts 1-10
 _ORDINALS: dict[int, str] = {
-    1: "الأول", 2: "الثاني", 3: "الثالث", 4: "الرابع", 5: "الخامس",
-    6: "السادس", 7: "السابع", 8: "الثامن", 9: "التاسع", 10: "العاشر",
+    1: "الأول",
+    2: "الثاني",
+    3: "الثالث",
+    4: "الرابع",
+    5: "الخامس",
+    6: "السادس",
+    7: "السابع",
+    8: "الثامن",
+    9: "التاسع",
+    10: "العاشر",
 }
 
-_ONTO_RE = re.compile(r'\bonto (.+?)\.$', re.IGNORECASE)
-_TOWARD_RE = re.compile(r'\btoward (.+?)\.$', re.IGNORECASE)
+_ONTO_RE = re.compile(r"\bonto (.+?)\.$", re.IGNORECASE)
+_TOWARD_RE = re.compile(r"\btoward (.+?)\.$", re.IGNORECASE)
 
 
 def _street(names: list[str]) -> str:
@@ -80,49 +96,57 @@ def _translate_maneuver(maneuver: dict, units: str) -> dict:
         return _toward(raw) or s
 
     ar: str
-    if typ in (1, 2, 3):       # Start (various directions)
+    if typ in (1, 2, 3):  # Start (various directions)
         ar = f"اتجه {direction} على {s}." if s else f"اتجه {direction}."
-    elif typ == 4:              # Destination (arrived)
+    elif typ == 4:  # Destination (arrived)
         ar = "لقد وصلت إلى وجهتك."
-    elif typ == 5:              # Destination right
+    elif typ == 5:  # Destination right
         ar = "وجهتك على اليمين."
-    elif typ == 6:              # Destination left
+    elif typ == 6:  # Destination left
         ar = "وجهتك على اليسار."
-    elif typ in (7, 8):         # Becomes / Continue
+    elif typ in (7, 8):  # Becomes / Continue
         ar = f"استمر على {s}." if s else "استمر مباشرة."
-    elif typ == 9:              # Slight right
+    elif typ == 9:  # Slight right
         ar = f"انحرف يميناً نحو {_onto_s()}." if _onto_s() else "انحرف قليلاً يميناً."
-    elif typ == 10:             # Right
+    elif typ == 10:  # Right
         ar = f"انعطف يميناً نحو {_onto_s()}." if _onto_s() else "انعطف يميناً."
-    elif typ == 11:             # Sharp right
+    elif typ == 11:  # Sharp right
         ar = f"انعطف يميناً حاداً نحو {_onto_s()}." if _onto_s() else "انعطف يميناً حاداً."
-    elif typ in (12, 13):       # U-turn
+    elif typ in (12, 13):  # U-turn
         ar = "استدر."
-    elif typ == 14:             # Sharp left
+    elif typ == 14:  # Sharp left
         ar = f"انعطف يساراً حاداً نحو {_onto_s()}." if _onto_s() else "انعطف يساراً حاداً."
-    elif typ == 15:             # Left
+    elif typ == 15:  # Left
         ar = f"انعطف يساراً نحو {_onto_s()}." if _onto_s() else "انعطف يساراً."
-    elif typ == 16:             # Slight left
+    elif typ == 16:  # Slight left
         ar = f"انحرف يساراً نحو {_onto_s()}." if _onto_s() else "انحرف قليلاً يساراً."
-    elif typ == 17:             # Ramp straight
+    elif typ == 17:  # Ramp straight
         ar = f"خذ المنحدر نحو {_onto_s()}." if _onto_s() else "خذ المنحدر."
-    elif typ == 18:             # Ramp right
+    elif typ == 18:  # Ramp right
         ar = f"خذ المنحدر على اليمين نحو {_onto_s()}." if _onto_s() else "خذ المنحدر على اليمين."
-    elif typ == 19:             # Ramp left
+    elif typ == 19:  # Ramp left
         ar = f"خذ المنحدر على اليسار نحو {_onto_s()}." if _onto_s() else "خذ المنحدر على اليسار."
-    elif typ == 20:             # Exit right
+    elif typ == 20:  # Exit right
         ar = f"اخرج من اليمين نحو {_onto_s()}." if _onto_s() else "اخرج من اليمين."
-    elif typ == 21:             # Exit left
+    elif typ == 21:  # Exit left
         ar = f"اخرج من اليسار نحو {_onto_s()}." if _onto_s() else "اخرج من اليسار."
-    elif typ == 22:             # Stay straight
+    elif typ == 22:  # Stay straight
         ar = f"استمر مباشرة على {s}." if s else "استمر مباشرة."
-    elif typ == 23:             # Stay right
-        ar = f"ابقَ على اليمين نحو {_onto_s() or _toward_s()}." if (_onto_s() or _toward_s()) else "ابقَ على اليمين."
-    elif typ == 24:             # Stay left
-        ar = f"ابقَ على اليسار نحو {_onto_s() or _toward_s()}." if (_onto_s() or _toward_s()) else "ابقَ على اليسار."
-    elif typ == 25:             # Merge
+    elif typ == 23:  # Stay right
+        ar = (
+            f"ابقَ على اليمين نحو {_onto_s() or _toward_s()}."
+            if (_onto_s() or _toward_s())
+            else "ابقَ على اليمين."
+        )
+    elif typ == 24:  # Stay left
+        ar = (
+            f"ابقَ على اليسار نحو {_onto_s() or _toward_s()}."
+            if (_onto_s() or _toward_s())
+            else "ابقَ على اليسار."
+        )
+    elif typ == 25:  # Merge
         ar = f"اندمج على {_onto_s()}." if _onto_s() else "اندمج."
-    elif typ == 26:             # Roundabout enter
+    elif typ == 26:  # Roundabout enter
         exit_street = _onto(raw)
         roundabout_name = s
         if roundabout_name and exit_street:
@@ -131,13 +155,13 @@ def _translate_maneuver(maneuver: dict, units: str) -> dict:
             ar = f"ادخل الدوار وخذ المخرج {ordinal} نحو {exit_street}."
         else:
             ar = f"ادخل الدوار وخذ المخرج {ordinal}."
-    elif typ == 27:             # Roundabout exit
+    elif typ == 27:  # Roundabout exit
         ar = f"اخرج من الدوار نحو {_onto_s()}." if _onto_s() else "اخرج من الدوار."
-    elif typ == 28:             # Ferry enter
+    elif typ == 28:  # Ferry enter
         ar = f"استقل العبارة نحو {_onto_s()}." if _onto_s() else "استقل العبارة."
-    elif typ == 29:             # Ferry exit
+    elif typ == 29:  # Ferry exit
         ar = "غادر العبارة."
-    elif typ in (37, 38):       # Merge right/left
+    elif typ in (37, 38):  # Merge right/left
         side = "يميناً" if typ == 37 else "يساراً"
         ar = f"اندمج {side} على {_onto_s()}." if _onto_s() else f"اندمج {side}."
     else:
@@ -183,8 +207,7 @@ def _strip_arabic_language(payload: dict) -> dict:
     return payload
 
 
-async def proxy(path: str, method: str, body: dict | None,
-                timeout: float = 30.0) -> Any:
+async def proxy(path: str, method: str, body: dict | None, timeout: float = 30.0) -> Any:
     """Forward a routing request to Valhalla, applying Arabic translation if needed."""
     translate = body is not None and _wants_arabic(body)
     if translate:
@@ -201,3 +224,57 @@ async def proxy(path: str, method: str, body: dict | None,
     if translate and resp.status_code == 200:
         result = _translate_response(result)
     return resp.status_code, result
+
+
+# ── HTTP router ───────────────────────────────────────────────────────────────
+# Mounted by the geocoder app via ``app.include_router(router)``. These endpoints
+# are a thin pass-through to Valhalla (with the Arabic narration rewrite above)
+# and hold no geocoder state, so they live alongside the proxy they delegate to.
+router = APIRouter(tags=["routing"])
+
+
+@router.get("/status")
+async def routing_status():
+    """Valhalla engine status (version, tileset bbox, available actions)."""
+    status_code, body = await proxy("/status", "GET", None)
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@router.post("/route")
+async def routing_route(request: Request):
+    """Turn-by-turn directions. Supports language=ar for Arabic narration."""
+    body = await request.json()
+    status_code, result = await proxy("/route", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@router.post("/optimized_route")
+async def routing_optimized_route(request: Request):
+    """Optimized route (TSP) — reorders waypoints for shortest tour."""
+    body = await request.json()
+    status_code, result = await proxy("/optimized_route", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@router.post("/sources_to_targets")
+async def routing_sources_to_targets(request: Request):
+    """Time/distance matrix (many sources to many targets)."""
+    body = await request.json()
+    status_code, result = await proxy("/sources_to_targets", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@router.post("/isochrone")
+async def routing_isochrone(request: Request):
+    """Reachability polygons at given time/distance contours."""
+    body = await request.json()
+    status_code, result = await proxy("/isochrone", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)
+
+
+@router.post("/locate")
+async def routing_locate(request: Request):
+    """Snap coordinates to the routing graph (nearest edges/nodes)."""
+    body = await request.json()
+    status_code, result = await proxy("/locate", "POST", body)
+    return JSONResponse(content=result, status_code=status_code)

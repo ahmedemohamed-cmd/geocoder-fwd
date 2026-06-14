@@ -5,6 +5,7 @@ GET requests are executed and summarised. Mutating POST requests
 (/feedback, /places, /insert) are SKIPPED by default so the test does not
 pollute the dataset; pass --include-post to run them too.
 """
+
 import argparse
 import json
 import re
@@ -88,7 +89,7 @@ def summarize(path, raw):
         extra = ""
         if d.get("address_detected") or p == "/address":
             pa = d.get("address_parsed") or d.get("parsed") or {}
-            extra = f" parsed={ {k:v for k,v in pa.items() if k!='raw' and v} }"
+            extra = f" parsed={ {k: v for k, v in pa.items() if k != 'raw' and v} }"
         interp = sum(1 for r in res if r.get("match_type") == "interpolated")
         ip = f" interp={interp}" if interp else ""
         return f"{len(res)} results, top='{name}'{ip}{extra}"
@@ -98,8 +99,10 @@ def summarize(path, raw):
         na = d.get("nearest_address")
         ia = d.get("interpolated_address")
         nl = d.get("nearest_line")
-        return (f"nearest_addr={'Y' if na else '-'} interp={'Y' if ia else '-'} "
-                f"nearest_line={'Y' if nl else '-'} polys={len(d.get('enclosing_polygons', []))}")
+        return (
+            f"nearest_addr={'Y' if na else '-'} interp={'Y' if ia else '-'} "
+            f"nearest_line={'Y' if nl else '-'} polys={len(d.get('enclosing_polygons', []))}"
+        )
     if p == "/health":
         ch = d.get("checks", {})
         return d.get("status") + " " + ",".join(f"{k}:{v.get('status')}" for k, v in ch.items())
@@ -107,7 +110,7 @@ def summarize(path, raw):
         return json.dumps(d)
     if p == "/describe":
         return "title=" + str(d.get("title") or d.get("name") or list(d)[:3])
-    return (json.dumps(d)[:80])
+    return json.dumps(d)[:80]
 
 
 def main():
@@ -138,7 +141,7 @@ def main():
             summary = summary.decode(errors="replace")
         print(f"{code:<7} {ms:>5}  {method} {path[:48]}\n            {summary}")
         npass += ok
-        nfail += (not ok)
+        nfail += not ok
     print("-" * 100)
     print(f"PASS={npass} FAIL={nfail} SKIP={nskip} TOTAL={len(reqs)}")
     return 1 if nfail else 0

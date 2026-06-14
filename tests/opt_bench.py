@@ -7,6 +7,7 @@ speed win and the ranking drift (recall risk) at the same time. Relative numbers
 are robust even while the box is busy (Valhalla build), because every variant is
 measured under the same conditions.
 """
+
 import json
 import statistics
 import sys
@@ -20,8 +21,9 @@ ES = s.ES
 
 
 def post(body):
-    req = urllib.request.Request(ES, data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        ES, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}
+    )
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read())
 
@@ -30,19 +32,60 @@ def post(body):
 def text_should(q):
     """The production non-address text should-clauses."""
     return [
-        {"multi_match": {"query": q, "fields": [
-            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
-            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
-            "type": "best_fields", "fuzziness": "AUTO"}},
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "fuzziness": 1, "prefix_length": 1, "boost": 10}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "phrase", "boost": 10}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "best_fields", "operator": "and", "boost": 15}},
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "operator": "and", "fuzziness": "AUTO",
-            "prefix_length": 1, "boost": 8}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": [
+                    "name^5",
+                    "name.autocomplete^2",
+                    "name_en^5",
+                    "name_en.autocomplete^2",
+                    "name_fr^5",
+                    "name_fr.autocomplete^2",
+                    "tags_text",
+                ],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "fuzziness": 1,
+                "prefix_length": 1,
+                "boost": 10,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "phrase",
+                "boost": 10,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "best_fields",
+                "operator": "and",
+                "boost": 15,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "operator": "and",
+                "fuzziness": "AUTO",
+                "prefix_length": 1,
+                "boost": 8,
+            }
+        },
     ]
 
 
@@ -50,86 +93,204 @@ def text_should_lean(q):
     """Cheaper recall: prefix_length 2, no fuzzy on edge-ngram/tags_text."""
     return [
         # non-fuzzy recall incl. autocomplete + tags_text (cheap)
-        {"multi_match": {"query": q, "fields": [
-            "name^5", "name.autocomplete^2", "name_en^5", "name_en.autocomplete^2",
-            "name_fr^5", "name_fr.autocomplete^2", "tags_text"],
-            "type": "best_fields"}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": [
+                    "name^5",
+                    "name.autocomplete^2",
+                    "name_en^5",
+                    "name_en.autocomplete^2",
+                    "name_fr^5",
+                    "name_fr.autocomplete^2",
+                    "tags_text",
+                ],
+                "type": "best_fields",
+            }
+        },
         # fuzzy only on the analyzed name fields, tighter automaton
-        {"multi_match": {"query": q, "fields": ["name^5", "name_en^5", "name_fr^5"],
-            "type": "best_fields", "fuzziness": "AUTO", "prefix_length": 2,
-            "max_expansions": 30, "boost": 4}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "phrase", "boost": 10}},
-        {"multi_match": {"query": q, "fields": ["name", "name_en", "name_fr"],
-            "type": "best_fields", "operator": "and", "boost": 15}},
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name^5", "name_en^5", "name_fr^5"],
+                "type": "best_fields",
+                "fuzziness": "AUTO",
+                "prefix_length": 2,
+                "max_expansions": 30,
+                "boost": 4,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "phrase",
+                "boost": 10,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q,
+                "fields": ["name", "name_en", "name_fr"],
+                "type": "best_fields",
+                "operator": "and",
+                "boost": 15,
+            }
+        },
     ]
 
 
 def funcs(with_geo=True):
     f = [
         {"weight": 1.0},
-        {"field_value_factor": {"field": "offline_rank", "modifier": "log1p",
-            "factor": 1, "missing": 0}, "weight": 1.5},
-        {"field_value_factor": {"field": "popularity", "modifier": "log1p",
-            "factor": 1, "missing": 0}, "weight": 1},
+        {
+            "field_value_factor": {
+                "field": "offline_rank",
+                "modifier": "log1p",
+                "factor": 1,
+                "missing": 0,
+            },
+            "weight": 1.5,
+        },
+        {
+            "field_value_factor": {
+                "field": "popularity",
+                "modifier": "log1p",
+                "factor": 1,
+                "missing": 0,
+            },
+            "weight": 1,
+        },
     ]
     if with_geo:
-        f.insert(2, {"gauss": {"centroid": {"origin": {"lat": CAIRO[0], "lon": CAIRO[1]},
-            "scale": "10km", "offset": "1km", "decay": 0.5}}, "weight": 2})
+        f.insert(
+            2,
+            {
+                "gauss": {
+                    "centroid": {
+                        "origin": {"lat": CAIRO[0], "lon": CAIRO[1]},
+                        "scale": "10km",
+                        "offset": "1km",
+                        "decay": 0.5,
+                    }
+                },
+                "weight": 2,
+            },
+        )
     return f
 
 
 def distance_feature():
     # Cheap proximity boost via BKD index (a query, not a per-doc function).
-    return {"distance_feature": {"field": "centroid",
-        "origin": [CAIRO[1], CAIRO[0]], "pivot": "10km", "boost": 8}}
+    return {
+        "distance_feature": {
+            "field": "centroid",
+            "origin": [CAIRO[1], CAIRO[0]],
+            "pivot": "10km",
+            "boost": 8,
+        }
+    }
 
 
 # ---- variants (each returns a full search body) ----------------------------
 def v0_baseline(q):
-    return {"size": 10, "query": {"function_score": {
-        "query": {"bool": {"should": text_should(q), "minimum_should_match": 1}},
-        "functions": funcs(), "score_mode": "sum", "boost_mode": "multiply"}}}
+    return {
+        "size": 10,
+        "query": {
+            "function_score": {
+                "query": {"bool": {"should": text_should(q), "minimum_should_match": 1}},
+                "functions": funcs(),
+                "score_mode": "sum",
+                "boost_mode": "multiply",
+            }
+        },
+    }
 
 
 def v1_no_total(q):
-    b = v0_baseline(q); b["track_total_hits"] = False; return b
+    b = v0_baseline(q)
+    b["track_total_hits"] = False
+    return b
 
 
 def v2_rescore(q):
     # phase1 = text only; phase2 = same multiply scoring over top-N
-    return {"size": 10, "track_total_hits": False,
+    return {
+        "size": 10,
+        "track_total_hits": False,
         "query": {"bool": {"should": text_should(q), "minimum_should_match": 1}},
-        "rescore": {"window_size": 200, "query": {
-            "rescore_query": {"function_score": {
-                "query": {"bool": {"should": text_should(q), "minimum_should_match": 1}},
-                "functions": funcs(), "score_mode": "sum", "boost_mode": "multiply"}},
-            "query_weight": 0, "rescore_query_weight": 1}}}
+        "rescore": {
+            "window_size": 200,
+            "query": {
+                "rescore_query": {
+                    "function_score": {
+                        "query": {"bool": {"should": text_should(q), "minimum_should_match": 1}},
+                        "functions": funcs(),
+                        "score_mode": "sum",
+                        "boost_mode": "multiply",
+                    }
+                },
+                "query_weight": 0,
+                "rescore_query_weight": 1,
+            },
+        },
+    }
 
 
 def v3_distance_feature(q):
     should = text_should(q) + [distance_feature()]
-    return {"size": 10, "track_total_hits": False, "query": {"function_score": {
-        "query": {"bool": {"should": should, "minimum_should_match": 1}},
-        "functions": funcs(with_geo=False), "score_mode": "sum", "boost_mode": "multiply"}}}
+    return {
+        "size": 10,
+        "track_total_hits": False,
+        "query": {
+            "function_score": {
+                "query": {"bool": {"should": should, "minimum_should_match": 1}},
+                "functions": funcs(with_geo=False),
+                "score_mode": "sum",
+                "boost_mode": "multiply",
+            }
+        },
+    }
 
 
 def v4_lean_fuzzy(q):
-    return {"size": 10, "track_total_hits": False, "query": {"function_score": {
-        "query": {"bool": {"should": text_should_lean(q), "minimum_should_match": 1}},
-        "functions": funcs(), "score_mode": "sum", "boost_mode": "multiply"}}}
+    return {
+        "size": 10,
+        "track_total_hits": False,
+        "query": {
+            "function_score": {
+                "query": {"bool": {"should": text_should_lean(q), "minimum_should_match": 1}},
+                "functions": funcs(),
+                "score_mode": "sum",
+                "boost_mode": "multiply",
+            }
+        },
+    }
 
 
 def v5_combo(q):
     # lean fuzzy + distance_feature + rescore the importance/pop over top-N
     should = text_should_lean(q) + [distance_feature()]
-    return {"size": 10, "track_total_hits": False,
+    return {
+        "size": 10,
+        "track_total_hits": False,
         "query": {"bool": {"should": should, "minimum_should_match": 1}},
-        "rescore": {"window_size": 200, "query": {
-            "rescore_query": {"function_score": {"query": {"match_all": {}},
-                "functions": funcs(with_geo=False), "score_mode": "sum",
-                "boost_mode": "multiply"}},
-            "query_weight": 1, "rescore_query_weight": 1}}}
+        "rescore": {
+            "window_size": 200,
+            "query": {
+                "rescore_query": {
+                    "function_score": {
+                        "query": {"match_all": {}},
+                        "functions": funcs(with_geo=False),
+                        "score_mode": "sum",
+                        "boost_mode": "multiply",
+                    }
+                },
+                "query_weight": 1,
+                "rescore_query_weight": 1,
+            },
+        },
+    }
 
 
 VARIANTS = [
@@ -172,8 +333,10 @@ def main():
         p50 = statistics.median(tooks)
         p90 = sorted(tooks)[int(0.9 * len(tooks))]
         ov = 100 * statistics.mean(overlaps) if overlaps else 0
-        print("| %s | %.0f | %.0f | %.1fx | %.0f%% |" % (
-            name, p50, p90, (b50 / p50 if p50 else 0), ov))
+        print(
+            "| %s | %.0f | %.0f | %.1fx | %.0f%% |"
+            % (name, p50, p90, (b50 / p50 if p50 else 0), ov)
+        )
 
 
 if __name__ == "__main__":

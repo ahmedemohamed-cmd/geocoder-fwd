@@ -30,14 +30,25 @@ import random
 import time as _time
 
 import nats.errors
-from elasticsearch import AsyncElasticsearch, ApiError
-from elasticsearch.helpers import async_bulk
 from elastic_transport import ConnectionTimeout
+from elasticsearch import ApiError, AsyncElasticsearch
+from elasticsearch.helpers import async_bulk
 
-from shared.config import ELASTICSEARCH_URL, EMBEDDING_DIM, ENABLE_VECTORS, BATCH_SIZE, MAX_CONCURRENT_BATCHES
-from shared.nats_client import connect, subscribe, is_transient_error, is_connection_error, reconnect
-from shared.ranking import compute_offline_rank
 from shared.centroid import centroid_latlon
+from shared.config import (
+    BATCH_SIZE,
+    ELASTICSEARCH_URL,
+    ENABLE_VECTORS,
+    MAX_CONCURRENT_BATCHES,
+)
+from shared.nats_client import (
+    connect,
+    is_connection_error,
+    is_transient_error,
+    reconnect,
+    subscribe,
+)
+from shared.ranking import compute_offline_rank
 
 # ---------------------------------------------------------------------------
 # Geometry simplification — prevent Lucene Tessellator from choking on
@@ -146,9 +157,15 @@ def simplify_geometry(geom):
     return geom
 
 
-from shared.address import extract_address_components, build_full_address, has_address, normalize_address_text
-
+from shared.address import (
+    build_full_address,
+    extract_address_components,
+    normalize_address_text,
+)
 from shared.es_mapping import MAPPING
+from shared.logging import get_logger
+
+logger = get_logger("es-inserter")
 
 INDEX = "osm_places"
 
@@ -183,26 +200,28 @@ if (ctx._source.popularity == null) { ctx._source.popularity = 0.0; }
 async def ensure_index(es: AsyncElasticsearch):
     max_retries = 5
     retry_delay = 3
-    
+
     for attempt in range(max_retries):
         try:
             if not await es.indices.exists(index=INDEX):
                 await es.indices.create(index=INDEX, **MAPPING)
-                print(f"[es-inserter] Created index {INDEX}", flush=True)
+                logger.info(f"[es-inserter] Created index {INDEX}")
             else:
-                print(f"[es-inserter] Index {INDEX} already exists", flush=True)
+                logger.info(f"[es-inserter] Index {INDEX} already exists")
             return
         except Exception as e:
-            print(f"[es-inserter] Error checking/creating ES index (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+            logger.error(
+                f"[es-inserter] Error checking/creating ES index (attempt {attempt + 1}/{max_retries}): {e}",
+            )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
             else:
                 # Final attempt - try to create anyway
                 try:
                     await es.indices.create(index=INDEX, **MAPPING)
-                    print(f"[es-inserter] Created ES index {INDEX} (fallback)", flush=True)
+                    logger.info(f"[es-inserter] Created ES index {INDEX} (fallback)")
                 except Exception as e2:
-                    print(f"[es-inserter] Failed to create ES index: {e2}", flush=True)
+                    logger.error(f"[es-inserter] Failed to create ES index: {e2}")
                     # If index already exists, that's fine
                     if "resource_already_exists" not in str(e2).lower():
                         raise
@@ -246,9 +265,9 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
         label = "NORMAL"
     try:
         await es.indices.put_settings(index=INDEX, settings={"index": settings})
-        print(f"[es-inserter] Index mode set to {label}", flush=True)
+        logger.info(f"[es-inserter] Index mode set to {label}")
     except Exception as e:
-        print(f"[es-inserter] Warning: could not set {label} mode: {e}", flush=True)
+        logger.warning(f"[es-inserter] Warning: could not set {label} mode: {e}")
 
     # When leaving bulk mode, kick off a background force-merge if needed
     if not enabled:
@@ -256,53 +275,59 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
             stats = await es.indices.stats(index=INDEX, metric="segments")
             seg_count = stats["indices"][INDEX]["primaries"]["segments"]["count"]
             if seg_count > 10:
-                print(f"[es-inserter] {seg_count} segments detected, starting background force-merge to 5", flush=True)
+                logger.info(
+                    f"[es-inserter] {seg_count} segments detected, starting background force-merge to 5",
+                )
                 await es.indices.forcemerge(
-                    index=INDEX, max_num_segments=5,
-                    wait_for_completion=False, flush=True,
+                    index=INDEX,
+                    max_num_segments=5,
+                    wait_for_completion=False,
+                    flush=True,
                 )
         except Exception as e:
-            print(f"[es-inserter] Warning: force-merge request failed: {e}", flush=True)
+            logger.error(f"[es-inserter] Warning: force-merge request failed: {e}")
 
 
 async def run():
-    import time as _time
 
     # Retry logic for connecting to Elasticsearch
     max_retries = 10
     retry_delay = 2
-    
+
     es = None
     for attempt in range(max_retries):
         try:
             es = AsyncElasticsearch(ELASTICSEARCH_URL, request_timeout=60)
             # Test ES connection
             await es.ping()
-            print(f"[es-inserter] Successfully connected to Elasticsearch", flush=True)
+            logger.info("[es-inserter] Successfully connected to Elasticsearch")
             break
         except Exception as e:
-            print(f"[es-inserter] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}", flush=True)
+            logger.error(
+                f"[es-inserter] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}",
+            )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
             else:
                 raise
-    
+
     if es is None:
         raise Exception("Failed to connect to Elasticsearch after maximum retries")
-    
+
     await ensure_index(es)
     await set_bulk_mode(es, enabled=True)
 
     # Pre-load embedding model before starting workers to avoid concurrent download conflicts
     if ENABLE_VECTORS:
-        print("[es-inserter] Pre-loading embedding model...", flush=True)
+        logger.info("[es-inserter] Pre-loading embedding model...")
         from shared.embeddings import get_model
+
         get_model()  # Force model download/load
-        print("[es-inserter] Embedding model loaded", flush=True)
+        logger.info("[es-inserter] Embedding model loaded")
 
     nc, js = await connect()
     sub = await subscribe(js, "es-consumer")
-    print("[es-inserter] Subscription created, listening for messages ...", flush=True)
+    logger.info("[es-inserter] Subscription created, listening for messages ...")
 
     # Use mutable containers for connection objects so workers can update them
     conn_state = {"nc": nc, "js": js, "sub": sub}
@@ -316,8 +341,8 @@ async def run():
     # and cleanly separates I/O (fetch/ack) from CPU-bound work (embed).
     work_queue: asyncio.Queue[list] = asyncio.Queue(maxsize=MAX_CONCURRENT_BATCHES * 2)
 
-    in_bulk_mode = True       # tracks whether we've applied bulk settings
-    consecutive_empty = 0     # number of consecutive empty fetches
+    in_bulk_mode = True  # tracks whether we've applied bulk settings
+    consecutive_empty = 0  # number of consecutive empty fetches
 
     async def fetcher():
         """Single fetcher that pulls batches from NATS into the work queue."""
@@ -329,7 +354,7 @@ async def run():
                 try:
                     msgs = await conn_state["sub"].fetch(batch=BATCH_SIZE, timeout=30)
                     break
-                except (nats.errors.TimeoutError, asyncio.TimeoutError):
+                except (TimeoutError, nats.errors.TimeoutError):
                     # Bare asyncio.TimeoutError (str == '') is raised by nats-py's
                     # fetch() internals on some no-message paths and slips past a
                     # nats.errors.TimeoutError-only catch — treat both as empty.
@@ -338,23 +363,29 @@ async def run():
                 except Exception as e:
                     is_conn_err = is_connection_error(e)
                     is_transient = is_transient_error(e)
-                    print(f"[es-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {type(e).__name__}: {e} (transient: {is_transient}, conn: {is_conn_err})", flush=True)
+                    logger.error(
+                        f"[es-inserter] Fetcher: error (attempt {fetch_attempt + 1}/{max_fetch_retries}): {type(e).__name__}: {e} (transient: {is_transient}, conn: {is_conn_err})",
+                    )
 
                     if is_conn_err:
                         async with reconnect_lock:
                             try:
                                 if conn_state["nc"].is_closed:
-                                    print("[es-inserter] Fetcher: Reconnecting...", flush=True)
-                                    conn_state["nc"], conn_state["js"] = await reconnect(conn_state["nc"], conn_state["js"])
+                                    logger.warning("[es-inserter] Fetcher: Reconnecting...")
+                                    conn_state["nc"], conn_state["js"] = await reconnect(
+                                        conn_state["nc"], conn_state["js"]
+                                    )
                                 conn_state["sub"] = await subscribe(conn_state["js"], "es-consumer")
-                                print("[es-inserter] Fetcher: Reconnected / resubscribed", flush=True)
+                                logger.info("[es-inserter] Fetcher: Reconnected / resubscribed")
                             except Exception as reconnect_err:
-                                print(f"[es-inserter] Fetcher: Reconnection failed: {reconnect_err}", flush=True)
+                                logger.error(
+                                    f"[es-inserter] Fetcher: Reconnection failed: {reconnect_err}",
+                                )
                                 await asyncio.sleep(5)
                                 continue
                         break
                     elif is_transient and fetch_attempt < max_fetch_retries - 1:
-                        delay = min(1 * (2 ** fetch_attempt), 10)
+                        delay = min(1 * (2**fetch_attempt), 10)
                         await asyncio.sleep(delay)
                     else:
                         await asyncio.sleep(1)
@@ -379,7 +410,7 @@ async def run():
 
     async def worker(worker_id: int):
         """Worker that processes batches from the queue and indexes into ES."""
-        from shared.embeddings import embed_texts, build_text
+        from shared.embeddings import build_text, embed_texts
 
         while True:
             msgs = await work_queue.get()
@@ -403,14 +434,14 @@ async def run():
             # compute vectors only when ENABLE_VECTORS is on
             vectors: list[list[float] | None] = [None] * len(elements)
             if ENABLE_VECTORS and non_empty:
-                indices, batch_texts = zip(*non_empty)
+                indices, batch_texts = zip(*non_empty, strict=False)
                 batch_vecs = embed_texts(list(batch_texts))
-                for idx, vec in zip(indices, batch_vecs):
+                for idx, vec in zip(indices, batch_vecs, strict=False):
                     vectors[idx] = vec
 
             # prepare bulk actions
             actions = []
-            for elem, txt, vec in zip(elements, texts, vectors):
+            for elem, txt, vec in zip(elements, texts, vectors, strict=False):
                 tags = elem["tags"]
                 admin_level = elem.get("admin_level")  # None when tag is absent
                 area_km2 = elem.get("area_km2", 0.0)
@@ -436,12 +467,12 @@ async def run():
                     "has_address": bool(full_addr),
                     "full_address": full_addr,
                     "addr_housenumber": addr.get("housenumber", ""),
-                    "addr_street":      addr.get("street", ""),
-                    "addr_city":        addr.get("city", ""),
-                    "addr_postcode":    addr.get("postcode", ""),
-                    "addr_country":     addr.get("country", ""),
-                    "addr_suburb":      addr.get("suburb", ""),
-                    "addr_state":       addr.get("state", ""),
+                    "addr_street": addr.get("street", ""),
+                    "addr_city": addr.get("city", ""),
+                    "addr_postcode": addr.get("postcode", ""),
+                    "addr_country": addr.get("country", ""),
+                    "addr_suburb": addr.get("suburb", ""),
+                    "addr_state": addr.get("state", ""),
                 }
                 if elem.get("geom"):
                     simplified_geom = simplify_geometry(elem["geom"])
@@ -461,7 +492,8 @@ async def run():
                 # self-contained, so they keep the faster doc-overwrite path.
                 if tags.get("source") == "google":
                     scalar_fields = {
-                        k: v for k, v in fields.items()
+                        k: v
+                        for k, v in fields.items()
                         if k not in ("tags", "tags_text", "name", "name_en", "name_fr")
                     }
                     doc = {
@@ -495,24 +527,32 @@ async def run():
                 try:
                     _, errors = await async_bulk(es, actions, raise_on_error=False)
                     if errors:
-                        print(f"[es-inserter] Worker {worker_id}: {len(errors)} docs rejected by ES (non-transient)", flush=True)
+                        logger.error(
+                            f"[es-inserter] Worker {worker_id}: {len(errors)} docs rejected by ES (non-transient)",
+                        )
                         for err in errors[:3]:
-                            print(f"[es-inserter] Worker {worker_id}: Doc error: {err}", flush=True)
+                            logger.error(f"[es-inserter] Worker {worker_id}: Doc error: {err}")
                     break
                 except ApiError as e:
                     if e.status_code == 429 and bulk_attempt < max_bulk_retries - 1:
                         delay = min(2 ** (bulk_attempt + 1), 15) + random.uniform(0, 3)
-                        print(f"[es-inserter] Worker {worker_id}: ES overloaded (429), backing off {delay:.1f}s (attempt {bulk_attempt + 1}/{max_bulk_retries})", flush=True)
+                        logger.info(
+                            f"[es-inserter] Worker {worker_id}: ES overloaded (429), backing off {delay:.1f}s (attempt {bulk_attempt + 1}/{max_bulk_retries})",
+                        )
                         await asyncio.sleep(delay)
                     else:
                         raise
                 except (ConnectionTimeout, ConnectionError, OSError) as e:
                     if bulk_attempt < max_bulk_retries - 1:
-                        delay = min(2 ** bulk_attempt, 15) + random.uniform(0, 3)
-                        print(f"[es-inserter] Worker {worker_id}: Bulk index failed ({type(e).__name__}), retrying in {delay:.1f}s (attempt {bulk_attempt + 1}/{max_bulk_retries})", flush=True)
+                        delay = min(2**bulk_attempt, 15) + random.uniform(0, 3)
+                        logger.error(
+                            f"[es-inserter] Worker {worker_id}: Bulk index failed ({type(e).__name__}), retrying in {delay:.1f}s (attempt {bulk_attempt + 1}/{max_bulk_retries})",
+                        )
                         await asyncio.sleep(delay)
                     else:
-                        print(f"[es-inserter] Worker {worker_id}: Bulk index failed after {max_bulk_retries} attempts: {e}", flush=True)
+                        logger.error(
+                            f"[es-inserter] Worker {worker_id}: Bulk index failed after {max_bulk_retries} attempts: {e}",
+                        )
                         raise
 
             # Ack messages only after successful indexing
@@ -521,14 +561,18 @@ async def run():
 
             elapsed = _time.monotonic() - batch_start
             throughput = len(actions) / elapsed if elapsed > 0 else 0
-            print(f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs in {elapsed:.2f}s ({throughput:.0f} docs/s)", flush=True)
+            logger.info(
+                f"[es-inserter] Worker {worker_id}: Indexed {len(actions)} docs in {elapsed:.2f}s ({throughput:.0f} docs/s)",
+            )
             work_queue.task_done()
 
     # Spawn one fetcher + multiple processing workers
     tasks = [asyncio.create_task(fetcher())]
     tasks += [asyncio.create_task(worker(i)) for i in range(MAX_CONCURRENT_BATCHES)]
-    print(f"[es-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)", flush=True)
-    
+    logger.info(
+        f"[es-inserter] Started 1 fetcher + {MAX_CONCURRENT_BATCHES} processing workers (pipeline parallel)",
+    )
+
     # Wait for all tasks (they run indefinitely)
     await asyncio.gather(*tasks)
 

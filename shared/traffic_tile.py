@@ -52,11 +52,11 @@ _LEVEL_BITS = 3
 _TILEID_BITS = 22
 _INDEX_BITS = 25
 
-_LEVEL_MASK = (1 << _LEVEL_BITS) - 1            # 0x7
-_TILEID_MASK = (1 << _TILEID_BITS) - 1          # 0x3FFFFF
-_INDEX_MASK = (1 << _INDEX_BITS) - 1            # 0x1FFFFF
+_LEVEL_MASK = (1 << _LEVEL_BITS) - 1  # 0x7
+_TILEID_MASK = (1 << _TILEID_BITS) - 1  # 0x3FFFFF
+_INDEX_MASK = (1 << _INDEX_BITS) - 1  # 0x1FFFFF
 # Mask that keeps level+tileid and zeroes the edge index -> the tile's base id.
-_TILE_BASE_MASK = (1 << (_LEVEL_BITS + _TILEID_BITS)) - 1   # 0x1FFFFFF
+_TILE_BASE_MASK = (1 << (_LEVEL_BITS + _TILEID_BITS)) - 1  # 0x1FFFFFF
 
 
 def decode_graphid(value: int) -> tuple[int, int, int]:
@@ -101,12 +101,12 @@ _SPEED_FIELDS = (
     ("spare", 1),
 )
 
-UNKNOWN_SPEED_RAW = 127           # 7-bit sentinel: "no live speed for this edge"
-MAX_SPEED_RAW = 126               # 126 * 2 = 252 kph, the max representable speed
+UNKNOWN_SPEED_RAW = 127  # 7-bit sentinel: "no live speed for this edge"
+MAX_SPEED_RAW = 126  # 126 * 2 = 252 kph, the max representable speed
 MAX_SPEED_KPH = MAX_SPEED_RAW * 2
-SPEED_RECORD_SIZE = 8             # bytes per TrafficSpeed
-HEADER_SIZE = 32                  # bytes per TrafficTileHeader
-_HEADER_FMT = "<QQIIII"           # tile_id, last_update, edge_count, version, spare2, spare3
+SPEED_RECORD_SIZE = 8  # bytes per TrafficSpeed
+HEADER_SIZE = 32  # bytes per TrafficTileHeader
+_HEADER_FMT = "<QQIIII"  # tile_id, last_update, edge_count, version, spare2, spare3
 
 assert sum(b for _, b in _SPEED_FIELDS) == 64
 assert struct.calcsize(_HEADER_FMT) == HEADER_SIZE

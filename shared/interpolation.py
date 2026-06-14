@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class InterpolatedAddress:
     """Result of an address interpolation."""
+
     housenumber: str
     street: str
     city: str
@@ -35,11 +36,11 @@ class InterpolatedAddress:
     country: str
     lat: float
     lon: float
-    match_type: str          # "exact" | "interpolated"
-    confidence: float        # 0.0 – 1.0
-    side: str                # "odd" | "even" | "unknown"
+    match_type: str  # "exact" | "interpolated"
+    confidence: float  # 0.0 – 1.0
+    side: str  # "odd" | "even" | "unknown"
     bracket_low: str | None  # e.g. "10"
-    bracket_high: str | None # e.g. "20"
+    bracket_high: str | None  # e.g. "20"
     osm_id: str | None = None  # real osm_id for an "exact" hit; None when synthesised
 
 
@@ -86,6 +87,7 @@ def _interpolation_confidence(gap: int) -> float:
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in metres between two lat/lon points."""
     import math
+
     r = 6371000.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp = math.radians(lat2 - lat1)
@@ -112,8 +114,7 @@ def _nearest_cluster(
     )
     alat, alon = anchor[1]["lat"], anchor[1]["lon"]
     clustered = [
-        hr for hr in parsed
-        if _haversine_m(alat, alon, hr[1]["lat"], hr[1]["lon"]) <= cluster_m
+        hr for hr in parsed if _haversine_m(alat, alon, hr[1]["lat"], hr[1]["lon"]) <= cluster_m
     ]
     return clustered or parsed
 
@@ -142,7 +143,7 @@ def _project_onto_line(
 
     # Pre-compute cumulative segment lengths
     for i in range(len(line_coords) - 1):
-        x1, y1 = line_coords[i]      # lon, lat (GeoJSON order)
+        x1, y1 = line_coords[i]  # lon, lat (GeoJSON order)
         x2, y2 = line_coords[i + 1]
         seg_len = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
         total_len += seg_len
@@ -166,7 +167,7 @@ def _project_onto_line(
         if dist_sq < best_dist_sq:
             best_dist_sq = dist_sq
             best_proj = (py, px)  # (lat, lon)
-            seg_len = ((dx ** 2 + dy ** 2) ** 0.5)
+            seg_len = (dx**2 + dy**2) ** 0.5
             best_frac = (seg_starts[i] + t * seg_len) / total_len
 
     return best_proj[0], best_proj[1], best_frac
@@ -307,8 +308,10 @@ async def interpolate_address(
         else:
             t = (requested_hn - low_hn) / gap
         est_lat, est_lon = _lerp(
-            low_row["lat"], low_row["lon"],
-            high_row["lat"], high_row["lon"],
+            low_row["lat"],
+            low_row["lon"],
+            high_row["lat"],
+            high_row["lon"],
             t,
         )
         confidence = _interpolation_confidence(gap)
@@ -329,12 +332,8 @@ async def interpolate_address(
         try:
             coords = street_geom["coordinates"]
             # Project both bracket addresses onto the street line
-            _, _, frac_low = _project_onto_line(
-                low_row["lat"], low_row["lon"], coords
-            )
-            _, _, frac_high = _project_onto_line(
-                high_row["lat"], high_row["lon"], coords
-            )
+            _, _, frac_low = _project_onto_line(low_row["lat"], low_row["lon"], coords)
+            _, _, frac_high = _project_onto_line(high_row["lat"], high_row["lon"], coords)
             # Interpolate the fraction along the street
             if gap > 0:
                 frac_est = frac_low + (requested_hn - low_hn) / gap * (frac_high - frac_low)
@@ -363,9 +362,7 @@ async def interpolate_address(
     )
 
 
-def _point_at_fraction(
-    coords: list[list[float]], frac: float
-) -> tuple[float, float]:
+def _point_at_fraction(coords: list[list[float]], frac: float) -> tuple[float, float]:
     """Return the (lat, lon) at a given normalised fraction along a polyline."""
     frac = max(0.0, min(1.0, frac))
 
@@ -462,9 +459,7 @@ async def reverse_interpolate(
         return None
 
     # Project all three points onto the street
-    street_geom = await _find_street_geometry(
-        pg_pool, a_row["street"], lat, lon
-    )
+    street_geom = await _find_street_geometry(pg_pool, a_row["street"], lat, lon)
 
     if street_geom:
         coords = street_geom["coordinates"]
@@ -555,10 +550,7 @@ async def _gather_addresses(
         lat, lon = near
         params.append(f"POINT({lon} {lat})")
         params.append(radius_m)
-        query += (
-            " AND ST_DWithin(geom::geography,"
-            " ST_GeomFromText($2, 4326)::geography, $3)"
-        )
+        query += " AND ST_DWithin(geom::geography, ST_GeomFromText($2, 4326)::geography, $3)"
     elif city:
         params.append(city)
         query += " AND lower(city) = lower($2)"
@@ -572,9 +564,7 @@ async def _gather_addresses(
         return []
 
 
-async def _find_street_geometry(
-    pg_pool, street: str, lat: float, lon: float
-) -> dict | None:
+async def _find_street_geometry(pg_pool, street: str, lat: float, lon: float) -> dict | None:
     """Find the closest street LineString geometry matching the name.
 
     Searches ``osm_geometries`` joined with Elasticsearch-indexed name data.

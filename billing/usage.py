@@ -11,28 +11,28 @@ Two planes of usage state:
   batches into ``usage_rollups``. In production this buffer is NATS/JetStream
   for at-least-once delivery; the list keeps the build self-contained.
 """
+
 from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from redis.exceptions import WatchError
 
-from . import config, repo
+from . import config
 
 
 def now_parts(ts: datetime | None = None) -> tuple[str, str]:
     """Return (period 'YYYY-MM', day 'YYYY-MM-DD') in UTC."""
-    ts = ts or datetime.now(timezone.utc)
+    ts = ts or datetime.now(UTC)
     return ts.strftime("%Y-%m"), ts.strftime("%Y-%m-%d")
 
 
 # ── key cache (shared across replicas) ───────────────────────────────────────
 async def cache_key(redis, key_hash: str, payload: dict[str, Any]) -> None:
-    await redis.set(config.KEYCACHE_PREFIX + key_hash, json.dumps(payload),
-                    ex=config.KEYCACHE_TTL)
+    await redis.set(config.KEYCACHE_PREFIX + key_hash, json.dumps(payload), ex=config.KEYCACHE_TTL)
 
 
 async def get_cached_key(redis, key_hash: str) -> dict | None:
@@ -61,8 +61,7 @@ async def incr_tenant(redis, tenant_id: str, period: str) -> int:
     return int(await redis.incr(_tkey(tenant_id, period)))
 
 
-async def incr_tenant_if_allowed(redis, tenant_id: str, period: str,
-                                 cap: int) -> int | None:
+async def incr_tenant_if_allowed(redis, tenant_id: str, period: str, cap: int) -> int | None:
     """Atomically bump the tenant counter unless it would exceed ``cap``.
 
     Returns the new count if allowed, or ``None`` when already at/over the cap
@@ -110,10 +109,13 @@ async def get_key_live(redis, key_id: str, period: str) -> int:
 
 
 # ── durable event buffer ─────────────────────────────────────────────────────
-async def push_event(redis, *, tenant_id: str, key_id: str, endpoint: str,
-                     period: str, day: str) -> None:
-    await redis.rpush(config.USAGE_EVENTS_LIST, json.dumps(
-        {"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day}))
+async def push_event(
+    redis, *, tenant_id: str, key_id: str, endpoint: str, period: str, day: str
+) -> None:
+    await redis.rpush(
+        config.USAGE_EVENTS_LIST,
+        json.dumps({"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day}),
+    )
 
 
 async def record(redis, *, tenant_id: str, key_id: str, endpoint: str) -> None:
@@ -125,8 +127,9 @@ async def record(redis, *, tenant_id: str, key_id: str, endpoint: str) -> None:
     period, day = now_parts()
     await incr_tenant(redis, tenant_id, period)
     await incr_key(redis, key_id, period)
-    await push_event(redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint,
-                     period=period, day=day)
+    await push_event(
+        redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint, period=period, day=day
+    )
 
 
 async def flush_events(pool, redis, *, batch: int = 1000) -> int:
@@ -155,6 +158,11 @@ async def flush_events(pool, redis, *, batch: int = 1000) -> int:
                        VALUES ($1,$2,$3,$4,$5,$6)
                        ON CONFLICT (tenant_id, key_id, day, endpoint)
                        DO UPDATE SET count = usage_rollups.count + EXCLUDED.count""",
-                    tenant_id, key_id, period, date.fromisoformat(day), endpoint, n,
+                    tenant_id,
+                    key_id,
+                    period,
+                    date.fromisoformat(day),
+                    endpoint,
+                    n,
                 )
     return len(events)

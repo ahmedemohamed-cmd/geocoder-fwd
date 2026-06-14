@@ -86,6 +86,7 @@ def encode_geohash(lat: float, lon: float, precision: int = 4) -> str:
 
 # ── score computation ────────────────────────────────────────────────────
 
+
 def compute_score(offline_rank: float, popularity: float) -> float:
     """Compute the sorted-set score for a suggestion.
 
@@ -95,6 +96,7 @@ def compute_score(offline_rank: float, popularity: float) -> float:
 
 
 # ── prefix extraction ───────────────────────────────────────────────────
+
 
 def _normalise(text: str) -> str:
     """Lowercase + strip for consistent prefix keys."""
@@ -113,6 +115,7 @@ def _prefixes(text: str) -> list[str]:
 
 
 # ── suggestion dict ──────────────────────────────────────────────────────
+
 
 def _build_suggestion(doc: dict[str, Any]) -> dict[str, Any]:
     """Build the compact JSON blob stored as the sorted-set member."""
@@ -135,6 +138,7 @@ def _build_suggestion(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── index operations ────────────────────────────────────────────────────
+
 
 async def index_entry(
     r: aioredis.Redis,
@@ -198,13 +202,17 @@ async def index_entry(
     p = pipeline or r.pipeline(transaction=False)
 
     # Store metadata for score updates (offline_rank needed to recompute score from new popularity)
-    meta = json.dumps({
-        "member": member,
-        "score": score,
-        "offline_rank": offline_rank,
-        "prefixes": list(all_prefixes),
-        "geohash": geohash,
-    }, ensure_ascii=False, separators=(",", ":"))
+    meta = json.dumps(
+        {
+            "member": member,
+            "score": score,
+            "offline_rank": offline_rank,
+            "prefixes": list(all_prefixes),
+            "geohash": geohash,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     p.set(f"ac:meta:{osm_id}", meta)
 
     for prefix in all_prefixes:
@@ -242,9 +250,6 @@ async def update_score(
     old_score = meta["score"]
     prefixes = meta["prefixes"]
     geohash = meta.get("geohash")
-
-    # Parse current suggestion to get offline_rank
-    suggestion = json.loads(member)
 
     # We don't store offline_rank in the suggestion, so back-derive it
     # from the old score: score = offline_rank * 10 + log1p(pop) * 5
@@ -367,9 +372,18 @@ async def warm_from_es(
         # (the warm-up would index 0 docs and autocomplete falls back to ES).
         "sort": [{"offline_rank": "desc"}, {"popularity": "desc"}, {"osm_id": "asc"}],
         "_source": [
-            "osm_id", "name", "name_en", "name_fr", "centroid",
-            "admin_level", "offline_rank", "popularity",
-            "full_address", "addr_street", "addr_city", "addr_country",
+            "osm_id",
+            "name",
+            "name_en",
+            "name_fr",
+            "centroid",
+            "admin_level",
+            "offline_rank",
+            "popularity",
+            "full_address",
+            "addr_street",
+            "addr_city",
+            "addr_country",
         ],
     }
 

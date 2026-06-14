@@ -37,7 +37,7 @@ def test_graphid_roundtrip():
 
 
 def test_tile_base_id_zeroes_edge_index():
-    value = 257032954354                       # level 2, tile 750654, edge 7660
+    value = 257032954354  # level 2, tile 750654, edge 7660
     base = tt.tile_base_id(value)
     assert tt.decode_graphid(base) == (2, 750654, 0)
     # Two edges in the same tile share a base id.

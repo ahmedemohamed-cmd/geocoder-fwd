@@ -36,13 +36,15 @@ import asyncio
 import glob
 import json
 import os
-import time
 import zipfile
 
-from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
+from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
+from shared.logging import get_logger
+from shared.processed import is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
-from shared.processed import load_processed, is_processed, record_processed
+
+logger = get_logger("gn-watcher")
 
 BATCH_PUBLISH = 50
 MAX_RETRIES = 10
@@ -76,62 +78,62 @@ NUM_COLUMNS = 19
 # GeoNames feature_class → OSM place type (for ranking)
 _FEATURE_CODE_TO_PLACE: dict[str, str] = {
     # P — populated places
-    "PPLC": "city",           # capital of a political entity
-    "PPLA": "city",           # seat of first-order admin div
-    "PPLA2": "city",          # seat of second-order admin div
-    "PPLA3": "town",          # seat of third-order admin div
-    "PPLA4": "town",          # seat of fourth-order admin div
+    "PPLC": "city",  # capital of a political entity
+    "PPLA": "city",  # seat of first-order admin div
+    "PPLA2": "city",  # seat of second-order admin div
+    "PPLA3": "town",  # seat of third-order admin div
+    "PPLA4": "town",  # seat of fourth-order admin div
     "PPLA5": "town",
-    "PPL": "village",         # populated place
-    "PPLS": "village",        # populated places
+    "PPL": "village",  # populated place
+    "PPLS": "village",  # populated places
     "PPLX": "neighbourhood",  # section of populated place
-    "PPLF": "hamlet",         # farm village
-    "PPLL": "hamlet",         # populated locality
-    "PPLQ": "hamlet",         # abandoned populated place
-    "PPLR": "hamlet",         # religious populated place
-    "PPLW": "hamlet",         # destroyed populated place
+    "PPLF": "hamlet",  # farm village
+    "PPLL": "hamlet",  # populated locality
+    "PPLQ": "hamlet",  # abandoned populated place
+    "PPLR": "hamlet",  # religious populated place
+    "PPLW": "hamlet",  # destroyed populated place
     # A — administrative (place tag for ranking)
-    "PCLI": "country",        # independent political entity
-    "PCLD": "country",        # dependent political entity
-    "PCLF": "country",        # freely associated state
-    "PCLS": "country",        # semi-independent political entity
-    "ADM1": "state",          # first-order admin division
+    "PCLI": "country",  # independent political entity
+    "PCLD": "country",  # dependent political entity
+    "PCLF": "country",  # freely associated state
+    "PCLS": "country",  # semi-independent political entity
+    "ADM1": "state",  # first-order admin division
     "ADM1H": "state",
-    "ADM2": "region",         # second-order admin division
+    "ADM2": "region",  # second-order admin division
     "ADM2H": "region",
 }
 
 # Feature_class → broad OSM-compatible tag key
 _FEATURE_CLASS_TAGS: dict[str, dict[str, str]] = {
     "A": {"boundary": "administrative"},  # admin boundary
-    "H": {"natural": "water"},            # hydrographic
-    "L": {"landuse": "area"},             # area / park
-    "P": {},                              # populated place (handled via place tag)
-    "R": {"highway": "road"},             # road / railroad
-    "S": {"building": "yes"},             # spot / building / farm
-    "T": {"natural": "peak"},             # hypsographic (mountain, hill)
-    "U": {"natural": "water"},            # undersea
-    "V": {"natural": "wood"},             # vegetation
+    "H": {"natural": "water"},  # hydrographic
+    "L": {"landuse": "area"},  # area / park
+    "P": {},  # populated place (handled via place tag)
+    "R": {"highway": "road"},  # road / railroad
+    "S": {"building": "yes"},  # spot / building / farm
+    "T": {"natural": "peak"},  # hypsographic (mountain, hill)
+    "U": {"natural": "water"},  # undersea
+    "V": {"natural": "wood"},  # vegetation
 }
 
 # Feature_code → admin_level mapping for administrative boundaries
 _FEATURE_CODE_ADMIN_LEVEL: dict[str, int] = {
-    "PCLI": 2,   # independent political entity (country)
-    "PCLD": 2,   # dependent political entity
-    "PCLF": 2,   # freely associated state
-    "PCLS": 2,   # semi-independent political entity
-    "PCLH": 2,   # historical political entity
-    "ADM1": 4,   # first-order admin division (state/province)
+    "PCLI": 2,  # independent political entity (country)
+    "PCLD": 2,  # dependent political entity
+    "PCLF": 2,  # freely associated state
+    "PCLS": 2,  # semi-independent political entity
+    "PCLH": 2,  # historical political entity
+    "ADM1": 4,  # first-order admin division (state/province)
     "ADM1H": 4,
-    "ADM2": 6,   # second-order (county/district)
+    "ADM2": 6,  # second-order (county/district)
     "ADM2H": 6,
-    "ADM3": 7,   # third-order (municipality)
+    "ADM3": 7,  # third-order (municipality)
     "ADM3H": 7,
-    "ADM4": 8,   # fourth-order
+    "ADM4": 8,  # fourth-order
     "ADM4H": 8,
-    "ADM5": 9,   # fifth-order
+    "ADM5": 9,  # fifth-order
     "ADM5H": 9,
-    "ADMD": 6,   # administrative division
+    "ADMD": 6,  # administrative division
     "ADMDH": 6,
 }
 
@@ -139,6 +141,7 @@ _FEATURE_CODE_ADMIN_LEVEL: dict[str, int] = {
 # ---------------------------------------------------------------------------
 # Row parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_geonames_row(fields: list[str]) -> dict | None:
     """Convert one tab-separated GeoNames row to a NATS message dict.
@@ -156,8 +159,6 @@ def _parse_geonames_row(fields: list[str]) -> dict | None:
     feature_class = fields[COL_FEATURE_CLASS].strip()
     feature_code = fields[COL_FEATURE_CODE].strip()
     country_code = fields[COL_COUNTRY_CODE].strip()
-    admin1 = fields[COL_ADMIN1].strip()
-    admin2 = fields[COL_ADMIN2].strip()
     population_raw = fields[COL_POPULATION].strip()
     alternatenames = fields[COL_ALTERNATENAMES].strip()
     timezone = fields[COL_TIMEZONE].strip()
@@ -245,9 +246,10 @@ def _parse_geonames_row(fields: list[str]) -> dict | None:
 # File-level processing
 # ---------------------------------------------------------------------------
 
+
 def _count_lines(filepath: str) -> int:
     """Quick line count for progress tracking."""
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         return sum(1 for _ in f)
 
 
@@ -257,21 +259,21 @@ def _extract_zips(data_dir: str):
         extract_marker = f"{zpath}.extracted"
         if os.path.exists(extract_marker):
             continue
-        print(f"[gn-watcher] Extracting {os.path.basename(zpath)} ...", flush=True)
+        logger.info(f"[gn-watcher] Extracting {os.path.basename(zpath)} ...")
         try:
             with zipfile.ZipFile(zpath, "r") as zf:
                 zf.extractall(data_dir)
             with open(extract_marker, "w") as f:
                 f.write(f"extracted: {zpath}\n")
-            print(f"[gn-watcher] Extracted {os.path.basename(zpath)}", flush=True)
+            logger.info(f"[gn-watcher] Extracted {os.path.basename(zpath)}")
         except Exception as e:
-            print(f"[gn-watcher] Error extracting {os.path.basename(zpath)}: {e}", flush=True)
+            logger.error(f"[gn-watcher] Error extracting {os.path.basename(zpath)}: {e}")
 
 
 async def publish_tsv(filepath: str, js):
     """Read a GeoNames TSV file and publish rows as NATS messages."""
     basename = os.path.basename(filepath)
-    print(f"[gn-watcher] Processing: {basename}", flush=True)
+    logger.info(f"[gn-watcher] Processing: {basename}")
 
     total_lines = _count_lines(filepath)
     progress = ProgressTracker(f"gn-watcher {basename}", total=total_lines)
@@ -280,7 +282,7 @@ async def publish_tsv(filepath: str, js):
     consecutive_failures = 0
     batch: list[bytes] = []
 
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.rstrip("\n")
             if not line or line.startswith("#"):
@@ -300,7 +302,7 @@ async def publish_tsv(filepath: str, js):
                     js, batch, published, consecutive_failures, progress
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    print(f"[gn-watcher] Too many failures, aborting {basename}", flush=True)
+                    logger.error(f"[gn-watcher] Too many failures, aborting {basename}")
                     progress.close()
                     return -1
                 batch.clear()
@@ -312,7 +314,7 @@ async def publish_tsv(filepath: str, js):
         )
 
     progress.close()
-    print(f"[gn-watcher] {basename}: published {published} places", flush=True)
+    logger.info(f"[gn-watcher] {basename}: published {published} places")
     return published
 
 
@@ -341,9 +343,11 @@ async def _publish_batch(
                 # Transient error — retry with exponential backoff
                 consecutive_failures += 1
                 if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(min(2 ** attempt, 30))
+                    await asyncio.sleep(min(2**attempt, 30))
                 else:
-                    print(f"[gn-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}", flush=True)
+                    logger.error(
+                        f"[gn-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                    )
 
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             break
@@ -354,6 +358,7 @@ async def _publish_batch(
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 async def _scan_and_process(js) -> int:
     """Extract any new zips and process not-yet-processed GeoNames TSVs once.
@@ -366,7 +371,8 @@ async def _scan_and_process(js) -> int:
     # Find GeoNames TSV files (*.txt, excluding readme and metadata)
     txt_files = sorted(glob.glob(os.path.join(GN_DATA_DIR, "*.txt")))
     txt_files = [
-        f for f in txt_files
+        f
+        for f in txt_files
         if not os.path.basename(f).lower().startswith("readme")
         and not os.path.basename(f).lower().startswith("license")
         and not os.path.basename(f).lower().endswith("codes.txt")
@@ -377,7 +383,7 @@ async def _scan_and_process(js) -> int:
     if not pending:
         return 0
 
-    print(f"[gn-watcher] Found {len(pending)} new data file(s) to process", flush=True)
+    logger.info(f"[gn-watcher] Found {len(pending)} new data file(s) to process")
     processed = 0
     for filepath in pending:
         try:
@@ -385,13 +391,16 @@ async def _scan_and_process(js) -> int:
             # Only mark as processed if we didn't abort early
             if count >= 0:
                 record_processed(GN_DATA_DIR, filepath, done)
-                print(f"[gn-watcher] Completed {os.path.basename(filepath)}", flush=True)
+                logger.info(f"[gn-watcher] Completed {os.path.basename(filepath)}")
                 processed += 1
             else:
-                print(f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next scan", flush=True)
+                logger.warning(
+                    f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next scan",
+                )
         except Exception as e:
-            print(f"[gn-watcher] Error processing {os.path.basename(filepath)}: {e}", flush=True)
+            logger.error(f"[gn-watcher] Error processing {os.path.basename(filepath)}: {e}")
             import traceback
+
             traceback.print_exc()
 
     return processed
@@ -399,18 +408,20 @@ async def _scan_and_process(js) -> int:
 
 async def run():
     """Continuously watch GN_DATA_DIR, importing new GeoNames files as they appear."""
-    print("[gn-watcher] Starting GeoNames watcher service ...", flush=True)
+    logger.info("[gn-watcher] Starting GeoNames watcher service ...")
     os.makedirs(GN_DATA_DIR, exist_ok=True)
 
     nc, js = await nats_client.connect()
-    print(f"[gn-watcher] Watching {GN_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)", flush=True)
+    logger.info(f"[gn-watcher] Watching {GN_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)")
 
     try:
         first = True
         while True:
             n = await _scan_and_process(js)
             if first and n == 0:
-                print(f"[gn-watcher] No new files in {GN_DATA_DIR} yet; will keep watching.", flush=True)
+                logger.info(
+                    f"[gn-watcher] No new files in {GN_DATA_DIR} yet; will keep watching.",
+                )
             first = False
             await asyncio.sleep(WATCH_POLL_INTERVAL)
     finally:

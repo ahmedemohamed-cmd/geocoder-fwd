@@ -30,12 +30,14 @@ import glob
 import hashlib
 import json
 import os
-import time
 
-from shared.config import OA_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared import nats_client
+from shared.config import NATS_SUBJECT, OA_DATA_DIR, WATCH_POLL_INTERVAL
+from shared.logging import get_logger
+from shared.processed import is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
-from shared.processed import load_processed, is_processed, record_processed
+
+logger = get_logger("oa-watcher")
 
 BATCH_PUBLISH = 50
 # Maximum retries per message
@@ -46,6 +48,7 @@ MAX_CONSECUTIVE_FAILURES = 50
 # ---------------------------------------------------------------------------
 # Row parsing
 # ---------------------------------------------------------------------------
+
 
 def _source_hash(filepath: str) -> str:
     """Short deterministic hash of a file path for use in ID generation."""
@@ -86,15 +89,15 @@ def _parse_csv_row(row: dict, row_idx: int, src_hash: str = "") -> dict | None:
         tags["addr:housenumber"] = number
     if street:
         tags["addr:street"] = street
-    if (unit := (row.get("UNIT") or "").strip()):
+    if unit := (row.get("UNIT") or "").strip():
         tags["addr:unit"] = unit
-    if (city := (row.get("CITY") or "").strip()):
+    if city := (row.get("CITY") or "").strip():
         tags["addr:city"] = city
-    if (district := (row.get("DISTRICT") or "").strip()):
+    if district := (row.get("DISTRICT") or "").strip():
         tags["addr:county"] = district
-    if (region := (row.get("REGION") or "").strip()):
+    if region := (row.get("REGION") or "").strip():
         tags["addr:state"] = region
-    if (postcode := (row.get("POSTCODE") or "").strip()):
+    if postcode := (row.get("POSTCODE") or "").strip():
         tags["addr:postcode"] = postcode
 
     # Generate a stable ID — prefer the HASH column, fall back to
@@ -182,16 +185,17 @@ def _parse_geojson_feature(feature: dict, row_idx: int, src_hash: str = "") -> d
 # File-level processing
 # ---------------------------------------------------------------------------
 
+
 def _count_csv_rows(filepath: str) -> int:
     """Quick line count (minus header) for progress tracking."""
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         return sum(1 for _ in f) - 1  # subtract header
 
 
 async def publish_csv(filepath: str, js):
     """Read a CSV file and publish rows as NATS messages."""
     basename = os.path.basename(filepath)
-    print(f"[oa-watcher] Processing CSV: {basename}", flush=True)
+    logger.info(f"[oa-watcher] Processing CSV: {basename}")
 
     total_rows = _count_csv_rows(filepath)
     progress = ProgressTracker(f"oa-watcher {basename}", total=total_rows)
@@ -200,7 +204,7 @@ async def publish_csv(filepath: str, js):
     consecutive_failures = 0
     shash = _source_hash(filepath)
 
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         reader = csv.DictReader(f)
         batch: list[bytes] = []
 
@@ -217,7 +221,7 @@ async def publish_csv(filepath: str, js):
                     js, batch, published, consecutive_failures, progress
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    print(f"[oa-watcher] Too many failures, aborting {basename}", flush=True)
+                    logger.error(f"[oa-watcher] Too many failures, aborting {basename}")
                     progress.close()
                     return -1
                 batch.clear()
@@ -229,24 +233,20 @@ async def publish_csv(filepath: str, js):
             )
 
     progress.close()
-    print(f"[oa-watcher] {basename}: published {published} addresses", flush=True)
+    logger.info(f"[oa-watcher] {basename}: published {published} addresses")
     return published
 
 
 def _is_ndjson(filepath: str) -> bool:
     """Detect newline-delimited GeoJSON (one Feature per line) vs FeatureCollection."""
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
                 obj = json.loads(line)
-                return (
-                    obj.get("type") == "Feature"
-                    and "geometry" in obj
-                    and "properties" in obj
-                )
+                return obj.get("type") == "Feature" and "geometry" in obj and "properties" in obj
             except json.JSONDecodeError:
                 return False
     return False
@@ -254,7 +254,7 @@ def _is_ndjson(filepath: str) -> bool:
 
 def _count_lines(filepath: str) -> int:
     """Count lines in a file for progress tracking."""
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+    with open(filepath, encoding="utf-8", errors="replace") as f:
         return sum(1 for _ in f)
 
 
@@ -268,7 +268,7 @@ async def publish_geojson(filepath: str, js):
     import gzip
 
     basename = os.path.basename(filepath)
-    print(f"[oa-watcher] Processing GeoJSON: {basename}", flush=True)
+    logger.info(f"[oa-watcher] Processing GeoJSON: {basename}")
 
     is_gz = filepath.endswith(".gz")
     _open = gzip.open if is_gz else open
@@ -281,11 +281,11 @@ async def publish_geojson(filepath: str, js):
         ndjson = True
 
     if ndjson:
-        print(f"[oa-watcher] Detected newline-delimited GeoJSON (NDJSON)", flush=True)
+        logger.info("[oa-watcher] Detected newline-delimited GeoJSON (NDJSON)")
         total = _count_lines(filepath) if not is_gz else 0
         features = None  # will stream line-by-line
     else:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
             data = json.load(f)
         features = data.get("features", [])
         total = len(features)
@@ -316,7 +316,7 @@ async def publish_geojson(filepath: str, js):
             )
             batch.clear()
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                print(f"[oa-watcher] Too many failures, aborting {basename}", flush=True)
+                logger.error(f"[oa-watcher] Too many failures, aborting {basename}")
                 return False
         return True
 
@@ -349,7 +349,7 @@ async def publish_geojson(filepath: str, js):
         )
 
     progress.close()
-    print(f"[oa-watcher] {basename}: published {published} addresses", flush=True)
+    logger.info(f"[oa-watcher] {basename}: published {published} addresses")
     return published
 
 
@@ -378,9 +378,11 @@ async def _publish_batch(
                 # Transient error — retry with exponential backoff
                 consecutive_failures += 1
                 if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(min(2 ** attempt, 30))
+                    await asyncio.sleep(min(2**attempt, 30))
                 else:
-                    print(f"[oa-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}", flush=True)
+                    logger.error(
+                        f"[oa-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                    )
 
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             break
@@ -392,6 +394,7 @@ async def _publish_batch(
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 async def _scan_and_process(js) -> int:
     """Process any not-yet-processed CSV/GeoJSON files in OA_DATA_DIR once.
 
@@ -400,10 +403,9 @@ async def _scan_and_process(js) -> int:
     # Scan recursively — OA archives often unzip into nested dirs
     # (e.g. collection-ca/ca/on/york-addresses-county.geojson)
     csv_files = glob.glob(os.path.join(OA_DATA_DIR, "**", "*.csv"), recursive=True)
-    geojson_files = (
-        glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson"), recursive=True)
-        + glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson.gz"), recursive=True)
-    )
+    geojson_files = glob.glob(
+        os.path.join(OA_DATA_DIR, "**", "*.geojson"), recursive=True
+    ) + glob.glob(os.path.join(OA_DATA_DIR, "**", "*.geojson.gz"), recursive=True)
     all_files = sorted(f for f in csv_files + geojson_files if not f.endswith(".meta"))
 
     # Only act on files we haven't already imported (skip processed quietly).
@@ -412,7 +414,7 @@ async def _scan_and_process(js) -> int:
     if not pending:
         return 0
 
-    print(f"[oa-watcher] Found {len(pending)} new file(s) to process", flush=True)
+    logger.info(f"[oa-watcher] Found {len(pending)} new file(s) to process")
     processed = 0
     for filepath in pending:
         rel_path = os.path.relpath(filepath, OA_DATA_DIR)
@@ -427,11 +429,12 @@ async def _scan_and_process(js) -> int:
             # Only mark as processed if we didn't abort early
             if count >= 0:
                 record_processed(OA_DATA_DIR, filepath, done)
-                print(f"[oa-watcher] Completed {rel_path}", flush=True)
+                logger.info(f"[oa-watcher] Completed {rel_path}")
                 processed += 1
         except Exception as e:
-            print(f"[oa-watcher] Error processing {rel_path}: {e}", flush=True)
+            logger.error(f"[oa-watcher] Error processing {rel_path}: {e}")
             import traceback
+
             traceback.print_exc()
 
     return processed
@@ -439,18 +442,20 @@ async def _scan_and_process(js) -> int:
 
 async def run():
     """Continuously watch OA_DATA_DIR, importing new CSV/GeoJSON files as they appear."""
-    print("[oa-watcher] Starting OpenAddresses watcher service ...", flush=True)
+    logger.info("[oa-watcher] Starting OpenAddresses watcher service ...")
     os.makedirs(OA_DATA_DIR, exist_ok=True)
 
     nc, js = await nats_client.connect()
-    print(f"[oa-watcher] Watching {OA_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)", flush=True)
+    logger.info(f"[oa-watcher] Watching {OA_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)")
 
     try:
         first = True
         while True:
             n = await _scan_and_process(js)
             if first and n == 0:
-                print(f"[oa-watcher] No new files in {OA_DATA_DIR} yet; will keep watching.", flush=True)
+                logger.info(
+                    f"[oa-watcher] No new files in {OA_DATA_DIR} yet; will keep watching.",
+                )
             first = False
             await asyncio.sleep(WATCH_POLL_INTERVAL)
     finally:

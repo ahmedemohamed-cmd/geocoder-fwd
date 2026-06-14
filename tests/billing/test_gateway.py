@@ -1,5 +1,6 @@
 """Gateway (data plane): validation, real-time metering, quota, scopes."""
-from conftest import (bearer, create_key, insert_plan, login, make_tenant)
+
+from conftest import bearer, create_key, insert_plan, login, make_tenant
 
 
 async def test_valid_key_proxies_and_meters_realtime(cp_client, gw_client, pool, redis):
@@ -31,29 +32,34 @@ async def test_missing_invalid_disabled_deleted_keys(cp_client, gw_client):
     key = await create_key(cp_client, ttok)
     apikey, kid = key["api_key"], key["id"]
 
-    assert (await gw_client.get("/geocode")).status_code == 401                       # missing
-    assert (await gw_client.get("/geocode",
-            headers={"X-API-Key": "gk_bad_nope"})).status_code == 401                  # invalid
+    assert (await gw_client.get("/geocode")).status_code == 401  # missing
+    assert (
+        await gw_client.get("/geocode", headers={"X-API-Key": "gk_bad_nope"})
+    ).status_code == 401  # invalid
 
     await cp_client.patch(f"/keys/{kid}", headers=bearer(ttok), json={"status": "disabled"})
-    assert (await gw_client.get("/geocode",
-            headers={"X-API-Key": apikey})).status_code == 403                         # disabled
+    assert (
+        await gw_client.get("/geocode", headers={"X-API-Key": apikey})
+    ).status_code == 403  # disabled
 
     await cp_client.patch(f"/keys/{kid}", headers=bearer(ttok), json={"status": "active"})
-    assert (await gw_client.get("/geocode",
-            headers={"X-API-Key": apikey})).status_code == 200                         # re-enabled
+    assert (
+        await gw_client.get("/geocode", headers={"X-API-Key": apikey})
+    ).status_code == 200  # re-enabled
 
     await cp_client.delete(f"/keys/{kid}", headers=bearer(ttok))
-    assert (await gw_client.get("/geocode",
-            headers={"X-API-Key": apikey})).status_code == 401                         # soft-deleted
+    assert (
+        await gw_client.get("/geocode", headers={"X-API-Key": apikey})
+    ).status_code == 401  # soft-deleted
 
 
 async def test_suspended_tenant_blocked(cp_client, gw_client):
     tenant, ttok = await make_tenant(cp_client, admin_email="g3@acme.test")
     key = await create_key(cp_client, ttok)
     atok = await login(cp_client, "admin@example.com", "admin12345")
-    await cp_client.patch(f"/admin/tenants/{tenant['id']}", headers=bearer(atok),
-                          json={"status": "suspended"})
+    await cp_client.patch(
+        f"/admin/tenants/{tenant['id']}", headers=bearer(atok), json={"status": "suspended"}
+    )
     r = await gw_client.get("/geocode", headers={"X-API-Key": key["api_key"]})
     assert r.status_code == 403
 

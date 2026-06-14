@@ -12,6 +12,7 @@ to the case's own coordinates, so geo-decay can't trivially surface the answer.
 
 Outputs: tests/recall_report.md  and  tests/recall_failures.json
 """
+
 import json
 import math
 import os
@@ -25,7 +26,7 @@ BASE = os.getenv("RECALL_BASE", "http://localhost:8000")
 IN = "tests/cairo_testset.json"
 REPORT = "tests/recall_report.md"
 FAILS = "tests/recall_failures.json"
-CAIRO = (30.0444, 31.2357)          # geo-bias origin for every query
+CAIRO = (30.0444, 31.2357)  # geo-bias origin for every query
 LIMIT = 10
 WORKERS = 8
 # Scoring efforts to measure, in report order. Each is the /geocode `effort`
@@ -37,9 +38,28 @@ EFFORT_LABELS = {
     "optimized": "Optimized effort (lean fuzzy + rescore, no exact hit count)",
 }
 
-_GENERIC = {"street", "st", "road", "rd", "ave", "avenue", "alley", "lane",
-            "square", "sq", "el", "al", "the",
-            "شارع", "ش", "طريق", "حارة", "حاره", "زقاق", "ميدان"}
+_GENERIC = {
+    "street",
+    "st",
+    "road",
+    "rd",
+    "ave",
+    "avenue",
+    "alley",
+    "lane",
+    "square",
+    "sq",
+    "el",
+    "al",
+    "the",
+    "شارع",
+    "ش",
+    "طريق",
+    "حارة",
+    "حاره",
+    "زقاق",
+    "ميدان",
+}
 
 
 def norm(s):
@@ -67,8 +87,16 @@ def haversine(a, b):
 
 
 def geocode(q, effort="high"):
-    qs = urllib.parse.urlencode({"q": q, "lat": CAIRO[0], "lon": CAIRO[1],
-                                 "limit": LIMIT, "vector": "false", "effort": effort})
+    qs = urllib.parse.urlencode(
+        {
+            "q": q,
+            "lat": CAIRO[0],
+            "lon": CAIRO[1],
+            "limit": LIMIT,
+            "vector": "false",
+            "effort": effort,
+        }
+    )
     url = f"{BASE}/geocode?{qs}"
     try:
         with urllib.request.urlopen(url, timeout=60) as r:
@@ -97,9 +125,14 @@ def eval_named(case, effort="high"):
         if exp_names & rn or near:
             lenient_rank = i + 1
             break
-    return {"kind": "named", "query": case["query"], "osm_id": case["osm_id"],
-            "strict_rank": osm_rank, "lenient_rank": lenient_rank,
-            "top": (results[0].get("name_en") or results[0].get("name")) if results else None}
+    return {
+        "kind": "named",
+        "query": case["query"],
+        "osm_id": case["osm_id"],
+        "strict_rank": osm_rank,
+        "lenient_rank": lenient_rank,
+        "top": (results[0].get("name_en") or results[0].get("name")) if results else None,
+    }
 
 
 def eval_address(case, effort="high"):
@@ -119,12 +152,24 @@ def eval_address(case, effort="high"):
     if probe_hn:
         pq = f"{probe_hn} {case['addr_street']}, {case['addr_city']}"
         for r in geocode(pq, effort):
-            if r.get("match_type") == "interpolated" and street_match(case["addr_street"], r.get("addr_street", "")):
+            if r.get("match_type") == "interpolated" and street_match(
+                case["addr_street"], r.get("addr_street", "")
+            ):
                 interp_ok = True
                 break
-    return {"kind": "address", "query": case["query"], "osm_id": case["osm_id"],
-            "exact_rank": osm_rank, "street_rank": street_rank, "interp_ok": interp_ok,
-            "top": (results[0].get("name_en") or results[0].get("name") or results[0].get("full_address")) if results else None}
+    return {
+        "kind": "address",
+        "query": case["query"],
+        "osm_id": case["osm_id"],
+        "exact_rank": osm_rank,
+        "street_rank": street_rank,
+        "interp_ok": interp_ok,
+        "top": (
+            results[0].get("name_en") or results[0].get("name") or results[0].get("full_address")
+        )
+        if results
+        else None,
+    }
 
 
 def _at(rs, key, k):
@@ -156,21 +201,40 @@ def section_lines(out, effort):
     lines.append("## Named places (%d)\n" % nN)
     lines.append("| metric | @1 | @5 | @10 |")
     lines.append("|---|---|---|---|")
-    for key, label in [("strict_rank", "strict (same osm_id)"), ("lenient_rank", "lenient (name or ≤150 m)")]:
-        lines.append("| %s | %.1f%% | %.1f%% | %.1f%% |" % (
-            label, 100 * _at(named, key, 1) / nN, 100 * _at(named, key, 5) / nN, 100 * _at(named, key, 10) / nN))
+    for key, label in [
+        ("strict_rank", "strict (same osm_id)"),
+        ("lenient_rank", "lenient (name or ≤150 m)"),
+    ]:
+        lines.append(
+            "| %s | %.1f%% | %.1f%% | %.1f%% |"
+            % (
+                label,
+                100 * _at(named, key, 1) / nN,
+                100 * _at(named, key, 5) / nN,
+                100 * _at(named, key, 10) / nN,
+            )
+        )
     lines.append("")
     lines.append("## Addresses (%d)\n" % nA)
     lines.append("| metric | @1 | @5 | @10 |")
     lines.append("|---|---|---|---|")
     for key, label in [("exact_rank", "exact (same osm_id)"), ("street_rank", "correct street")]:
-        lines.append("| %s | %.1f%% | %.1f%% | %.1f%% |" % (
-            label, 100 * _at(addr, key, 1) / nA, 100 * _at(addr, key, 5) / nA, 100 * _at(addr, key, 10) / nA))
+        lines.append(
+            "| %s | %.1f%% | %.1f%% | %.1f%% |"
+            % (
+                label,
+                100 * _at(addr, key, 1) / nA,
+                100 * _at(addr, key, 5) / nA,
+                100 * _at(addr, key, 10) / nA,
+            )
+        )
     interp = sum(1 for r in addr if r["interp_ok"])
     lines.append("")
     lines.append("## Interpolation probe (addresses, %d)\n" % nA)
-    lines.append(f"- Non-existent house number on a known street returned an "
-                 f"interpolated point: **{interp}/{nA} ({100*interp/nA:.1f}%)**\n")
+    lines.append(
+        f"- Non-existent house number on a known street returned an "
+        f"interpolated point: **{interp}/{nA} ({100 * interp / nA:.1f}%)**\n"
+    )
     return lines
 
 

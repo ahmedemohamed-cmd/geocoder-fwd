@@ -1,4 +1,5 @@
 """Usage aggregation (Redis buffer → Postgres rollups) and billing/invoicing."""
+
 from conftest import bearer, create_key, insert_plan, login, make_tenant
 
 from billing import usage
@@ -16,7 +17,8 @@ async def test_flush_events_aggregates_into_rollups(cp_client, gw_client, pool, 
     processed = await usage.flush_events(pool, redis)
     assert processed == 5
     total = await pool.fetchval(
-        "SELECT SUM(count)::bigint FROM usage_rollups WHERE key_id=$1", key["id"])
+        "SELECT SUM(count)::bigint FROM usage_rollups WHERE key_id=$1", key["id"]
+    )
     assert total == 5
     # idempotent drain — nothing left to process
     assert await usage.flush_events(pool, redis) == 0
@@ -24,16 +26,21 @@ async def test_flush_events_aggregates_into_rollups(cp_client, gw_client, pool, 
 
 # ── pricing maths ────────────────────────────────────────────────────────────
 def test_compute_charge_within_quota():
-    amount, items = compute_charge(total_requests=100, base_price_cents=2900,
-                                   overage_cents_per_unit=0.05, monthly_quota=50000)
+    amount, items = compute_charge(
+        total_requests=100, base_price_cents=2900, overage_cents_per_unit=0.05, monthly_quota=50000
+    )
     assert amount == 2900
     assert items[0]["amount_cents"] == 2900
 
 
 def test_compute_charge_with_overage():
     # 60000 requests, 50000 included, 0.05c each over → 10000 * 0.05 = 500c
-    amount, items = compute_charge(total_requests=60000, base_price_cents=2900,
-                                   overage_cents_per_unit=0.05, monthly_quota=50000)
+    amount, items = compute_charge(
+        total_requests=60000,
+        base_price_cents=2900,
+        overage_cents_per_unit=0.05,
+        monthly_quota=50000,
+    )
     assert amount == 2900 + 500
     assert items[-1]["quantity"] == 10000
 
@@ -62,8 +69,9 @@ async def test_billing_run_marks_and_pays(cp_client, gw_client, pool, redis):
     assert any(i["id"] == inv["id"] for i in mine.json())
 
     # admin sees the tenant's bills and marks paid
-    admin_view = await cp_client.get(f"/admin/tenants/{tenant['id']}/invoices",
-                                     headers=bearer(atok))
+    admin_view = await cp_client.get(
+        f"/admin/tenants/{tenant['id']}/invoices", headers=bearer(atok)
+    )
     assert admin_view.json()[0]["id"] == inv["id"]
 
     pay = await cp_client.post(f"/admin/invoices/{inv['id']}/pay", headers=bearer(atok))
@@ -97,5 +105,6 @@ async def test_usage_history_report(cp_client, gw_client, pool, redis):
 async def test_tenant_cannot_reach_admin_billing(cp_client):
     _, ttok = await make_tenant(cp_client, admin_email="noadmin@acme.test")
     assert (await cp_client.get("/admin/invoices", headers=bearer(ttok))).status_code == 403
-    assert (await cp_client.post("/admin/billing/run?period=2026-06",
-            headers=bearer(ttok))).status_code == 403
+    assert (
+        await cp_client.post("/admin/billing/run?period=2026-06", headers=bearer(ttok))
+    ).status_code == 403

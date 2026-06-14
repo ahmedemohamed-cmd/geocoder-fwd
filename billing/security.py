@@ -3,6 +3,7 @@
 API keys are shown to the customer exactly once at creation; only a SHA-256
 hash is persisted, so the plaintext is never recoverable from the database.
 """
+
 import base64
 import hashlib
 import hmac
@@ -30,8 +31,7 @@ def verify_password(plain: str, hashed: str) -> bool:
         algo, iters, salt_hex, hash_hex = hashed.split("$")
         if algo != "pbkdf2_sha256":
             return False
-        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(),
-                                 bytes.fromhex(salt_hex), int(iters))
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), bytes.fromhex(salt_hex), int(iters))
         return hmac.compare_digest(dk.hex(), hash_hex)
     except (ValueError, AttributeError):
         return False
@@ -61,6 +61,7 @@ def hash_api_key(full_key: str) -> str:
 # Reversible encryption of the key material (needed to (re)push to APISIX).
 def _fernet():
     from cryptography.fernet import Fernet
+
     key = base64.urlsafe_b64encode(hashlib.sha256(config.KEY_ENC_SECRET.encode()).digest())
     return Fernet(key)
 
@@ -94,6 +95,7 @@ def _fetch_jwks() -> dict:
     """Fetch + index the Zitadel JWKS by kid, sending the Host override so the
     request resolves to the right instance when called via the service name."""
     import httpx
+
     headers = {"Host": config.ZITADEL_HOST_HEADER} if config.ZITADEL_HOST_HEADER else {}
     r = httpx.get(config.ZITADEL_JWKS_URL, headers=headers, timeout=10)
     r.raise_for_status()
@@ -124,10 +126,17 @@ def decode_token(token: str) -> dict[str, Any]:
         key = _zitadel_signing_key(token)
         opts = {"require": ["exp", "sub"], "verify_aud": bool(config.ZITADEL_AUDIENCE)}
         return jwt.decode(
-            token, key, algorithms=["RS256"], issuer=config.ZITADEL_ISSUER,
-            audience=config.ZITADEL_AUDIENCE or None, options=opts,
+            token,
+            key,
+            algorithms=["RS256"],
+            issuer=config.ZITADEL_ISSUER,
+            audience=config.ZITADEL_AUDIENCE or None,
+            options=opts,
         )
     return jwt.decode(
-        token, config.JWT_SECRET, algorithms=[config.JWT_ALG],
-        issuer=config.JWT_ISSUER, options={"require": ["exp", "sub", "role"]},
+        token,
+        config.JWT_SECRET,
+        algorithms=[config.JWT_ALG],
+        issuer=config.JWT_ISSUER,
+        options={"require": ["exp", "sub", "role"]},
     )

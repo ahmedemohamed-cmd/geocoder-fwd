@@ -77,7 +77,7 @@ Fetch multiple batches, process them all in parallel, then wait for all to compl
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100"))
 MAX_CONCURRENT_BATCHES = int(os.getenv("MAX_CONCURRENT_BATCHES", "4"))
 
-# AI mode (GPU + vectors) - automatically set in docker-compose-ai.yaml
+# AI mode (GPU + vectors) - automatically set in docker-compose.ai.yaml
 # BATCH_SIZE = 50 (reduced for GPU efficiency)
 # MAX_CONCURRENT_BATCHES = 2 (reduced for GPU efficiency)
 ```

@@ -3,6 +3,7 @@
 All functions take a connection or pool. UUID/date values are stringified at the
 boundary so the API layer can hand records straight to pydantic.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,26 +41,35 @@ async def get_user_by_email(pool, email: str) -> dict | None:
 
 async def list_tenant_users(pool, tenant_id: str) -> list[dict]:
     rows = await pool.fetch(
-        "SELECT email, role, status FROM users WHERE tenant_id=$1 ORDER BY email", tenant_id)
+        "SELECT email, role, status FROM users WHERE tenant_id=$1 ORDER BY email", tenant_id
+    )
     return [dict(r) for r in rows]
 
 
-async def create_tenant_user(pool, *, tenant_id: str, email: str,
-                             password_hash: str, role: str = "tenant_user") -> dict:
+async def create_tenant_user(
+    pool, *, tenant_id: str, email: str, password_hash: str, role: str = "tenant_user"
+) -> dict:
     try:
         rec = await pool.fetchrow(
             """INSERT INTO users (email, password_hash, role, tenant_id)
                VALUES ($1,$2,$3,$4) RETURNING email, role, status""",
-            email, password_hash, role, tenant_id)
+            email,
+            password_hash,
+            role,
+            tenant_id,
+        )
     except asyncpg.UniqueViolationError:
-        raise Conflict(f"user {email!r} already exists")
+        raise Conflict(f"user {email!r} already exists") from None
     return dict(rec)
 
 
 async def set_user_status(pool, *, tenant_id: str, email: str, status: str) -> dict:
     rec = await pool.fetchrow(
-        "UPDATE users SET status=$1 WHERE email=$2 AND tenant_id=$3 "
-        "RETURNING email, role, status", status, email, tenant_id)
+        "UPDATE users SET status=$1 WHERE email=$2 AND tenant_id=$3 RETURNING email, role, status",
+        status,
+        email,
+        tenant_id,
+    )
     if rec is None:
         raise NotFound("user not found for this tenant")
     return dict(rec)
@@ -67,8 +77,8 @@ async def set_user_status(pool, *, tenant_id: str, email: str, status: str) -> d
 
 async def delete_tenant_user(pool, *, tenant_id: str, email: str) -> None:
     res = await pool.execute(
-        "DELETE FROM users WHERE email=$1 AND tenant_id=$2 AND role <> 'admin'",
-        email, tenant_id)
+        "DELETE FROM users WHERE email=$1 AND tenant_id=$2 AND role <> 'admin'", email, tenant_id
+    )
     if res.endswith("0"):
         raise NotFound("user not found for this tenant")
 
@@ -76,15 +86,17 @@ async def delete_tenant_user(pool, *, tenant_id: str, email: str) -> None:
 async def set_user_password(pool, *, email: str, tenant_id: str, password_hash: str) -> None:
     res = await pool.execute(
         "UPDATE users SET password_hash=$1 WHERE email=$2 AND tenant_id=$3",
-        password_hash, email, tenant_id)
+        password_hash,
+        email,
+        tenant_id,
+    )
     if res.endswith("0"):
         raise NotFound("user not found for this tenant")
 
 
 # ── platform admins (role='admin', no tenant) ────────────────────────────────
 async def list_admins(pool) -> list[dict]:
-    rows = await pool.fetch(
-        "SELECT email, status FROM users WHERE role='admin' ORDER BY email")
+    rows = await pool.fetch("SELECT email, status FROM users WHERE role='admin' ORDER BY email")
     return [dict(r) for r in rows]
 
 
@@ -93,24 +105,31 @@ async def create_admin(pool, *, email: str, password_hash: str) -> dict:
         rec = await pool.fetchrow(
             """INSERT INTO users (email, password_hash, role, tenant_id)
                VALUES ($1,$2,'admin',NULL) RETURNING email, status""",
-            email, password_hash)
+            email,
+            password_hash,
+        )
     except asyncpg.UniqueViolationError:
-        raise Conflict(f"user {email!r} already exists")
+        raise Conflict(f"user {email!r} already exists") from None
     return dict(rec)
 
 
 async def _other_active_admins(pool, email: str) -> int:
-    return int(await pool.fetchval(
-        "SELECT count(*) FROM users WHERE role='admin' AND status='active' AND email <> $1",
-        email))
+    return int(
+        await pool.fetchval(
+            "SELECT count(*) FROM users WHERE role='admin' AND status='active' AND email <> $1",
+            email,
+        )
+    )
 
 
 async def set_admin_status(pool, *, email: str, status: str) -> dict:
     if status == "disabled" and await _other_active_admins(pool, email) == 0:
         raise Conflict("cannot disable the last active admin")
     rec = await pool.fetchrow(
-        "UPDATE users SET status=$1 WHERE email=$2 AND role='admin' "
-        "RETURNING email, status", status, email)
+        "UPDATE users SET status=$1 WHERE email=$2 AND role='admin' RETURNING email, status",
+        status,
+        email,
+    )
     if rec is None:
         raise NotFound("admin not found")
     return dict(rec)
@@ -126,16 +145,21 @@ async def delete_admin(pool, *, email: str) -> None:
 
 async def set_admin_password(pool, *, email: str, password_hash: str) -> None:
     res = await pool.execute(
-        "UPDATE users SET password_hash=$1 WHERE email=$2 AND role='admin'",
-        password_hash, email)
+        "UPDATE users SET password_hash=$1 WHERE email=$2 AND role='admin'", password_hash, email
+    )
     if res.endswith("0"):
         raise NotFound("admin not found")
 
 
 # ── tenants ──────────────────────────────────────────────────────────────────
 async def create_tenant(
-    pool, *, name: str, contact_email: str | None, plan_id: str,
-    admin_email: str, admin_password_hash: str,
+    pool,
+    *,
+    name: str,
+    contact_email: str | None,
+    plan_id: str,
+    admin_email: str,
+    admin_password_hash: str,
 ) -> dict:
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -147,12 +171,16 @@ async def create_tenant(
             tenant = await conn.fetchrow(
                 """INSERT INTO tenants (name, contact_email, plan_id)
                    VALUES ($1,$2,$3) RETURNING *""",
-                name, contact_email, plan_id,
+                name,
+                contact_email,
+                plan_id,
             )
             await conn.execute(
                 """INSERT INTO users (email, password_hash, role, tenant_id)
                    VALUES ($1,$2,'tenant_user',$3)""",
-                admin_email, admin_password_hash, tenant["id"],
+                admin_email,
+                admin_password_hash,
+                tenant["id"],
             )
             return _row(tenant)
 
@@ -211,7 +239,8 @@ async def soft_delete_tenant(pool, tenant_id: str) -> list[str]:
                 tenant_id,
             )
             rows = await conn.fetch(
-                "DELETE FROM users WHERE tenant_id=$1 RETURNING email", tenant_id)
+                "DELETE FROM users WHERE tenant_id=$1 RETURNING email", tenant_id
+            )
             return [r["email"] for r in rows]
 
 
@@ -221,7 +250,12 @@ async def create_key(pool, *, tenant_id: str, name: str, scopes: list[str]) -> t
     rec = await pool.fetchrow(
         """INSERT INTO api_keys (tenant_id, name, key_prefix, key_hash, key_enc, scopes)
            VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
-        tenant_id, name, prefix, key_hash, security.encrypt_key(full), scopes,
+        tenant_id,
+        name,
+        prefix,
+        key_hash,
+        security.encrypt_key(full),
+        scopes,
     )
     return _row(rec), full
 
@@ -257,7 +291,7 @@ async def update_key(pool, key_id: str, tenant_id: str, fields: dict) -> dict:
     vals.extend([key_id, tenant_id])
     rec = await pool.fetchrow(
         f"UPDATE api_keys SET {', '.join(sets)}, updated_at=now() "
-        f"WHERE id=${len(vals)-1} AND tenant_id=${len(vals)} AND status <> 'deleted' "
+        f"WHERE id=${len(vals) - 1} AND tenant_id=${len(vals)} AND status <> 'deleted' "
         f"RETURNING *",
         *vals,
     )
@@ -270,7 +304,8 @@ async def soft_delete_key(pool, key_id: str, tenant_id: str) -> dict:
     rec = await pool.fetchrow(
         "UPDATE api_keys SET status='deleted', deleted_at=now(), updated_at=now() "
         "WHERE id=$1 AND tenant_id=$2 AND status <> 'deleted' RETURNING *",
-        key_id, tenant_id,
+        key_id,
+        tenant_id,
     )
     if rec is None:
         raise NotFound("key not found")
@@ -306,16 +341,18 @@ async def usage_history(pool, tenant_id: str, *, period_from: str, period_to: st
             WHERE tenant_id=$1 AND period BETWEEN $2 AND $3
          GROUP BY period, day, endpoint
          ORDER BY day, endpoint""",
-        tenant_id, period_from, period_to,
+        tenant_id,
+        period_from,
+        period_to,
     )
     return [dict(r) for r in rows]
 
 
 async def usage_total_for_period(pool, tenant_id: str, period: str) -> int:
     val = await pool.fetchval(
-        "SELECT COALESCE(SUM(count),0)::bigint FROM usage_rollups "
-        "WHERE tenant_id=$1 AND period=$2",
-        tenant_id, period,
+        "SELECT COALESCE(SUM(count),0)::bigint FROM usage_rollups WHERE tenant_id=$1 AND period=$2",
+        tenant_id,
+        period,
     )
     return int(val or 0)
 
@@ -324,14 +361,22 @@ async def usage_by_key_for_period(pool, tenant_id: str, period: str) -> dict[str
     """Durable per-key request counts for the period (from Postgres rollups)."""
     rows = await pool.fetch(
         "SELECT key_id, SUM(count)::bigint AS c FROM usage_rollups "
-        "WHERE tenant_id=$1 AND period=$2 GROUP BY key_id", tenant_id, period)
+        "WHERE tenant_id=$1 AND period=$2 GROUP BY key_id",
+        tenant_id,
+        period,
+    )
     return {str(r["key_id"]): int(r["c"]) for r in rows}
 
 
 # ── invoices ─────────────────────────────────────────────────────────────────
 async def upsert_invoice(
-    pool, *, tenant_id: str, period: str, total_requests: int,
-    amount_cents: int, line_items: list[dict],
+    pool,
+    *,
+    tenant_id: str,
+    period: str,
+    total_requests: int,
+    amount_cents: int,
+    line_items: list[dict],
 ) -> dict:
     rec = await pool.fetchrow(
         """INSERT INTO invoices (tenant_id, period, total_requests, amount_cents, line_items)
@@ -343,7 +388,11 @@ async def upsert_invoice(
                  generated_at   = now()
            WHERE invoices.status = 'pending'
            RETURNING *""",
-        tenant_id, period, total_requests, amount_cents, json.dumps(line_items),
+        tenant_id,
+        period,
+        total_requests,
+        amount_cents,
+        json.dumps(line_items),
     )
     if rec is None:  # already paid → return existing untouched
         rec = await pool.fetchrow(
@@ -357,15 +406,16 @@ async def list_invoices(
 ) -> list[dict]:
     conds, vals = [], []
     if tenant_id:
-        vals.append(tenant_id); conds.append(f"tenant_id=${len(vals)}")
+        vals.append(tenant_id)
+        conds.append(f"tenant_id=${len(vals)}")
     if status:
-        vals.append(status); conds.append(f"status=${len(vals)}")
+        vals.append(status)
+        conds.append(f"status=${len(vals)}")
     if period:
-        vals.append(period); conds.append(f"period=${len(vals)}")
+        vals.append(period)
+        conds.append(f"period=${len(vals)}")
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    rows = await pool.fetch(
-        f"SELECT * FROM invoices{where} ORDER BY generated_at DESC", *vals
-    )
+    rows = await pool.fetch(f"SELECT * FROM invoices{where} ORDER BY generated_at DESC", *vals)
     return [_invoice_row(r) for r in rows]
 
 
@@ -424,7 +474,8 @@ async def list_key_hashes(pool, tenant_id: str) -> list[str]:
 
 async def tenant_ids_on_plan(pool, plan_id: str) -> list[str]:
     rows = await pool.fetch(
-        "SELECT id FROM tenants WHERE plan_id=$1 AND status <> 'deleted'", plan_id)
+        "SELECT id FROM tenants WHERE plan_id=$1 AND status <> 'deleted'", plan_id
+    )
     return [str(r["id"]) for r in rows]
 
 
@@ -434,7 +485,8 @@ async def list_active_tenant_quota_specs(pool) -> list[dict]:
     rows = await pool.fetch(
         """SELECT t.id AS tenant_id, p.monthly_quota, p.hard_cap
              FROM tenants t JOIN plans p ON p.id = t.plan_id
-            WHERE t.status = 'active'""")
+            WHERE t.status = 'active'"""
+    )
     return [dict(r) for r in rows]
 
 
@@ -449,17 +501,30 @@ async def get_plan(pool, plan_id: str) -> dict:
     return dict(rec)
 
 
-async def create_plan(pool, *, id: str, name: str, monthly_quota: int,
-                      base_price_cents: int, overage_cents_per_unit: float,
-                      hard_cap: bool) -> dict:
+async def create_plan(
+    pool,
+    *,
+    id: str,
+    name: str,
+    monthly_quota: int,
+    base_price_cents: int,
+    overage_cents_per_unit: float,
+    hard_cap: bool,
+) -> dict:
     try:
         rec = await pool.fetchrow(
             """INSERT INTO plans (id, name, monthly_quota, base_price_cents,
                                   overage_cents_per_unit, hard_cap)
                VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
-            id, name, monthly_quota, base_price_cents, overage_cents_per_unit, hard_cap)
+            id,
+            name,
+            monthly_quota,
+            base_price_cents,
+            overage_cents_per_unit,
+            hard_cap,
+        )
     except asyncpg.UniqueViolationError:
-        raise Conflict(f"plan {id!r} already exists")
+        raise Conflict(f"plan {id!r} already exists") from None
     return dict(rec)
 
 
@@ -472,7 +537,8 @@ async def update_plan(pool, plan_id: str, fields: dict) -> dict:
         return await get_plan(pool, plan_id)
     vals.append(plan_id)
     rec = await pool.fetchrow(
-        f"UPDATE plans SET {', '.join(sets)} WHERE id=${len(vals)} RETURNING *", *vals)
+        f"UPDATE plans SET {', '.join(sets)} WHERE id=${len(vals)} RETURNING *", *vals
+    )
     if rec is None:
         raise NotFound("plan not found")
     return dict(rec)
@@ -483,8 +549,9 @@ async def delete_plan(pool, plan_id: str) -> None:
         res = await pool.execute("DELETE FROM plans WHERE id=$1", plan_id)
     except asyncpg.ForeignKeyViolationError:
         n = await pool.fetchval(
-            "SELECT count(*) FROM tenants WHERE plan_id=$1 AND status <> 'deleted'", plan_id)
-        raise Conflict(f"plan is in use by {n} tenant(s); reassign them first")
+            "SELECT count(*) FROM tenants WHERE plan_id=$1 AND status <> 'deleted'", plan_id
+        )
+        raise Conflict(f"plan is in use by {n} tenant(s); reassign them first") from None
     if res.endswith("0"):
         raise NotFound("plan not found")
 

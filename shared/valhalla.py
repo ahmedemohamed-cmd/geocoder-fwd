@@ -9,6 +9,10 @@ data/.
 
 import os
 
+from shared.logging import get_logger
+
+logger = get_logger("valhalla")
+
 
 def link_pbf_for_valhalla(filepath: str, label: str = "valhalla"):
     """Symlink a PBF into <its dir>/valhalla/ so the routing engine picks it up.
@@ -28,7 +32,7 @@ def link_pbf_for_valhalla(filepath: str, label: str = "valhalla"):
             return
         os.remove(link)
     elif os.path.exists(link):
-        print(f"[{label}] {link} exists and is not a symlink, leaving it")
+        logger.info(f"[{label}] {link} exists and is not a symlink, leaving it")
         return
     os.symlink(target, link)
-    print(f"[{label}] Linked {link} -> {target} for Valhalla")
+    logger.info(f"[{label}] Linked {link} -> {target} for Valhalla")

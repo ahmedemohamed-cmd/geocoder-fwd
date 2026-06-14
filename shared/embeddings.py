@@ -1,7 +1,7 @@
 import logging
 import os
 
-from shared.config import EMBEDDING_MODEL, EMBEDDING_DIM, ENABLE_VECTORS
+from shared.config import EMBEDDING_DIM, EMBEDDING_MODEL, ENABLE_VECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -9,16 +9,38 @@ _model = None
 
 # High-priority keys placed first so they carry more weight in the text
 _PRIORITY_KEYS = (
-    "name", "name:en", "name:ar", "alt_name", "int_name",
-    "place", "boundary", "amenity", "shop", "tourism",
-    "highway", "building", "natural", "leisure", "landuse",
-    "addr:street", "addr:city", "addr:country",
+    "name",
+    "name:en",
+    "name:ar",
+    "alt_name",
+    "int_name",
+    "place",
+    "boundary",
+    "amenity",
+    "shop",
+    "tourism",
+    "highway",
+    "building",
+    "natural",
+    "leisure",
+    "landuse",
+    "addr:street",
+    "addr:city",
+    "addr:country",
 )
 
 # Keys to skip – not useful for search text
 _SKIP_PREFIXES = (
-    "source", "created_by", "note", "fixme", "FIXME",
-    "tiger:", "gnis:", "ref", "is_in", "check_date",
+    "source",
+    "created_by",
+    "note",
+    "fixme",
+    "FIXME",
+    "tiger:",
+    "gnis:",
+    "ref",
+    "is_in",
+    "check_date",
 )
 
 
@@ -33,8 +55,8 @@ def get_model():
         return _model
 
     try:
-        from sentence_transformers import SentenceTransformer
         import torch
+        from sentence_transformers import SentenceTransformer
     except ImportError as e:
         raise RuntimeError(
             "sentence-transformers and torch are required when ENABLE_VECTORS=true. "
@@ -47,23 +69,19 @@ def get_model():
         device = "cpu"
     logger.info("Using device: %s", device)
 
-    cache_folder = os.environ.get('TRANSFORMERS_CACHE')
+    cache_folder = os.environ.get("TRANSFORMERS_CACHE")
 
     try:
         if os.path.exists(EMBEDDING_MODEL):
             logger.info("Loading local model from: %s", EMBEDDING_MODEL)
-            os.environ['HF_HUB_OFFLINE'] = '1'
-            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            os.environ["TRANSFORMERS_OFFLINE"] = "1"
             _model = SentenceTransformer(EMBEDDING_MODEL, device=device)
             logger.info("Local model loaded successfully")
         elif cache_folder:
             os.makedirs(cache_folder, exist_ok=True)
             logger.info("Downloading model to: %s", cache_folder)
-            _model = SentenceTransformer(
-                EMBEDDING_MODEL,
-                device=device,
-                cache_folder=cache_folder
-            )
+            _model = SentenceTransformer(EMBEDDING_MODEL, device=device, cache_folder=cache_folder)
             logger.info("Model downloaded and cached successfully")
         else:
             logger.info("Loading model with default cache")
@@ -119,16 +137,14 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     # Use larger batch size on GPU for better throughput
     try:
         import torch
+
         batch_size = 128 if torch.cuda.is_available() else 32
     except Exception:
         batch_size = 32
 
     try:
         return model.encode(
-            texts,
-            batch_size=batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True
+            texts, batch_size=batch_size, show_progress_bar=False, convert_to_numpy=True
         ).tolist()
     except Exception as e:
         logger.error("Embedding failed: %s", e)

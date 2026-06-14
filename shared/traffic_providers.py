@@ -14,18 +14,23 @@ Selected via TRAFFIC_PROVIDER. Currently:
 import httpx
 
 from shared.config import (
+    TOMTOM_API_KEY,
+    TOMTOM_FLOW_URL,
     TRAFFIC_PROVIDER,
     TRAFFIC_PROVIDER_BBOX,
     TRAFFIC_PROVIDER_GRID,
-    TOMTOM_API_KEY,
-    TOMTOM_FLOW_URL,
 )
+from shared.logging import get_logger
+
+logger = get_logger("traffic-providers")
 
 
 def _parse_bbox(s: str) -> tuple[float, float, float, float]:
     parts = [float(x) for x in s.split(",")]
     if len(parts) != 4:
-        raise ValueError(f"TRAFFIC_PROVIDER_BBOX must be 'min_lat,min_lon,max_lat,max_lon', got {s!r}")
+        raise ValueError(
+            f"TRAFFIC_PROVIDER_BBOX must be 'min_lat,min_lon,max_lat,max_lon', got {s!r}"
+        )
     return parts[0], parts[1], parts[2], parts[3]
 
 
@@ -97,7 +102,11 @@ def get_provider() -> TrafficProvider | None:
     """Build the configured provider, or None when disabled / misconfigured."""
     if TRAFFIC_PROVIDER == "tomtom":
         if not TOMTOM_API_KEY:
-            print("[traffic-aggregator] TRAFFIC_PROVIDER=tomtom but TOMTOM_API_KEY is unset — provider disabled", flush=True)
+            logger.info(
+                "[traffic-aggregator] TRAFFIC_PROVIDER=tomtom but TOMTOM_API_KEY is unset — provider disabled",
+            )
             return None
-        return TomTomFlowProvider(TRAFFIC_PROVIDER_BBOX, TRAFFIC_PROVIDER_GRID, TOMTOM_API_KEY, TOMTOM_FLOW_URL)
+        return TomTomFlowProvider(
+            TRAFFIC_PROVIDER_BBOX, TRAFFIC_PROVIDER_GRID, TOMTOM_API_KEY, TOMTOM_FLOW_URL
+        )
     return None
