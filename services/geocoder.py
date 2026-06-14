@@ -523,7 +523,10 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
     except Exception as e:
         logger.error(f"[geocoder] Error fetching address data from ES: {e}")
 
-    # Find nearest street: first line in distance order that has a name
+    # Find nearest street: first line in distance order t
+    #
+    #
+    # hat has a name
     nearest_street = None
     for row in nearest_lines:
         src = es_data.get(row["osm_id"])

@@ -522,24 +522,32 @@ def build_app(pool=None, redis=None) -> FastAPI:
         pool=Depends(get_pool),
         redis=Depends(get_redis),
     ):
-        rec, full = await repo.create_key(
-            pool, tenant_id=ident.tenant_id, name=body.name, scopes=body.scopes
-        )
+        try:
+            rec, full = await repo.create_key(
+                pool, tenant_id=ident.tenant_id, name=body.name, scopes=body.scopes
+            )
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         # warm the legacy gateway cache
         await _refresh_cache(pool, redis, rec["key_hash"], rec["tenant_id"])
-        # register the key as an APISIX consumer in its tenant's group
-        if apisix_admin.enabled():
-            plan = await repo.tenant_with_plan(pool, ident.tenant_id)
-            in_group = await apisix_admin.ensure_consumer_group(
-                ident.tenant_id,
-                quota=int(plan.get("monthly_quota") or 0),
-                hard_cap=bool(plan.get("hard_cap")),
-            )
-            await _apisix_safe(
-                apisix_admin.upsert_consumer(
+        # Register the key as an APISIX consumer in its tenant's group. Best-effort:
+        # the key already exists in Postgres + the gateway cache and the reconciler
+        # heals any APISIX drift, so a slow/unreachable APISIX must never fail the
+        # create (an unhandled error here would 500 *without* CORS headers, which the
+        # browser reports as "failed to fetch" even though the key was created).
+        try:
+            if apisix_admin.enabled():
+                plan = await repo.tenant_with_plan(pool, ident.tenant_id)
+                in_group = await apisix_admin.ensure_consumer_group(
+                    ident.tenant_id,
+                    quota=int(plan.get("monthly_quota") or 0),
+                    hard_cap=bool(plan.get("hard_cap")),
+                )
+                await apisix_admin.upsert_consumer(
                     rec["id"], api_key=full, in_group=in_group, tenant_id=ident.tenant_id
                 )
-            )
+        except Exception as e:  # noqa: BLE001 - reconciler heals APISIX drift later
+            _log.warning("APISIX registration for new key %s failed: %s", rec["id"], e)
         return KeyCreated(api_key=full, **_key_public(rec))
 
     @app.get("/keys", response_model=list[KeyOut], tags=[router_tag_tenant])
@@ -568,26 +576,30 @@ def build_app(pool=None, redis=None) -> FastAPI:
             rec = await repo.update_key(pool, key_id, ident.tenant_id, fields)
         except repo.NotFound as e:
             raise _not_found(e) from e
+        except repo.Conflict as e:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         await _refresh_cache(pool, redis, rec["key_hash"], rec["tenant_id"])
-        # enable → (re)create the APISIX consumer from the stored key; disable → remove it
-        if apisix_admin.enabled():
-            if rec["status"] == "active" and rec.get("key_enc"):
-                plan = await repo.tenant_with_plan(pool, ident.tenant_id)
-                in_group = await apisix_admin.ensure_consumer_group(
-                    ident.tenant_id,
-                    quota=int(plan.get("monthly_quota") or 0),
-                    hard_cap=bool(plan.get("hard_cap")),
-                )
-                await _apisix_safe(
-                    apisix_admin.upsert_consumer(
+        # enable → (re)create the APISIX consumer from the stored key; disable → remove
+        # it. Best-effort (see create_key): never let an APISIX hiccup 500 the update.
+        try:
+            if apisix_admin.enabled():
+                if rec["status"] == "active" and rec.get("key_enc"):
+                    plan = await repo.tenant_with_plan(pool, ident.tenant_id)
+                    in_group = await apisix_admin.ensure_consumer_group(
+                        ident.tenant_id,
+                        quota=int(plan.get("monthly_quota") or 0),
+                        hard_cap=bool(plan.get("hard_cap")),
+                    )
+                    await apisix_admin.upsert_consumer(
                         rec["id"],
                         api_key=security.decrypt_key(rec["key_enc"]),
                         in_group=in_group,
                         tenant_id=ident.tenant_id,
                     )
-                )
-            else:
-                await _apisix_safe(apisix_admin.delete_consumer(rec["id"]))
+                else:
+                    await apisix_admin.delete_consumer(rec["id"])
+        except Exception as e:  # noqa: BLE001 - reconciler heals APISIX drift later
+            _log.warning("APISIX sync for key %s failed: %s", rec["id"], e)
         return rec
 
     @app.delete("/keys/{key_id}", status_code=204, tags=[router_tag_tenant])

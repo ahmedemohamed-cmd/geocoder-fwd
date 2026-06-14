@@ -1,8 +1,12 @@
 """asyncpg pool, schema DDL and idempotent seeding."""
 
+import logging
+
 import asyncpg
 
 from . import config, security
+
+_log = logging.getLogger("billing.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS plans (
@@ -113,6 +117,21 @@ async def init_schema(pool: asyncpg.Pool) -> None:
         await conn.execute(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'"
         )
+        # Key names must be unique per tenant (soft-deleted keys excluded, so a
+        # name can be reused after deletion). Best-effort: a pre-existing database
+        # with duplicate names would make the index build fail — log and continue
+        # so startup isn't blocked; the application-level check still applies.
+        try:
+            await conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_api_keys_tenant_name "
+                "ON api_keys (tenant_id, name) WHERE status <> 'deleted'"
+            )
+        except asyncpg.PostgresError as e:
+            _log.warning(
+                "could not create unique index on (tenant_id, name) — "
+                "deduplicate existing api_keys names to enable it: %s",
+                e,
+            )
 
 
 async def seed_plans(pool: asyncpg.Pool) -> None:

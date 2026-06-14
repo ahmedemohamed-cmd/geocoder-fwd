@@ -245,18 +245,46 @@ async def soft_delete_tenant(pool, tenant_id: str) -> list[str]:
 
 
 # ── api keys ─────────────────────────────────────────────────────────────────
-async def create_key(pool, *, tenant_id: str, name: str, scopes: list[str]) -> tuple[dict, str]:
-    full, prefix, key_hash = security.generate_api_key()
-    rec = await pool.fetchrow(
-        """INSERT INTO api_keys (tenant_id, name, key_prefix, key_hash, key_enc, scopes)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
-        tenant_id,
-        name,
-        prefix,
-        key_hash,
-        security.encrypt_key(full),
-        scopes,
+async def _key_name_taken(
+    pool, tenant_id: str, name: str, *, exclude_id: str | None = None
+) -> bool:
+    """True if a non-deleted key with this name already exists for the tenant."""
+    if exclude_id is None:
+        return bool(
+            await pool.fetchval(
+                "SELECT 1 FROM api_keys WHERE tenant_id=$1 AND name=$2 AND status <> 'deleted'",
+                tenant_id,
+                name,
+            )
+        )
+    return bool(
+        await pool.fetchval(
+            "SELECT 1 FROM api_keys "
+            "WHERE tenant_id=$1 AND name=$2 AND id <> $3 AND status <> 'deleted'",
+            tenant_id,
+            name,
+            exclude_id,
+        )
     )
+
+
+async def create_key(pool, *, tenant_id: str, name: str, scopes: list[str]) -> tuple[dict, str]:
+    if await _key_name_taken(pool, tenant_id, name):
+        raise Conflict(f"a key named {name!r} already exists")
+    full, prefix, key_hash = security.generate_api_key()
+    try:
+        rec = await pool.fetchrow(
+            """INSERT INTO api_keys (tenant_id, name, key_prefix, key_hash, key_enc, scopes)
+               VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
+            tenant_id,
+            name,
+            prefix,
+            key_hash,
+            security.encrypt_key(full),
+            scopes,
+        )
+    except asyncpg.UniqueViolationError:  # lost a create race on the unique index
+        raise Conflict(f"a key named {name!r} already exists") from None
     return _row(rec), full
 
 
@@ -282,6 +310,10 @@ async def get_key(pool, key_id: str, *, tenant_id: str | None = None) -> dict:
 
 
 async def update_key(pool, key_id: str, tenant_id: str, fields: dict) -> dict:
+    if "name" in fields and await _key_name_taken(
+        pool, tenant_id, fields["name"], exclude_id=key_id
+    ):
+        raise Conflict(f"a key named {fields['name']!r} already exists")
     sets, vals = [], []
     for i, (k, v) in enumerate(fields.items(), start=1):
         sets.append(f"{k}=${i}")
@@ -289,12 +321,15 @@ async def update_key(pool, key_id: str, tenant_id: str, fields: dict) -> dict:
     if not sets:
         return await get_key(pool, key_id, tenant_id=tenant_id)
     vals.extend([key_id, tenant_id])
-    rec = await pool.fetchrow(
-        f"UPDATE api_keys SET {', '.join(sets)}, updated_at=now() "
-        f"WHERE id=${len(vals) - 1} AND tenant_id=${len(vals)} AND status <> 'deleted' "
-        f"RETURNING *",
-        *vals,
-    )
+    try:
+        rec = await pool.fetchrow(
+            f"UPDATE api_keys SET {', '.join(sets)}, updated_at=now() "
+            f"WHERE id=${len(vals) - 1} AND tenant_id=${len(vals)} AND status <> 'deleted' "
+            f"RETURNING *",
+            *vals,
+        )
+    except asyncpg.UniqueViolationError:
+        raise Conflict(f"a key named {fields['name']!r} already exists") from None
     if rec is None:
         raise NotFound("key not found")
     return _row(rec)
@@ -488,6 +523,13 @@ async def list_active_tenant_quota_specs(pool) -> list[dict]:
             WHERE t.status = 'active'"""
     )
     return [dict(r) for r in rows]
+
+
+async def all_active_tenant_ids(pool) -> list[str]:
+    """Tenant ids for every active tenant — used to re-project APISIX consumers
+    on startup so the data plane self-heals after an etcd reset."""
+    rows = await pool.fetch("SELECT id FROM tenants WHERE status = 'active'")
+    return [str(r["id"]) for r in rows]
 
 
 async def list_plans(pool) -> list[dict]:

@@ -1,9 +1,9 @@
 """Unit tests for the APISIX integration pieces that don't need a live APISIX:
 key encryption round-trip, consumer-name mapping, and the usage sink endpoint."""
 
-from conftest import bearer, create_key, make_tenant
+from conftest import admin_token, bearer, create_key, make_tenant
 
-from billing import apisix_admin, security, usage
+from billing import apisix_admin, repo, security, usage
 
 
 def test_key_encryption_roundtrip():
@@ -52,6 +52,21 @@ async def test_usage_sink_records_served_only(cp_client, pool, redis):
     # and it surfaces through the tenant's real-time usage endpoint
     cur = await cp_client.get("/usage/current", headers=bearer(ttok))
     assert cur.json()["requests"] == 1
+
+
+async def test_all_active_tenant_ids_excludes_deleted(cp_client, pool):
+    """The startup reconcile (_cp_lifespan) re-projects consumers for exactly
+    these tenants, so a deleted tenant must drop out."""
+    keep, _ = await make_tenant(cp_client, name="Keep", admin_email="keep@acme.io")
+    drop, _ = await make_tenant(cp_client, name="Drop", admin_email="drop@acme.io")
+
+    atok = await admin_token(cp_client)
+    r = await cp_client.delete(f"/admin/tenants/{drop['id']}", headers=bearer(atok))
+    assert r.status_code in (200, 204), r.text
+
+    ids = await repo.all_active_tenant_ids(pool)
+    assert keep["id"] in ids
+    assert drop["id"] not in ids
 
 
 async def test_usage_sink_rejects_bad_token(cp_client, monkeypatch):

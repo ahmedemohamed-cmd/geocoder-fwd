@@ -54,6 +54,43 @@ async def test_soft_delete_keeps_row_in_db(cp_client, pool):
     assert row["deleted_at"] is not None
 
 
+async def test_duplicate_key_name_rejected(cp_client):
+    _, ttok = await make_tenant(cp_client, admin_email="dup@acme.test")
+    await create_key(cp_client, ttok, name="prod")
+
+    # second key with the same name in the same tenant → 409
+    dup = await cp_client.post("/keys", headers=bearer(ttok), json={"name": "prod", "scopes": []})
+    assert dup.status_code == 409, dup.text
+    assert "already exists" in dup.json()["detail"]
+
+
+async def test_key_name_unique_only_within_tenant(cp_client):
+    # same name in two different tenants is fine
+    _, tokA = await make_tenant(cp_client, name="A", admin_email="dupa@acme.test")
+    _, tokB = await make_tenant(cp_client, name="B", admin_email="dupb@acme.test")
+    await create_key(cp_client, tokA, name="prod")
+    same = await cp_client.post("/keys", headers=bearer(tokB), json={"name": "prod", "scopes": []})
+    assert same.status_code == 201, same.text
+
+
+async def test_key_name_reusable_after_delete(cp_client):
+    _, ttok = await make_tenant(cp_client, admin_email="reuse@acme.test")
+    created = await create_key(cp_client, ttok, name="prod")
+    await cp_client.delete(f"/keys/{created['id']}", headers=bearer(ttok))
+    # name freed once the old key is soft-deleted
+    again = await cp_client.post("/keys", headers=bearer(ttok), json={"name": "prod", "scopes": []})
+    assert again.status_code == 201, again.text
+
+
+async def test_rename_to_existing_name_rejected(cp_client):
+    _, ttok = await make_tenant(cp_client, admin_email="rename@acme.test")
+    await create_key(cp_client, ttok, name="prod")
+    other = await create_key(cp_client, ttok, name="staging")
+    # renaming "staging" → "prod" collides → 409
+    r = await cp_client.patch(f"/keys/{other['id']}", headers=bearer(ttok), json={"name": "prod"})
+    assert r.status_code == 409, r.text
+
+
 async def test_tenant_isolation(cp_client):
     _, tokA = await make_tenant(cp_client, name="A", admin_email="iso-a@acme.test")
     _, tokB = await make_tenant(cp_client, name="B", admin_email="iso-b@acme.test")

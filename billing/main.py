@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 
-from . import apisix_admin, config, control_plane, db, gateway, usage
+from . import apisix_admin, config, control_plane, db, gateway, repo, usage
 
 
 def _make_redis() -> aioredis.Redis:
@@ -45,6 +45,12 @@ async def _cp_lifespan(app):
         try:
             await apisix_admin.ensure_route()
             await apisix_admin.ensure_valhalla_route()
+            # Re-project consumer-groups + per-key consumers from the DB so the
+            # data plane self-heals after an etcd reset (routes alone come back
+            # without the consumers that authenticate requests). Best-effort:
+            # _sync_tenant swallows per-tenant gateway errors.
+            for tid in await repo.all_active_tenant_ids(app.state.pool):
+                await control_plane._sync_tenant(app.state.pool, tid)
         except Exception:  # noqa: BLE001 - APISIX may still be starting
             pass
     yield
