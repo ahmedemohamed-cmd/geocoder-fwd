@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,60 @@ def _parse_housenumber(hn: str) -> int | None:
 def _parity(n: int) -> str:
     """Return 'odd' or 'even'."""
     return "odd" if n % 2 else "even"
+
+
+# ── street-name normalisation (cross-lingual address matching) ─────────────────
+# Address points (``osm_addresses.street``) and the street-way names resolved from
+# ES rarely match byte-for-byte: Arabic diacritics, alef/ya/ta-marbuta spelling
+# variants, and the leading "شارع"/"St" generic word all differ.  Matching on a
+# normalised form bridges the two so interpolation can actually find a street's
+# address points.  ``_norm_street`` (Python) and ``_STREET_NORM_SQL`` (Postgres)
+# must stay in lock-step — a parity unit test guards this.
+_AR_DELETE = {  # Arabic diacritics (tashkeel) + tatweel + superscript alef
+    *range(0x064B, 0x0653),
+    0x0640,
+    0x0670,
+}
+_AR_MAP = {"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي"}  # spelling variants
+_STREET_PREFIXES = {
+    "شارع", "ش", "طريق", "حارة", "حاره", "زقاق", "ميدان",
+    "street", "st", "road", "rd", "avenue", "ave",
+}
+
+# SQL mirror of the diacritic-delete + alef-map step (translate maps the first
+# len(_AR_TO) chars and drops the rest, since the FROM string is longer).
+_AR_SQL_FROM = "أإآةى" + "".join(chr(c) for c in _AR_DELETE)
+_AR_SQL_TO = "اااهي"
+# Longer alternatives first so e.g. "street" wins over "st".
+_STREET_PREFIX_RE = "شارع|طريق|حارة|حاره|زقاق|ميدان|street|avenue|road|ش|ave|rd|st"
+_STREET_NORM_SQL = (
+    "regexp_replace("
+    "  btrim(regexp_replace("
+    f"    translate(lower({{col}}), '{_AR_SQL_FROM}', '{_AR_SQL_TO}'),"
+    "    '\\s+', ' ', 'g')),"
+    f"  '^({_STREET_PREFIX_RE})\\s+', '', '')"
+)
+
+
+def _norm_street(s: str | None) -> str:
+    """Normalise a street name for cross-lingual exact matching.
+
+    Lowercase, drop Arabic diacritics/tatweel, unify alef/ya/ta-marbuta spelling
+    variants, collapse whitespace, and strip a single leading generic street word
+    ("شارع", "St", …).  Mirrors ``_STREET_NORM_SQL``.
+    """
+    if not s:
+        return ""
+    out = []
+    for ch in s.lower():
+        if ord(ch) in _AR_DELETE:
+            continue
+        out.append(_AR_MAP.get(ch, ch))
+    s = re.sub(r"\s+", " ", "".join(out)).strip()
+    head, _, tail = s.partition(" ")
+    if tail and head in _STREET_PREFIXES:
+        s = tail
+    return s
 
 
 def _interpolation_confidence(gap: int) -> float:
@@ -535,16 +590,18 @@ async def _gather_addresses(
     yields the cluster the user is actually near.  Without ``near`` it falls back
     to a name-only match, optionally narrowed by ``city``.
     """
-    names = [n.lower() for n in street_names if n]
+    # Match on the normalised street name (diacritic/alef/prefix-insensitive) so
+    # an ES-resolved name reaches address points tagged with a spelling variant.
+    names = list(dict.fromkeys(_norm_street(n) for n in street_names if _norm_street(n)))
     if not names:
         return []
 
     params: list = [names]
-    query = """
+    query = f"""
         SELECT osm_id, housenumber, street, city, postcode, country,
                ST_Y(geom) AS lat, ST_X(geom) AS lon
         FROM osm_addresses
-        WHERE lower(street) = ANY($1::text[])
+        WHERE {_STREET_NORM_SQL.format(col="street")} = ANY($1::text[])
     """
     if near is not None:
         lat, lon = near

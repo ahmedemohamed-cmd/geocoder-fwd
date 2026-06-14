@@ -135,6 +135,57 @@ def eval_named(case, effort="high"):
     }
 
 
+def _hn_int(s):
+    d = re.sub(r"\D", "", s or "")
+    return int(d) if d else None
+
+
+# Same-parity offsets used to locate a genuinely-absent house number to probe.
+# All even so `base ± offset` stays on the requested odd/even side (the side
+# interpolation brackets on); ordered nearest-first so we interpolate between
+# brackets rather than extrapolate past the ends when possible.
+_PROBE_OFFSETS = (2, -2, 4, -4, 6, 20, 50)
+
+
+def probe_interpolation(case, effort="high"):
+    """Probe a *genuinely absent* same-parity house number on the case's street.
+
+    The old probe used ``base + 1`` which (a) flips parity and (b) lands on a
+    number that already exists ~80% of the time — an exact hit the probe then
+    miscounted as an interpolation failure.  Here we step by even offsets and
+    skip any candidate that already exists, so we only score real interpolation.
+
+    Returns:
+      "ok"   - an absent number returned an interpolated point on the street
+      "fail" - an absent number returned no interpolated point
+      "na"   - no absent number could be found (every candidate exists, so
+               interpolation was never exercised) → excluded from the denominator
+    """
+    base = _hn_int(case.get("addr_housenumber"))
+    if base is None:
+        return "na"
+    street, city = case["addr_street"], case.get("addr_city", "")
+    for off in _PROBE_OFFSETS:
+        n = base + off
+        if n <= 0:
+            continue
+        hits = [
+            r for r in geocode(f"{n} {street}, {city}", effort)
+            if street_match(street, r.get("addr_street", ""))
+        ]
+        if any(r.get("match_type") == "interpolated" for r in hits):
+            return "ok"
+        # candidate already exists as a real address → not an interpolation test
+        if any(
+            _hn_int(r.get("addr_housenumber")) == n and r.get("match_type") != "interpolated"
+            for r in hits
+        ):
+            continue
+        # street resolvable but no interpolated point for an absent number → miss
+        return "fail"
+    return "na"
+
+
 def eval_address(case, effort="high"):
     results = geocode(case["query"], effort)
     osm_rank = rank_of_osmid(results, case["osm_id"])
@@ -143,27 +194,13 @@ def eval_address(case, effort="high"):
         if street_match(case["addr_street"], r.get("addr_street", "")):
             street_rank = i + 1
             break
-    # interpolation probe: query a likely-nonexistent number on the same street
-    try:
-        probe_hn = int(re.sub(r"\D", "", case["addr_housenumber"]) or "0") + 1
-    except ValueError:
-        probe_hn = None
-    interp_ok = False
-    if probe_hn:
-        pq = f"{probe_hn} {case['addr_street']}, {case['addr_city']}"
-        for r in geocode(pq, effort):
-            if r.get("match_type") == "interpolated" and street_match(
-                case["addr_street"], r.get("addr_street", "")
-            ):
-                interp_ok = True
-                break
     return {
         "kind": "address",
         "query": case["query"],
         "osm_id": case["osm_id"],
         "exact_rank": osm_rank,
         "street_rank": street_rank,
-        "interp_ok": interp_ok,
+        "interp_state": probe_interpolation(case, effort),
         "top": (
             results[0].get("name_en") or results[0].get("name") or results[0].get("full_address")
         )
@@ -228,12 +265,20 @@ def section_lines(out, effort):
                 100 * _at(addr, key, 10) / nA,
             )
         )
-    interp = sum(1 for r in addr if r["interp_ok"])
+    states = [r["interp_state"] for r in addr]
+    valid = [s for s in states if s != "na"]
+    ok = sum(1 for s in valid if s == "ok")
+    na = len(states) - len(valid)
+    pct = 100 * ok / len(valid) if valid else 0.0
     lines.append("")
     lines.append("## Interpolation probe (addresses, %d)\n" % nA)
     lines.append(
-        f"- Non-existent house number on a known street returned an "
-        f"interpolated point: **{interp}/{nA} ({100 * interp / nA:.1f}%)**\n"
+        f"- Genuinely-absent (same-parity) house number on a known street returned "
+        f"an interpolated point: **{ok}/{len(valid)} ({pct:.1f}%)**\n"
+    )
+    lines.append(
+        f"- Excluded {na} cases where no absent number could be probed "
+        f"(every candidate already exists, so interpolation was never exercised).\n"
     )
     return lines
 

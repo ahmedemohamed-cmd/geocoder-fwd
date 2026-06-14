@@ -10,7 +10,7 @@ from services.geocoder_helpers import (
     _normalize_confidence,
 )
 from shared.address import build_full_address, has_address, is_address_query
-from shared.interpolation import _parity, _parse_housenumber
+from shared.interpolation import _norm_street, _parity, _parse_housenumber
 
 
 def test_normalize_confidence():
@@ -47,6 +47,22 @@ def test_parse_housenumber():
 def test_parity():
     assert _parity(3) == "odd"
     assert _parity(4) == "even"
+
+
+def test_norm_street():
+    # leading generic word stripped (Arabic + English), trailing kept
+    assert _norm_street("شارع التحرير") == "التحرير"
+    assert _norm_street("ش الهرم") == "الهرم"
+    assert _norm_street("طريق النصر") == "النصر"
+    assert _norm_street("Tahrir Street") == "tahrir street"
+    # diacritics dropped, alef/ya/ta-marbuta variants unified, whitespace collapsed
+    assert _norm_street("الجيزة") == "الجيزه"
+    assert _norm_street("شارع  مصطفى  النحاس") == "مصطفي النحاس"
+    assert _norm_street("شَارِع التَحرير") == "التحرير"
+    # a prefix word that stands alone is not stripped
+    assert _norm_street("شارع") == "شارع"
+    assert _norm_street("") == ""
+    assert _norm_street(None) == ""
 
 
 def test_has_address():

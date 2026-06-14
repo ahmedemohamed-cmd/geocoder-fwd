@@ -42,6 +42,7 @@ from shared.config import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
+from shared.interpolation import _STREET_NORM_SQL
 from shared.logging import get_logger
 from shared.nats_client import (
     connect,
@@ -200,6 +201,14 @@ async def ensure_table(pool: asyncpg.Pool):
             await conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{ADDRESS_TABLE}_street"
                 f" ON {ADDRESS_TABLE} (lower(street))"
+            )
+            # Normalised-name index: address interpolation matches street names
+            # diacritic/alef/prefix-insensitively (see shared.interpolation), which
+            # can't ride the lower(street) btree. Without this functional index the
+            # gather degrades to a full seq scan over every address.
+            await conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{ADDRESS_TABLE}_street_norm"
+                f" ON {ADDRESS_TABLE} (({_STREET_NORM_SQL.format(col='street')}))"
             )
             await conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{ADDRESS_TABLE}_postcode"

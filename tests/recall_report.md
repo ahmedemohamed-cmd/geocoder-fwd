@@ -21,7 +21,9 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 ## Interpolation probe (addresses, 250)
 
-- Non-existent house number on a known street returned an interpolated point: **63/250 (25.2%)**
+- Genuinely-absent (same-parity) house number on a known street returned an interpolated point: **138/196 (70.4%)**
+
+- Excluded 54 cases where no absent number could be probed (every candidate already exists, so interpolation was never exercised).
 
 # Optimized effort (lean fuzzy + rescore, no exact hit count)
 
@@ -29,8 +31,8 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| strict (same osm_id) | 88.9% | 97.5% | 98.7% |
-| lenient (name or ≤150 m) | 96.7% | 98.9% | 99.3% |
+| strict (same osm_id) | 88.9% | 97.5% | 98.5% |
+| lenient (name or ≤150 m) | 96.7% | 98.9% | 99.2% |
 
 ## Addresses (250)
 
@@ -41,4 +43,6 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 ## Interpolation probe (addresses, 250)
 
-- Non-existent house number on a known street returned an interpolated point: **63/250 (25.2%)**
+- Genuinely-absent (same-parity) house number on a known street returned an interpolated point: **138/196 (70.4%)**
+
+- Excluded 54 cases where no absent number could be probed (every candidate already exists, so interpolation was never exercised).
