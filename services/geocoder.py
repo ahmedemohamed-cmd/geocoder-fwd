@@ -888,7 +888,7 @@ async def geocode(
         False, description="Include AI-generated descriptions (cached where available)"
     ),
     effort: str = Query(
-        "high",
+        "optimized",
         pattern="^(high|optimized)$",
         description="Scoring effort: 'high' (full fuzzy recall + per-doc "
         "function_score over all matches) or 'optimized' (lean "
