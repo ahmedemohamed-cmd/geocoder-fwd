@@ -9,6 +9,7 @@ Services:
     watcher           Parse PBF files and publish to NATS
     oa-watcher        Parse OpenAddresses CSV/GeoJSON files and publish to NATS
     gn-watcher        Parse GeoNames TSV dump files and publish to NATS
+    places-watcher    Parse curated place JSON exports and publish to NATS
     es-inserter       NATS -> Elasticsearch
     postgis-inserter  NATS -> PostGIS
     geocoder          FastAPI geocoding HTTP server (includes /insert endpoint)
@@ -49,6 +50,11 @@ def main():
 
     elif service == "gn-watcher":
         from services.gn_watcher import run
+
+        asyncio.run(run())
+
+    elif service == "places-watcher":
+        from services.places_watcher import run
 
         asyncio.run(run())
 

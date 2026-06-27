@@ -368,6 +368,24 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # Imports curated place JSON exports dropped into ./data/places (Pelias google
+  # POIs + Postgres `places` dumps). Maps each record to the watcher OSM-element
+  # format and publishes to NATS; a .processed ledger stops re-import on restart.
+  places-watcher:
+    build: .
+    command: python -u -m services.places_watcher
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NATS_URL=nats://nats:4222
+      - NATS_STREAM=OSM
+      - NATS_SUBJECT=osm.elements
+      - PLACES_DATA_DIR=/app/data/places
+    depends_on:
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
   downloader:
     build: .
     command: python -u -m services.downloader

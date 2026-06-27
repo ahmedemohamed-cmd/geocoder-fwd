@@ -141,7 +141,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### Basic name search
-GET {{gatewayUrl}}/geocode?q=makaram
+GET {{gatewayUrl}}/geocode?q=اسكندرون
 X-API-Key: {{apiKey}}
 
 ###

@@ -40,6 +40,9 @@ OA_DATA_DIR = os.getenv("OA_DATA_DIR", str(Path(DATA_DIR) / "openaddresses"))
 # GeoNames data directory (TSV dump files)
 GN_DATA_DIR = os.getenv("GN_DATA_DIR", str(Path(DATA_DIR) / "geonames"))
 
+# Curated place exports (JSON arrays: Pelias google + Postgres `places` dumps)
+PLACES_DATA_DIR = os.getenv("PLACES_DATA_DIR", str(Path(DATA_DIR) / "places"))
+
 # How often the file-importing services (watcher, oa-watcher, gn-watcher)
 # re-scan their data dirs for newly-added files, in seconds. They poll rather
 # than rely on inotify/watchdog because the data dirs are Docker bind mounts and

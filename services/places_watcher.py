@@ -1,0 +1,181 @@
+"""Watch data/places/ for curated place exports, map them, publish to NATS JS.
+
+Imports the one-off place datasets that aren't downloadable feeds (OSM/OA/
+GeoNames) but curated JSON exports we drop into ``data/places/``:
+
+  * ``*pelias*google*.json`` — Pelias ``source=google`` POIs ({_id,_source} list)
+  * Postgres ``places`` table exports (flat {id,name,layer,lon,lat,...} list)
+
+Each record is mapped (``shared.places_mapping``) into the same NATS message
+format ``watcher.py`` produces for OSM PBF data, so the downstream consumers
+(``es_inserter``, ``postgis_inserter``) index it with no changes. A single
+``.processed`` ledger in the data dir records imported files so a restart does
+NOT re-import them (re-imports are idempotent anyway — osm_id is stable).
+
+Usage:
+    python run.py places-watcher
+"""
+
+import asyncio
+import glob
+import json
+import os
+
+from shared import nats_client
+from shared.config import NATS_SUBJECT, PLACES_DATA_DIR, WATCH_POLL_INTERVAL
+from shared.logging import get_logger
+from shared.places_mapping import map_record
+from shared.processed import is_processed, load_processed, record_processed
+from shared.progress import ProgressTracker
+
+logger = get_logger("places-watcher")
+
+BATCH_PUBLISH = 500
+MAX_RETRIES = 10
+MAX_CONSECUTIVE_FAILURES = 50
+
+
+async def _publish_batch(
+    js,
+    batch: list[bytes],
+    published: int,
+    consecutive_failures: int,
+    progress: ProgressTracker,
+) -> tuple[int, int]:
+    """Publish a batch of encoded messages to NATS. Returns updated counters."""
+    for payload in batch:
+        for attempt in range(MAX_RETRIES):
+            try:
+                await js.publish(NATS_SUBJECT, payload, timeout=30)
+                published += 1
+                consecutive_failures = 0
+                progress.update()
+                break
+            except Exception as e:
+                err_str = str(e).lower()
+                if any(kw in err_str for kw in ("payload", "large", "exceeded")):
+                    progress.skip()  # permanent — message too large, skip it
+                    break
+                consecutive_failures += 1
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(min(2**attempt, 30))
+                else:
+                    logger.error(
+                        f"[places-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                    )
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            break
+    return published, consecutive_failures
+
+
+async def publish_file(filepath: str, js) -> int:
+    """Read a JSON-array place export and publish each record as a NATS message.
+
+    Returns the number published, or -1 if aborted early (too many failures).
+    """
+    basename = os.path.basename(filepath)
+    logger.info(f"[places-watcher] Processing: {basename}")
+
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            records = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error(f"[places-watcher] Cannot read {basename}: {e}")
+        return -1
+    if not isinstance(records, list):
+        logger.error(f"[places-watcher] {basename}: expected a JSON array, skipping")
+        return -1
+
+    progress = ProgressTracker(f"places-watcher {basename}", total=len(records))
+    published = 0
+    consecutive_failures = 0
+    batch: list[bytes] = []
+
+    for rec in records:
+        try:
+            msg = map_record(rec)
+        except Exception as e:
+            logger.debug(f"[places-watcher] {basename}: bad record skipped: {e}")
+            msg = None
+        if msg is None:
+            progress.skip()
+            continue
+
+        batch.append(json.dumps(msg, ensure_ascii=False).encode())
+        if len(batch) >= BATCH_PUBLISH:
+            published, consecutive_failures = await _publish_batch(
+                js, batch, published, consecutive_failures, progress
+            )
+            batch.clear()
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                logger.error(f"[places-watcher] Too many failures, aborting {basename}")
+                progress.close()
+                return -1
+
+    if batch and consecutive_failures < MAX_CONSECUTIVE_FAILURES:
+        published, consecutive_failures = await _publish_batch(
+            js, batch, published, consecutive_failures, progress
+        )
+
+    progress.close()
+    logger.info(f"[places-watcher] {basename}: published {published} places")
+    return published
+
+
+async def _scan_and_process(js) -> int:
+    """Process not-yet-imported *.json place exports once. Returns files done."""
+    json_files = sorted(glob.glob(os.path.join(PLACES_DATA_DIR, "*.json")))
+
+    done = load_processed(PLACES_DATA_DIR)
+    pending = [f for f in json_files if not is_processed(PLACES_DATA_DIR, f, done)]
+    if not pending:
+        return 0
+
+    logger.info(f"[places-watcher] Found {len(pending)} new place file(s) to process")
+    processed = 0
+    for filepath in pending:
+        try:
+            count = await publish_file(filepath, js)
+            if count >= 0:
+                record_processed(PLACES_DATA_DIR, filepath, done)
+                logger.info(f"[places-watcher] Completed {os.path.basename(filepath)}")
+                processed += 1
+            else:
+                logger.warning(
+                    f"[places-watcher] Incomplete processing of {os.path.basename(filepath)} "
+                    "— will retry next scan",
+                )
+        except Exception as e:
+            logger.error(f"[places-watcher] Error processing {os.path.basename(filepath)}: {e}")
+            import traceback
+
+            traceback.print_exc()
+    return processed
+
+
+async def run():
+    """Continuously watch PLACES_DATA_DIR, importing new place exports as they appear."""
+    logger.info("[places-watcher] Starting places watcher service ...")
+    os.makedirs(PLACES_DATA_DIR, exist_ok=True)
+
+    nc, js = await nats_client.connect()
+    logger.info(
+        f"[places-watcher] Watching {PLACES_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)"
+    )
+
+    try:
+        first = True
+        while True:
+            n = await _scan_and_process(js)
+            if first and n == 0:
+                logger.info(
+                    f"[places-watcher] No new files in {PLACES_DATA_DIR} yet; will keep watching.",
+                )
+            first = False
+            await asyncio.sleep(WATCH_POLL_INTERVAL)
+    finally:
+        await nc.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(run())
