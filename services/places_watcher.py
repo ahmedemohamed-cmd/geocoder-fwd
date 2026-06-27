@@ -1,12 +1,11 @@
 """Watch data/places/ for curated place exports, map them, publish to NATS JS.
 
-Imports the one-off place datasets that aren't downloadable feeds (OSM/OA/
-GeoNames) but curated JSON exports we drop into ``data/places/``:
+Imports the curated place datasets that aren't downloadable feeds (OSM/OA/
+GeoNames) but JSON-array exports we drop into ``data/places/``. Every file is
+expected in the **unified place schema** (``shared.places_mapping``); raw
+Pelias/Postgres exports are converted to it once via ``scripts/unify_places.py``.
 
-  * ``*pelias*google*.json`` — Pelias ``source=google`` POIs ({_id,_source} list)
-  * Postgres ``places`` table exports (flat {id,name,layer,lon,lat,...} list)
-
-Each record is mapped (``shared.places_mapping``) into the same NATS message
+Each unified record is mapped (``place_to_element``) into the same NATS message
 format ``watcher.py`` produces for OSM PBF data, so the downstream consumers
 (``es_inserter``, ``postgis_inserter``) index it with no changes. A single
 ``.processed`` ledger in the data dir records imported files so a restart does
@@ -24,7 +23,7 @@ import os
 from shared import nats_client
 from shared.config import NATS_SUBJECT, PLACES_DATA_DIR, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
-from shared.places_mapping import map_record
+from shared.places_mapping import place_to_element
 from shared.processed import is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
 
@@ -93,7 +92,7 @@ async def publish_file(filepath: str, js) -> int:
 
     for rec in records:
         try:
-            msg = map_record(rec)
+            msg = place_to_element(rec)
         except Exception as e:
             logger.debug(f"[places-watcher] {basename}: bad record skipped: {e}")
             msg = None
