@@ -50,11 +50,11 @@
 ###
 ### Shared query flags: vector=true|false · ai=true|false · describe=true|false
 
-@gatewayUrl = http://localhost:8080
-#@gatewayUrl = http://84.8.102.106:8080
+#@gatewayUrl = http://localhost:8080
+@gatewayUrl = https://places.nourbyte.com/api
 
 # Your tenant API key (create one in the console; shown once). Replace this.
-@apiKey = gk_45d465a0_aDVdPtEPRdtKzjcrpgb39GC98cFByzWU
+@apiKey = gk_82178b50_s8Iaoer87HSK_oeFvZ5JQkT-X4Q6v72Y
 
 
 # ============================================================================

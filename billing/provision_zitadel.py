@@ -92,7 +92,14 @@ def main() -> None:
     if host_override:
         headers["Host"] = host_override
     with httpx.Client(headers=headers, timeout=30) as c:
-        issuer = c.get(f"{API}/.well-known/openid-configuration").json()["issuer"]
+        # Behind a TLS-terminating proxy the discovery doc fetched over the
+        # internal http://zitadel:8080 reports an http:// issuer (no
+        # X-Forwarded-Proto on this hop), which would not match the https issuer
+        # Zitadel mints for browser-facing tokens. Prefer the explicit public
+        # issuer when provided; fall back to discovery for local/dev.
+        issuer = os.getenv("ZITADEL_ISSUER") or (
+            c.get(f"{API}/.well-known/openid-configuration").json()["issuer"]
+        )
 
         # 0) Zitadel v4 defaults to "Login UI v2", which is a separate service we
         # don't run; disable it so OIDC uses the built-in login UI (/ui/login).
@@ -182,7 +189,10 @@ def _ensure_spa(c, project_id) -> str:
     r = c.post(f"{API}/management/v1/projects/{project_id}/apps/oidc", json=body)
     if r.status_code < 300:
         return r.json()["clientId"]
-    # already exists → find it
+    # already exists → find it and UPDATE its OIDC config so redirect/logout
+    # URIs (and the other settings) track the current deployment. Without this
+    # a re-provision against an existing app keeps stale URIs and OIDC fails
+    # with "redirect_uri missing in the client configuration".
     apps = c.post(
         f"{API}/management/v1/projects/{project_id}/apps/_search",
         json={
@@ -192,6 +202,19 @@ def _ensure_spa(c, project_id) -> str:
         },
     ).json()
     app_id = apps["result"][0]["id"]
+    update_fields = (
+        "redirectUris", "responseTypes", "grantTypes", "appType", "authMethodType",
+        "postLogoutRedirectUris", "devMode", "accessTokenType",
+        "accessTokenRoleAssertion", "idTokenRoleAssertion", "idTokenUserinfoAssertion",
+    )
+    upd = c.put(
+        f"{API}/management/v1/projects/{project_id}/apps/{app_id}/oidc_config",
+        json={k: body[k] for k in update_fields},
+    )
+    if upd.status_code >= 300:
+        print(f"WARN update oidc_config -> {upd.status_code} {upd.text[:200]}")
+    else:
+        print("updated SPA redirect URIs:", body["redirectUris"])
     detail = c.get(f"{API}/management/v1/projects/{project_id}/apps/{app_id}").json()
     return detail["app"]["oidcConfig"]["clientId"]
 
