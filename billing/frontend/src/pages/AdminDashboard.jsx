@@ -90,6 +90,11 @@ export default function AdminDashboard({ api }) {
     try { await api.patch(`/admin/tenants/${t.id}`, { status }); load(); if (sel?.id === t.id) openTenant({ ...t, status }); }
     catch (e) { setErr(e.message); }
   };
+  const changePlan = async (t, plan_id) => {
+    if (!plan_id || plan_id === t.plan_id) return;
+    try { await api.patch(`/admin/tenants/${t.id}`, { plan_id }); load(); if (sel?.id === t.id) openTenant({ ...t, plan_id }); }
+    catch (e) { setErr(e.message); }
+  };
   const del = async (t) => {
     if (!confirm(`Delete tenant ${t.name}? This is permanent (soft delete).`)) return;
     try { await api.del(`/admin/tenants/${t.id}`); load(); setSel(null); }
@@ -107,7 +112,15 @@ export default function AdminDashboard({ api }) {
             {tenants.map((t) => (
               <tr key={t.id} className={sel?.id === t.id ? "active" : ""}>
                 <td><a onClick={() => openTenant(t)}>{t.name}</a></td>
-                <td>{t.plan_id}</td>
+                <td>
+                  <select value={t.plan_id || ""} onChange={(e) => changePlan(t, e.target.value)}
+                    disabled={t.status === "deleted"} title="Change subscription plan">
+                    {!plans.some((p) => p.id === t.plan_id) && (
+                      <option value={t.plan_id || ""}>{t.plan_id || "—"}</option>
+                    )}
+                    {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </td>
                 <td><span className={`pill ${t.status}`}>{t.status}</span></td>
                 <td>
                   {t.status === "active" && (
