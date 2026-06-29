@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import AccountCard from "./AccountCard.jsx";
 
 export default function TenantDashboard({ api }) {
   const [keys, setKeys] = useState([]);
@@ -146,6 +147,8 @@ export default function TenantDashboard({ api }) {
           <button className="primary" type="submit">Create</button>
         </form>
       </section>
+
+      <AccountCard api={api} />
     </div>
   );
 }

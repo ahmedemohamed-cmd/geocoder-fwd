@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import PlansCard from "./PlansCard.jsx";
 import AdminsCard from "./AdminsCard.jsx";
+import AccountCard from "./AccountCard.jsx";
 
 export default function AdminDashboard({ api }) {
   const [tenants, setTenants] = useState([]);
@@ -33,6 +34,14 @@ export default function AdminDashboard({ api }) {
     try {
       await api.post(`/admin/tenants/${sel.id}/reset-password`, { email, new_password: pw });
       alert(`Password reset for ${email}.`);
+    } catch (e) { setErr(e.message); }
+  };
+
+  const resetMfa = async (email) => {
+    if (!confirm(`Reset MFA for ${email}? They'll set up a new authenticator at next sign-in.`)) return;
+    try {
+      await api.post(`/admin/tenants/${sel.id}/reset-mfa`, { email });
+      alert(`MFA reset for ${email}.`);
     } catch (e) { setErr(e.message); }
   };
 
@@ -152,6 +161,7 @@ export default function AdminDashboard({ api }) {
                     <td><span className={`pill ${u.status === "active" ? "active" : "disabled"}`}>{u.status}</span></td>
                     <td>
                       <button onClick={() => resetPw(u.email)}>Reset password</button>
+                      <button onClick={() => resetMfa(u.email)}>Reset MFA</button>
                       {u.role !== "admin" && (
                         <>
                           <button onClick={() => toggleUser(u)}>
@@ -198,6 +208,7 @@ export default function AdminDashboard({ api }) {
 
       <PlansCard api={api} onChange={setPlans} />
       <AdminsCard api={api} />
+      <AccountCard api={api} />
     </div>
   );
 }

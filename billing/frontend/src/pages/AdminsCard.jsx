@@ -36,6 +36,13 @@ export default function AdminsCard({ api }) {
       alert(`Password reset for ${a.email}.`);
     } catch (e) { setErr(e.message); }
   };
+  const resetMfa = async (a) => {
+    if (!confirm(`Reset MFA for ${a.email}? They'll set up a new authenticator at next sign-in.`)) return;
+    try {
+      await api.post(`/admin/admins/${encodeURIComponent(a.email)}/reset-mfa`);
+      alert(`MFA reset for ${a.email}.`);
+    } catch (e) { setErr(e.message); }
+  };
 
   return (
     <section className="card">
@@ -50,6 +57,7 @@ export default function AdminsCard({ api }) {
               <td><span className={`pill ${a.status === "active" ? "active" : "disabled"}`}>{a.status}</span></td>
               <td>
                 <button onClick={() => resetPw(a)}>Reset password</button>
+                <button onClick={() => resetMfa(a)}>Reset MFA</button>
                 <button onClick={() => toggle(a)}>{a.status === "active" ? "Disable" : "Enable"}</button>
                 <button className="danger" onClick={() => del(a)}>Remove</button>
               </td>

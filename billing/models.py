@@ -62,6 +62,16 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class ResetMfaRequest(BaseModel):
+    email: str
+
+
+# ── self-service (any authenticated user) ────────────────────────────────────
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
+
+
 class AdminOut(BaseModel):
     email: str
     status: str = "active"

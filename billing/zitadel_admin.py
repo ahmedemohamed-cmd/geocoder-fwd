@@ -24,6 +24,10 @@ class ZitadelError(Exception):
     pass
 
 
+class InvalidCurrentPassword(ZitadelError):
+    """The current password supplied for a self-service change was wrong."""
+
+
 def enabled() -> bool:
     return config.AUTH_MODE == "zitadel" and bool(config.ZITADEL_SERVICE_TOKEN)
 
@@ -189,3 +193,60 @@ async def set_user_password(*, email: str, password: str) -> bool:
         if r.status_code >= 300:
             raise ZitadelError(f"set password failed: {r.status_code} {r.text[:200]}")
         return True
+
+
+async def change_own_password(*, user_id: str, old_password: str, new_password: str) -> bool:
+    """Self-service password change: set the password, verifying the caller's
+    current password (Zitadel rejects the call if it doesn't match). Raises
+    InvalidCurrentPassword on a bad current password, ZitadelError otherwise.
+    No-op (returns False) if the IdP client is disabled (dev mode)."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        r = await c.post(
+            f"/v2/users/{user_id}/password",
+            json={
+                "newPassword": {"password": new_password, "changeRequired": False},
+                "currentPassword": old_password,
+            },
+        )
+        if r.status_code < 300:
+            return True
+        if r.status_code in (400, 403):
+            msg = r.text.lower()
+            # Distinguish a new password rejected by the complexity policy from a
+            # wrong current password (both surface as 400).
+            if any(w in msg for w in ("complex", "policy", "minimum", "length")):
+                raise ZitadelError(f"new password rejected by policy: {r.text[:200]}")
+            raise InvalidCurrentPassword("current password is incorrect")
+        raise ZitadelError(f"password change failed: {r.status_code} {r.text[:200]}")
+
+
+async def _remove_totp(c: httpx.AsyncClient, user_id: str) -> bool:
+    """Remove the user's TOTP factor. Treats 'not enrolled' as success."""
+    r = await c.delete(f"/v2/users/{user_id}/totp")
+    if r.status_code < 300:
+        return True
+    if r.status_code == 404 and "doesn't exist" in r.text.lower():
+        return True
+    raise ZitadelError(f"MFA reset failed: {r.status_code} {r.text[:200]}")
+
+
+async def reset_user_mfa(*, user_id: str) -> bool:
+    """Self-service: remove the caller's own TOTP so they re-enroll at next login.
+    No-op (returns False) if the IdP client is disabled."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        return await _remove_totp(c, user_id)
+
+
+async def reset_user_mfa_by_email(*, email: str) -> bool:
+    """Admin: remove a user's TOTP (looked up by email). No-op if disabled."""
+    if not enabled():
+        return False
+    async with _client() as c:
+        uid = await _find_user_id(c, email)
+        if not uid:
+            raise ZitadelError(f"user {email!r} not found in the IdP")
+        return await _remove_totp(c, uid)
