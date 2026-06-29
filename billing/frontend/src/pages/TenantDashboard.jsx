@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from "react";
 import AccountCard from "./AccountCard.jsx";
+import Tabs from "./Tabs.jsx";
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "account", label: "Account" },
+];
 
 export default function TenantDashboard({ api }) {
+  const [tab, setTab] = useState("overview");
   const [keys, setKeys] = useState([]);
   const [usage, setUsage] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -54,6 +61,12 @@ export default function TenantDashboard({ api }) {
   const pct = usage && usage.quota ? Math.min(100, (usage.requests / usage.quota) * 100) : 0;
 
   return (
+    <>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      {tab === "account" && (
+        <div className="grid single"><AccountCard api={api} /></div>
+      )}
+      {tab === "overview" && (
     <div className="grid">
       <section className="card">
         <div className="row">
@@ -147,8 +160,8 @@ export default function TenantDashboard({ api }) {
           <button className="primary" type="submit">Create</button>
         </form>
       </section>
-
-      <AccountCard api={api} />
     </div>
+      )}
+    </>
   );
 }

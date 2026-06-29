@@ -2,11 +2,20 @@ import React, { useEffect, useState } from "react";
 import PlansCard from "./PlansCard.jsx";
 import AdminsCard from "./AdminsCard.jsx";
 import AccountCard from "./AccountCard.jsx";
+import Tabs from "./Tabs.jsx";
+
+const TABS = [
+  { id: "tenants", label: "Tenants" },
+  { id: "plans", label: "Plans" },
+  { id: "admins", label: "Admins" },
+  { id: "account", label: "Account" },
+];
 
 export default function AdminDashboard({ api }) {
+  const [tab, setTab] = useState("tenants");
   const [tenants, setTenants] = useState([]);
   const [plans, setPlans] = useState([]);
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState(null); // selected tenant -> detail view
   const [invoices, setInvoices] = useState([]);
   const [users, setUsers] = useState([]);
   const [err, setErr] = useState(null);
@@ -23,10 +32,12 @@ export default function AdminDashboard({ api }) {
     api.get(`/admin/tenants/${tid}/users`).then(setUsers).catch(() => setUsers([]));
 
   const openTenant = (t) => {
+    setErr(null);
     setSel(t);
     api.get(`/admin/tenants/${t.id}/invoices`).then(setInvoices).catch((e) => setErr(e.message));
     loadUsers(t.id);
   };
+  const closeTenant = () => { setSel(null); setUsers([]); setInvoices([]); };
 
   const resetPw = async (email) => {
     const pw = prompt(`New password for ${email}\n(min 8, with upper + lower + number + symbol):`);
@@ -77,7 +88,7 @@ export default function AdminDashboard({ api }) {
 
   const runBilling = async () => {
     const period = new Date().toISOString().slice(0, 7);
-    try { await api.post(`/admin/billing/run?period=${period}`); if (sel) openTenant(sel); }
+    try { await api.post(`/admin/billing/run?period=${period}`); if (sel) openTenant(sel); else load(); }
     catch (e) { setErr(e.message); }
   };
 
@@ -87,82 +98,114 @@ export default function AdminDashboard({ api }) {
   };
 
   const setTenantStatus = async (t, status) => {
-    try { await api.patch(`/admin/tenants/${t.id}`, { status }); load(); if (sel?.id === t.id) openTenant({ ...t, status }); }
-    catch (e) { setErr(e.message); }
+    try {
+      await api.patch(`/admin/tenants/${t.id}`, { status });
+      load();
+      if (sel?.id === t.id) setSel({ ...t, status });
+    } catch (e) { setErr(e.message); }
   };
   const changePlan = async (t, plan_id) => {
     if (!plan_id || plan_id === t.plan_id) return;
-    try { await api.patch(`/admin/tenants/${t.id}`, { plan_id }); load(); if (sel?.id === t.id) openTenant({ ...t, plan_id }); }
-    catch (e) { setErr(e.message); }
+    try {
+      await api.patch(`/admin/tenants/${t.id}`, { plan_id });
+      load();
+      if (sel?.id === t.id) setSel({ ...t, plan_id });
+    } catch (e) { setErr(e.message); }
   };
   const del = async (t) => {
     if (!confirm(`Delete tenant ${t.name}? This is permanent (soft delete).`)) return;
-    try { await api.del(`/admin/tenants/${t.id}`); load(); setSel(null); }
+    try { await api.del(`/admin/tenants/${t.id}`); load(); closeTenant(); }
     catch (e) { setErr(e.message); }
   };
 
+  const planSelect = (t) => (
+    <select value={t.plan_id || ""} onChange={(e) => changePlan(t, e.target.value)}
+      disabled={t.status === "deleted"} title="Change subscription plan">
+      {!plans.some((p) => p.id === t.plan_id) && (
+        <option value={t.plan_id || ""}>{t.plan_id || "—"}</option>
+      )}
+      {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+    </select>
+  );
+
   return (
-    <div className="grid">
-      <section className="card">
-        <h2>Tenants</h2>
-        {err && <p className="error">{err}</p>}
-        <table>
-          <thead><tr><th>Name</th><th>Plan</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {tenants.map((t) => (
-              <tr key={t.id} className={sel?.id === t.id ? "active" : ""}>
-                <td><a onClick={() => openTenant(t)}>{t.name}</a></td>
-                <td>
-                  <select value={t.plan_id || ""} onChange={(e) => changePlan(t, e.target.value)}
-                    disabled={t.status === "deleted"} title="Change subscription plan">
-                    {!plans.some((p) => p.id === t.plan_id) && (
-                      <option value={t.plan_id || ""}>{t.plan_id || "—"}</option>
+    <>
+      <Tabs tabs={TABS} active={tab} onChange={(id) => { setTab(id); }} />
+      {err && <p className="error">{err}</p>}
+
+      {tab === "tenants" && !sel && (
+        <section className="card">
+          <div className="page-head">
+            <h1>Tenants</h1>
+            <span className="spacer" />
+            <button onClick={runBilling}>Run billing (this month)</button>
+          </div>
+          <table>
+            <thead><tr><th>Name</th><th>Plan</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {tenants.map((t) => (
+                <tr key={t.id}>
+                  <td><a onClick={() => openTenant(t)}>{t.name}</a></td>
+                  <td>{planSelect(t)}</td>
+                  <td><span className={`pill ${t.status}`}>{t.status}</span></td>
+                  <td>
+                    <button onClick={() => openTenant(t)}>Manage</button>
+                    {t.status === "active" && (
+                      <button onClick={() => setTenantStatus(t, "suspended")}>Suspend</button>
                     )}
-                    {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </td>
-                <td><span className={`pill ${t.status}`}>{t.status}</span></td>
-                <td>
-                  {t.status === "active" && (
-                    <button onClick={() => setTenantStatus(t, "suspended")}>Suspend</button>
-                  )}
-                  {t.status === "suspended" && (
-                    <button className="primary" onClick={() => setTenantStatus(t, "active")}>Reactivate</button>
-                  )}
-                  {t.status !== "deleted" && (
-                    <button className="danger" onClick={() => del(t)}>Delete</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    {t.status === "suspended" && (
+                      <button className="primary" onClick={() => setTenantStatus(t, "active")}>Reactivate</button>
+                    )}
+                    {t.status !== "deleted" && (
+                      <button className="danger" onClick={() => del(t)}>Delete</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {tenants.length === 0 && <tr><td colSpan="4" className="muted">No tenants yet.</td></tr>}
+            </tbody>
+          </table>
 
-        <h3>Add tenant</h3>
-        <form onSubmit={createTenant} className="stack">
-          <input placeholder="Tenant name" value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <select value={form.plan_id}
-            onChange={(e) => setForm({ ...form, plan_id: e.target.value })}>
-            {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <input placeholder="Owner email" type="email" value={form.admin_email}
-            onChange={(e) => setForm({ ...form, admin_email: e.target.value })} required />
-          <input placeholder="Owner password (min 8)" type="password" value={form.admin_password}
-            onChange={(e) => setForm({ ...form, admin_password: e.target.value })} required />
-          <button className="primary" type="submit">Create tenant</button>
-        </form>
-      </section>
+          <h3>Add tenant</h3>
+          <form onSubmit={createTenant} className="stack">
+            <input placeholder="Tenant name" value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <select value={form.plan_id}
+              onChange={(e) => setForm({ ...form, plan_id: e.target.value })}>
+              {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <input placeholder="Owner email" type="email" value={form.admin_email}
+              onChange={(e) => setForm({ ...form, admin_email: e.target.value })} required />
+            <input placeholder="Owner password (min 8)" type="password" value={form.admin_password}
+              onChange={(e) => setForm({ ...form, admin_password: e.target.value })} required />
+            <button className="primary" type="submit">Create tenant</button>
+          </form>
+        </section>
+      )}
 
-      <section className="card">
-        <div className="row">
-          <h2>Bills {sel ? `· ${sel.name}` : ""}</h2>
-          <span className="spacer" />
-          <button onClick={runBilling}>Run billing (this month)</button>
-        </div>
-        {!sel && <p className="muted">Select a tenant to view its users &amp; bills.</p>}
-        {sel && (
-          <>
+      {tab === "tenants" && sel && (
+        <>
+          <button className="back" onClick={closeTenant}>← All tenants</button>
+          <section className="card">
+            <div className="page-head">
+              <h1>{sel.name}</h1>
+              <span className={`pill ${sel.status}`}>{sel.status}</span>
+              <span className="spacer" />
+              {sel.status === "active" && (
+                <button onClick={() => setTenantStatus(sel, "suspended")}>Suspend</button>
+              )}
+              {sel.status === "suspended" && (
+                <button className="primary" onClick={() => setTenantStatus(sel, "active")}>Reactivate</button>
+              )}
+              <button onClick={runBilling}>Run billing</button>
+              {sel.status !== "deleted" && (
+                <button className="danger" onClick={() => del(sel)}>Delete tenant</button>
+              )}
+            </div>
+            <div className="row">
+              <span className="muted">Plan</span> {planSelect(sel)}
+            </div>
+
             <h3>Users</h3>
             <table>
               <thead><tr><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
@@ -196,32 +239,37 @@ export default function AdminDashboard({ api }) {
                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
               <button className="primary" type="submit">Add user</button>
             </form>
-            <h3>Invoices</h3>
-          </>
-        )}
-        {sel && (
-          <table>
-            <thead><tr><th>Period</th><th>Requests</th><th>Amount</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-              {invoices.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.period}</td>
-                  <td>{i.total_requests}</td>
-                  <td>${(i.amount_cents / 100).toFixed(2)}</td>
-                  <td><span className={`pill ${i.status}`}>{i.status}</span></td>
-                  <td>{i.status === "pending" &&
-                    <button className="primary" onClick={() => pay(i.id)}>Mark paid</button>}</td>
-                </tr>
-              ))}
-              {invoices.length === 0 && <tr><td colSpan="5" className="muted">No invoices yet.</td></tr>}
-            </tbody>
-          </table>
-        )}
-      </section>
 
-      <PlansCard api={api} onChange={setPlans} />
-      <AdminsCard api={api} />
-      <AccountCard api={api} />
-    </div>
+            <h3>Invoices</h3>
+            <table>
+              <thead><tr><th>Period</th><th>Requests</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {invoices.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.period}</td>
+                    <td>{i.total_requests}</td>
+                    <td>${(i.amount_cents / 100).toFixed(2)}</td>
+                    <td><span className={`pill ${i.status}`}>{i.status}</span></td>
+                    <td>{i.status === "pending" &&
+                      <button className="primary" onClick={() => pay(i.id)}>Mark paid</button>}</td>
+                  </tr>
+                ))}
+                {invoices.length === 0 && <tr><td colSpan="5" className="muted">No invoices yet.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
+
+      {tab === "plans" && (
+        <div className="grid single"><PlansCard api={api} onChange={setPlans} /></div>
+      )}
+      {tab === "admins" && (
+        <div className="grid single"><AdminsCard api={api} /></div>
+      )}
+      {tab === "account" && (
+        <div className="grid single"><AccountCard api={api} /></div>
+      )}
+    </>
   );
 }
