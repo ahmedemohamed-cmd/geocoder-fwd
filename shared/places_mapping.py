@@ -170,7 +170,13 @@ CATEGORY_FEATURE = {
 }
 
 # admin layers → (OSM admin_level, place= value); POIs stay at level 0
+# The curated Pelias-google export mixes Pelias layer names (locality, region,
+# borough, …) with raw Google admin types (sublocality_level_1,
+# administrative_area_level_*, neighborhood). Both naming schemes must be mapped
+# or districts like "التجمع الخامس" (layer=sublocality_level_1) fall through to a
+# 0-rank generic node.
 ADMIN_LAYER = {
+    # Pelias / WOF layer names
     "locality": (8, "city"),
     "localadmin": (8, "town"),
     "borough": (10, "suburb"),
@@ -180,6 +186,16 @@ ADMIN_LAYER = {
     "county": (6, "county"),
     "macrocounty": (6, "county"),
     "country": (2, "country"),
+    # Google admin types (as they appear in the export's `layer`)
+    "neighborhood": (10, "neighbourhood"),  # American spelling
+    "sublocality": (10, "suburb"),
+    "sublocality_level_1": (10, "suburb"),
+    "sublocality_level_2": (10, "neighbourhood"),
+    "sublocality_level_3": (10, "neighbourhood"),
+    "administrative_area_level_1": (4, "state"),
+    "administrative_area_level_2": (6, "county"),
+    "administrative_area_level_3": (7, "region"),
+    "administrative_area_level_4": (8, "city"),
 }
 
 # Generic source layers that carry NO type information. A record with one of
@@ -189,30 +205,41 @@ ADMIN_LAYER = {
 # it to an OSM ``place`` below.
 _GENERIC_LAYERS = {"", "venue", "point_of_interest", "poi", "establishment", "premise"}
 
-# Admin-sounding name keyword → OSM ``place`` value. Applied ONLY to otherwise
-# unclassified generic-layer records (see above), so businesses that merely
-# contain one of these words keep their mapped feature tag and are unaffected.
-# Heuristic and intentionally conservative — it assigns ``place`` (a modest rank
-# boost) but never fabricates an admin_level on a point.
-_PLACE_NAME_KEYWORDS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"ضاحي[ةه]|\bsuburb\b", re.IGNORECASE), "suburb"),
-    (re.compile(r"قري[ةه]|\bvillage\b", re.IGNORECASE), "village"),
-    (
-        re.compile(
-            r"التجمع|كم?بوند|\bcompound\b|\bحي\b|\bالحي\b|منطق[ةه]|مدين[ةه]"
-            r"|\bdistrict\b|\bneighou?rhood\b|\bzone\b|\bquarter\b|\bsettlement\b",
-            re.IGNORECASE,
-        ),
-        "neighbourhood",
-    ),
-]
+# District/area detection for generic-layer records. This must be STRICT: many
+# businesses embed a district in their name ("IMA 5th Settlement", "wedding court
+# 5th settlement …"), so a substring match over-promotes them. We only treat a
+# name as a district when it is ANCHORED on an admin keyword:
+#   • Arabic — the FIRST token is an admin head word ("التجمع الخامس", "منطقة X")
+#   • English — the whole name is exactly "<number/ordinal> <keyword>"
+#     ("5th Settlement", "Fifth Settlement") or "<keyword> <number>".
+# An admin keyword merely appearing somewhere in a longer name does NOT qualify.
+_AR_PLACE_HEAD = re.compile(r"^(?:التجمع|الحي|حي|منطق[ةه]|مدين[ةه]|ضاحي[ةه]|قري[ةه])$")
+_EN_PLACE_KEYWORD = re.compile(
+    r"^(?:settlement|district|zone|quarter|neighbou?rhood|suburb|compound)$", re.IGNORECASE
+)
+_NUM_OR_ORDINAL = re.compile(
+    r"^(?:\d+(?:st|nd|rd|th)?|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth"
+    r"|tenth|eleventh|twelfth)$",
+    re.IGNORECASE,
+)
+_EN_PLACE_VALUE = {"suburb": "suburb", "village": "village"}  # else → neighbourhood
 
 
 def _place_from_name(name: str) -> str | None:
-    """Return an OSM ``place`` value if *name* looks like a district/area."""
-    for pattern, place_val in _PLACE_NAME_KEYWORDS:
-        if pattern.search(name):
-            return place_val
+    """Return an OSM ``place`` value only when *name* is clearly a district/area."""
+    toks = (name or "").split()
+    if not toks:
+        return None
+    # Arabic: leading admin head word (e.g. "التجمع الخامس", "منطقة النزهة")
+    if _AR_PLACE_HEAD.match(toks[0]):
+        return "neighbourhood"
+    # English: exactly "<number/ordinal> <keyword>" or "<keyword> <number/ordinal>"
+    if len(toks) == 2:
+        a, b = toks
+        if _NUM_OR_ORDINAL.match(a) and _EN_PLACE_KEYWORD.match(b):
+            return _EN_PLACE_VALUE.get(b.lower(), "neighbourhood")
+        if _EN_PLACE_KEYWORD.match(a) and _NUM_OR_ORDINAL.match(b):
+            return _EN_PLACE_VALUE.get(a.lower(), "neighbourhood")
     return None
 
 

@@ -116,7 +116,7 @@ X-API-Key: {{apiKey}}
 ###
 
 ### Arabic prefix
-GET {{gatewayUrl}}/autocomplete?q=5th settlement
+GET {{gatewayUrl}}/autocomplete?q=fifth settlement
 X-API-Key: {{apiKey}}
 
 ###

@@ -114,9 +114,13 @@ _ADMIN_TYPE_MAP = {
     "administrative_area_level_1": (4, "state"),
     "administrative_area_level_2": (6, "county"),
     "administrative_area_level_3": (7, "region"),
+    "administrative_area_level_4": (8, "city"),
     "locality": (8, "city"),
     "postal_town": (8, "town"),
     "sublocality": (10, "suburb"),
+    "sublocality_level_1": (10, "suburb"),
+    "sublocality_level_2": (10, "neighbourhood"),
+    "sublocality_level_3": (10, "neighbourhood"),
     "neighborhood": (10, "neighbourhood"),
 }
 
