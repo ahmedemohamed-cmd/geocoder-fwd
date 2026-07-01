@@ -28,6 +28,7 @@ Supported OSM address tags
 """
 
 import re
+import unicodedata
 
 # ── OSM addr: tag → logical field name ───────────────────────────────────
 ADDR_FIELD_MAP: dict[str, str] = {
@@ -261,6 +262,8 @@ _EN_CITY_KEYWORDS_RAW = [
 
 _RE_ALEF_VARIANTS = re.compile(r"[إأآا]")
 _RE_WHITESPACE = re.compile(r"\s+")
+# Apostrophe variants stripped to mirror the ES ``strip_apostrophes`` char_filter
+_APOSTROPHE_TABLE = {ord(c): None for c in "'’ʼ"}
 _RE_EN_ABBREVS = re.compile(
     r"\b(" + "|".join(re.escape(k) for k in _EN_ABBREVS) + r")\b",
     re.IGNORECASE,
@@ -405,6 +408,13 @@ def normalize_address_text(s: str) -> str:
         return _FR_STREET_TYPES.get(m.group(0).lower(), m.group(0))
 
     s = _RE_FR_ABBREVS.sub(_expand_fr, s)
+
+    # Fold to match the ES analyzers (asciifolding + strip apostrophes/tashkeel).
+    # Done LAST so the accented French abbreviation lookups above still match.
+    # NFKD + dropping combining marks folds Latin accents (Ä→A) and strips
+    # Arabic harakat in one pass; apostrophe variants are removed explicitly.
+    s = s.translate(_APOSTROPHE_TABLE)
+    s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
     # Collapse multiple spaces
     s = _RE_WHITESPACE.sub(" ", s).strip()

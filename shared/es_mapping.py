@@ -17,6 +17,18 @@ MAPPING = {
                     "pattern": "[ـ]",  # tatweel
                     "replacement": "",
                 },
+                # Strip apostrophe variants so "O'Brien" indexes as "obrien"
+                "strip_apostrophes": {
+                    "type": "pattern_replace",
+                    "pattern": "['’ʼ]",  # ' ’ ʼ
+                    "replacement": "",
+                },
+                # Strip Arabic tashkeel (harakat) so diacritics don't block matches
+                "strip_tashkeel": {
+                    "type": "pattern_replace",
+                    "pattern": "[ً-ْٰ]",  # fathatan..sukun + superscript alef
+                    "replacement": "",
+                },
             },
             "filter": {
                 # English street-type synonyms (bidirectional)
@@ -85,26 +97,36 @@ MAPPING = {
                 "address_standard": {
                     "type": "custom",
                     "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
+                    "char_filter": [
+                        "arabic_normalize_char",
+                        "strip_apostrophes",
+                        "strip_tashkeel",
+                    ],
                     "filter": [
                         "lowercase",
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
                         "street_synonyms_fr",
+                        "asciifolding",
                     ],
                 },
                 # Edge n-gram analyzer for autocomplete (index-time only)
                 "address_autocomplete": {
                     "type": "custom",
                     "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
+                    "char_filter": [
+                        "arabic_normalize_char",
+                        "strip_apostrophes",
+                        "strip_tashkeel",
+                    ],
                     "filter": [
                         "lowercase",
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
                         "street_synonyms_fr",
+                        "asciifolding",
                         "edge_ngram_filter",
                     ],
                 },
@@ -112,23 +134,33 @@ MAPPING = {
                 "address_search": {
                     "type": "custom",
                     "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
+                    "char_filter": [
+                        "arabic_normalize_char",
+                        "strip_apostrophes",
+                        "strip_tashkeel",
+                    ],
                     "filter": [
                         "lowercase",
                         "arabic_normalization",
                         "street_synonyms_en",
                         "street_synonyms_ar",
                         "street_synonyms_fr",
+                        "asciifolding",
                     ],
                 },
                 # Arabic-optimized analyzer for name fields
                 "arabic_name": {
                     "type": "custom",
                     "tokenizer": "standard",
-                    "char_filter": ["arabic_normalize_char"],
+                    "char_filter": [
+                        "arabic_normalize_char",
+                        "strip_apostrophes",
+                        "strip_tashkeel",
+                    ],
                     "filter": [
                         "lowercase",
                         "arabic_normalization",
+                        "asciifolding",
                     ],
                 },
             },

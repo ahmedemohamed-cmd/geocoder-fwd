@@ -104,7 +104,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### First few characters
-GET {{gatewayUrl}}/autocomplete?q=cai
+GET {{gatewayUrl}}/autocomplete?q=cfc
 X-API-Key: {{apiKey}}
 
 ###
@@ -141,7 +141,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### Basic name search
-GET {{gatewayUrl}}/geocode?q=اسكندرون
+GET {{gatewayUrl}}/geocode?q=CFC
 X-API-Key: {{apiKey}}
 
 ###
