@@ -66,6 +66,14 @@ services:
 
   postgis:
     image: postgis/postgis:16-3.4-alpine
+    command:
+      - "postgres"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
     ports:
       - "127.0.0.1:5432:5432"
     environment:

@@ -54,7 +54,7 @@
 @gatewayUrl = https://places.nourbyte.com/api
 
 # Your tenant API key (create one in the console; shown once). Replace this.
-@apiKey = gk_82178b50_s8Iaoer87HSK_oeFvZ5JQkT-X4Q6v72Y
+@apiKey = gk_511357a7_dLpa6A7yrBQX8_wFHZYv1Xt3o2_hZZOG
 
 
 # ============================================================================
@@ -116,7 +116,7 @@ X-API-Key: {{apiKey}}
 ###
 
 ### Arabic prefix
-GET {{gatewayUrl}}/autocomplete?q=القاه
+GET {{gatewayUrl}}/autocomplete?q=5th settl
 X-API-Key: {{apiKey}}
 
 ###
