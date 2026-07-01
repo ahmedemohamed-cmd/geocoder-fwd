@@ -11,7 +11,8 @@ Secondary signals (minor boost):
   6. natural      – water / peak / coastline / wetland / ...
   7. metadata     – wikidata / wikipedia presence
   8. landuse      – residential > commercial > retail > industrial > ...
-  9. POI type     – max of venue (amenity/shop/leisure/tourism/aeroway) and building
+  9. POI type     – max of venue (amenity/shop/leisure/tourism/aeroway),
+                    building, office, and a named-POI floor
  10. brand        – known brand presence
 
 The final ``offline_rank`` is the weighted sum, kept as a positive float
@@ -291,6 +292,67 @@ def _building_score(tags: dict) -> float:
     return _BUILDING_SCORES.get(building, 0.0)
 
 
+# ── office importance (0..1) ──────────────────────────────────────────────
+# ``office=*`` venues (banks-as-offices, lawyers, estate agents, government
+# offices, …) are real POIs but were previously unscored, so every office
+# element landed at offline_rank 0.0.  Unknown office types get a small floor
+# rather than 0 so a named office still outranks a bare node.
+_OFFICE_SCORES: dict[str, float] = {
+    "government": 0.55,
+    "diplomatic": 0.55,
+    "financial": 0.50,
+    "insurance": 0.45,
+    "lawyer": 0.45,
+    "notary": 0.45,
+    "estate_agent": 0.45,
+    "telecommunication": 0.45,
+    "accountant": 0.40,
+    "company": 0.40,
+    "it": 0.40,
+    "travel_agent": 0.40,
+    "employment_agency": 0.35,
+    "coworking": 0.35,
+    "yes": 0.30,
+}
+
+
+def _office_score(tags: dict) -> float:
+    """Score based on office type (falls back to a small floor for unknowns)."""
+    office = tags.get("office", "")
+    if not office:
+        return 0.0
+    return _OFFICE_SCORES.get(office, 0.30)
+
+
+# ── named-POI floor ───────────────────────────────────────────────────────
+# A named place we couldn't otherwise classify (e.g. a Google/Pelias record
+# whose ``layer`` is a generic ``point_of_interest``/``venue``) still deserves
+# a small nonzero rank so it isn't buried at 0.0 behind classified venues.
+# Gated on evidence that it is a real curated/imported POI (a source/contact/
+# rating/ref tag) so we don't lift every trivially-named bare OSM node.
+_POI_EVIDENCE_KEYS = (
+    "source",
+    "phone",
+    "website",
+    "rating",
+    "opening_hours",
+    "brand",
+    "operator",
+    "ref:google_place_id",
+    "ref:source_id",
+)
+_NAMED_POI_FLOOR = 0.25
+
+
+def _named_poi_score(tags: dict) -> float:
+    """Small floor for a named POI carrying real-place evidence tags."""
+    if not tags.get("name"):
+        return 0.0
+    if any(tags.get(k) for k in _POI_EVIDENCE_KEYS):
+        return _NAMED_POI_FLOOR
+    return 0.0
+
+
 def _highway_score(tags: dict) -> float:
     """Score based on highway type."""
     highway = tags.get("highway", "")
@@ -391,8 +453,14 @@ def compute_offline_rank(tags: dict, admin_level: int | None, area_km2: float) -
     raw += W_LANDUSE * _landuse_score(tags)
     raw += W_BRAND * _brand_score(tags)
 
-    # POI signal: max of venue and building (avoids double-counting)
-    raw += W_POI * max(_venue_score(tags), _building_score(tags))
+    # POI signal: max of venue / building / office / named-POI floor
+    # (max avoids double-counting; the floor keeps unclassified named POIs > 0)
+    raw += W_POI * max(
+        _venue_score(tags),
+        _building_score(tags),
+        _office_score(tags),
+        _named_poi_score(tags),
+    )
 
     # Highway (only counted when tag is present)
     hw = _highway_score(tags)

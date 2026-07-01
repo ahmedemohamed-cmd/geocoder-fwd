@@ -182,6 +182,40 @@ ADMIN_LAYER = {
     "country": (2, "country"),
 }
 
+# Generic source layers that carry NO type information. A record with one of
+# these (or an empty layer) and no usable category is unclassified — if its name
+# looks like a district/area, the source almost certainly mislabeled a place as
+# a POI (e.g. the "التجمع الخامس" district arrives as layer=venue), so we promote
+# it to an OSM ``place`` below.
+_GENERIC_LAYERS = {"", "venue", "point_of_interest", "poi", "establishment", "premise"}
+
+# Admin-sounding name keyword → OSM ``place`` value. Applied ONLY to otherwise
+# unclassified generic-layer records (see above), so businesses that merely
+# contain one of these words keep their mapped feature tag and are unaffected.
+# Heuristic and intentionally conservative — it assigns ``place`` (a modest rank
+# boost) but never fabricates an admin_level on a point.
+_PLACE_NAME_KEYWORDS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"ضاحي[ةه]|\bsuburb\b", re.IGNORECASE), "suburb"),
+    (re.compile(r"قري[ةه]|\bvillage\b", re.IGNORECASE), "village"),
+    (
+        re.compile(
+            r"التجمع|كم?بوند|\bcompound\b|\bحي\b|\bالحي\b|منطق[ةه]|مدين[ةه]"
+            r"|\bdistrict\b|\bneighou?rhood\b|\bzone\b|\bquarter\b|\bsettlement\b",
+            re.IGNORECASE,
+        ),
+        "neighbourhood",
+    ),
+]
+
+
+def _place_from_name(name: str) -> str | None:
+    """Return an OSM ``place`` value if *name* looks like a district/area."""
+    for pattern, place_val in _PLACE_NAME_KEYWORDS:
+        if pattern.search(name):
+            return place_val
+    return None
+
+
 # Pelias parent keys promoted into address.* (the rest are kept under extra.wof)
 _PELIAS_PROMOTED_PARENT = {
     "neighbourhood",
@@ -438,6 +472,14 @@ def place_to_element(p: dict) -> dict | None:
     if layer in ADMIN_LAYER:
         admin_level, place_val = ADMIN_LAYER[layer]
         tags.setdefault("place", place_val)
+
+    # Rescue districts the source mislabeled as generic POIs: an unclassified
+    # generic-layer record whose name reads like a district/area gets a `place`
+    # tag so it ranks as a neighbourhood instead of a bare 0.0-rank node.
+    if feat is None and admin_level == 0 and layer in _GENERIC_LAYERS:
+        place_val = _place_from_name(p.get("name") or "")
+        if place_val:
+            tags.setdefault("place", place_val)
 
     for key, val in (p.get("address") or {}).items():
         tag = _ADDRESS_TAG.get(key)

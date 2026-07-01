@@ -116,7 +116,7 @@ X-API-Key: {{apiKey}}
 ###
 
 ### Arabic prefix
-GET {{gatewayUrl}}/autocomplete?q=5th settl
+GET {{gatewayUrl}}/autocomplete?q=5th settlement
 X-API-Key: {{apiKey}}
 
 ###
@@ -141,7 +141,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### Basic name search
-GET {{gatewayUrl}}/geocode?q=CFC
+GET {{gatewayUrl}}/geocode?q=5th settlement
 X-API-Key: {{apiKey}}
 
 ###

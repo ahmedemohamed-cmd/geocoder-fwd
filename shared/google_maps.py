@@ -97,6 +97,15 @@ _FEATURE_TYPE_MAP = {
     "train_station": ("railway", "station"),
     "transit_station": ("public_transport", "station"),
     "bus_station": ("amenity", "bus_station"),
+    # offices / finance (Google types) — mirror the curated LAYER_FEATURE so
+    # deep-geocoded offices get a scored office=* tag instead of a bare node.
+    "finance": ("amenity", "bank"),
+    "local_government_office": ("office", "government"),
+    "lawyer": ("office", "lawyer"),
+    "accounting": ("office", "accountant"),
+    "insurance_agency": ("office", "insurance"),
+    "real_estate_agency": ("office", "estate_agent"),
+    "travel_agency": ("shop", "travel_agency"),
 }
 
 # ── Google admin/place type → (OSM admin_level, place= value) ──────────────

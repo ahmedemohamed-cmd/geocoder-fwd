@@ -439,6 +439,12 @@ _POSTCODE_RE = re.compile(r"^\d{4,6}$")
 # House-number pattern: digits optionally followed by a letter or slash-suffix
 _HOUSENUMBER_RE = re.compile(r"^\d[\w/-]*$")
 
+# English ordinal token (5th, 1st, 2nd, 3rd, 21st, 11th). These are NOT house
+# numbers — they are ordinals that commonly begin place names ("5th Settlement",
+# "6th of October", "1st District"), so they must be excluded from house-number
+# detection or the query gets mis-parsed as an address.
+_ORDINAL_RE = re.compile(r"^\d+(?:st|nd|rd|th)$", re.IGNORECASE)
+
 
 def is_address_query(q: str) -> bool:
     """Heuristically decide whether *q* looks like a structured address.
@@ -454,8 +460,9 @@ def is_address_query(q: str) -> bool:
     q = q.strip()
     if not q:
         return False
-    # Starts with housenumber + words
-    if re.match(r"^\d[\w/-]*\s+\w", q):
+    # Starts with housenumber + words (but not an ordinal like "5th settlement")
+    first_tok = q.split(None, 1)[0]
+    if re.match(r"^\d[\w/-]*\s+\w", q) and not _ORDINAL_RE.match(first_tok):
         return True
     # Has commas (structured address)
     if "," in q:
@@ -563,7 +570,7 @@ def parse_address_query(q: str) -> dict:
     street_part_idx: int | None = None
     for i, part in enumerate(remaining_parts):
         m = re.match(r"^(\d[\w/-]*)\s+(.+)", part)
-        if m:
+        if m and not _ORDINAL_RE.match(m.group(1)):
             result["housenumber"] = m.group(1).strip()
             result["street"] = m.group(2).strip()
             street_part_idx = i
