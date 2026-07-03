@@ -84,7 +84,6 @@ from services.geocoder_models import (
     ProbePing,
 )
 from shared.address import (
-    expand_ordinals,
     is_address_query,
     normalize_address_text,
     parse_address_query,
@@ -1039,35 +1038,6 @@ async def geocode(
     should_clauses: list[dict] = (
         _text_should_lean(q_norm) if optimized else _text_should_full(q_norm)
     )
-
-    # ── Ordinal synonym expansion (5th ⇆ fifth) ───────────────────────────
-    # Names use either spelling and the two share no tokens, so a digit query
-    # ("5th settlement") never matches a word-named doc ("Fifth Settlement").
-    # Search the alternate spelling so both forms RECALL the same places — but as
-    # a *plain text match only*: this clause mirrors the base best_fields recall
-    # clause (same fields/boosts) exactly, so an alternate-spelling hit can never
-    # score more than an ordinary text match. Earlier this used exact-AND ^12 +
-    # phrase ^8 boosts, which over-rewarded any doc merely CONTAINING the ordinal
-    # words (e.g. a generic "… home") and let it outrank the real place; keeping
-    # it within text-match bounds lets offline_rank order the recalled set.
-    for q_alt in expand_ordinals(q_norm):
-        should_clauses.append(
-            {
-                "multi_match": {
-                    "query": q_alt,
-                    "fields": [
-                        "name^5",
-                        "name.autocomplete^2",
-                        "name_en^5",
-                        "name_en.autocomplete^2",
-                        "name_fr^5",
-                        "name_fr.autocomplete^2",
-                        "tags_text",
-                    ],
-                    "type": "best_fields",
-                }
-            }
-        )
 
     # ── Address-specific search layers (active when address detected) ─────
     if addr_detected:
