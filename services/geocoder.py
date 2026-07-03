@@ -168,8 +168,22 @@ _ac_task: asyncio.Task | None = None  # strong reference to prevent GC
 _enrich_inflight: set[str] = set()
 _enrich_bg_tasks: set[asyncio.Task] = set()
 
+# Features larger than this (km²) are treated as areas, not point-like places:
+# a "nearest street to the centroid" is meaningless for them, so it's skipped.
+# 0.1 km² = 10 hectares (~316 m square): comfortably above any single building
+# or POI polygon (malls, hospitals, campuses all keep their nearest street) but
+# well below neighbourhood/district scale (Fifth Settlement is 10 km²), where
+# the centroid-nearest line is just noise. Admin-level features are always
+# skipped regardless of size. Tunable.
+_NEAREST_STREET_MAX_AREA_KM2 = 0.1
 
-def _schedule_enrichment(osm_id: str, centroid: dict | None, self_area: float = 0.0) -> None:
+
+def _schedule_enrichment(
+    osm_id: str,
+    centroid: dict | None,
+    self_area: float = 0.0,
+    admin_level: int | None = None,
+) -> None:
     """Enrich + cache a doc's address once, in the background (non-blocking).
 
     No-op if the doc is already being enriched. The result is persisted to ES by
@@ -181,7 +195,7 @@ def _schedule_enrichment(osm_id: str, centroid: dict | None, self_area: float = 
 
     async def _run():
         try:
-            await _enrich_address(osm_id, centroid, self_area)
+            await _enrich_address(osm_id, centroid, self_area, admin_level)
         except Exception:
             logger.warning("Background enrichment failed for %s", osm_id, exc_info=True)
         finally:
@@ -435,7 +449,10 @@ async def logging_middleware(request: Request, call_next):
 
 # ── address enrichment ────────────────────────────────────────────────────
 async def _enrich_address(
-    osm_id: str, centroid: dict | None, self_area: float = 0.0
+    osm_id: str,
+    centroid: dict | None,
+    self_area: float = 0.0,
+    admin_level: int | None = None,
 ) -> dict | None:
     """Look up address/parent data from PostGIS and cache it in ES.
 
@@ -446,6 +463,12 @@ async def _enrich_address(
     larger than it, so any candidate not strictly larger than ``self_area`` is a
     child/sibling and is dropped. Point features (``self_area == 0``) keep every
     enclosing polygon.
+
+    ``nearest_street`` is skipped entirely for features that are administrative
+    boundaries (``admin_level`` not null) or larger than
+    ``_NEAREST_STREET_MAX_AREA_KM2``: for such areas the centroid sits arbitrarily
+    inside the region, so the closest line to it is not a meaningful address and
+    the (heavier) nearest-line query is pure cost. Parents are still computed.
 
     Returns the address dict or None if the centroid is missing.
     The address structure:
@@ -468,21 +491,29 @@ async def _enrich_address(
 
     point_wkt = f"POINT({lon} {lat})"
 
+    # A nearest street only makes sense for point-like features. For admin
+    # boundaries or large areas the centroid is arbitrary, so skip the (heavier)
+    # nearest-line lookup and report no street. admin_level 0/None both mean
+    # "not an administrative boundary" (0 is the Google/deep-path sentinel).
+    skip_nearest = bool(admin_level) or self_area > _NEAREST_STREET_MAX_AREA_KM2
+
     try:
         async with pg_pool.acquire() as conn:
             # Set a query timeout to avoid slow enrichment blocking the API
             await conn.execute("SET LOCAL statement_timeout = '3000'")  # 3s
 
             # Find nearest lines (fetch several to find one with a name)
-            nearest_lines_query = """
-                SELECT osm_id, osm_type
-                FROM osm_geometries
-                WHERE ST_GeometryType(geom) = 'ST_LineString'
-                  AND ST_DWithin(geom, ST_GeomFromText($1, 4326), 0.005)
-                ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
-                LIMIT 10
-            """
-            nearest_lines = await conn.fetch(nearest_lines_query, point_wkt)
+            nearest_lines = []
+            if not skip_nearest:
+                nearest_lines_query = """
+                    SELECT osm_id, osm_type
+                    FROM osm_geometries
+                    WHERE ST_GeometryType(geom) = 'ST_LineString'
+                      AND ST_DWithin(geom, ST_GeomFromText($1, 4326), 0.005)
+                    ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
+                    LIMIT 10
+                """
+                nearest_lines = await conn.fetch(nearest_lines_query, point_wkt)
 
             # Find enclosing polygons/multipolygons
             enclosing_query = """
@@ -1283,8 +1314,9 @@ async def geocode(
         # the search hot path free of synchronous spatial-join fan-out.
         address = result["address"]
         self_area = src.get("area_km2", 0) or 0
+        self_admin = src.get("admin_level")
         if address is None:
-            _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area)
+            _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area, self_admin)
         else:
             cached_parents = address.get("parents") or []
             stale = any("area_km2" not in p for p in cached_parents)
@@ -1294,8 +1326,11 @@ async def geocode(
             smaller_parent = self_area > 0 and any(
                 (p.get("area_km2", 0) or 0) <= self_area for p in cached_parents
             )
-            if stale or self_ref or smaller_parent:
-                _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area)
+            # Re-enrich admin/large-area docs cached with a (now-unwanted) street.
+            skip_nearest = bool(self_admin) or self_area > _NEAREST_STREET_MAX_AREA_KM2
+            street_on_area = skip_nearest and address.get("nearest_street") is not None
+            if stale or self_ref or smaller_parent or street_on_area:
+                _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area, self_admin)
 
     # ── Address interpolation fallback ────────────────────────────────────
     # When the query contained a housenumber but no result matched it
@@ -2418,7 +2453,9 @@ async def deep_forward(
     if enrich and results:
         enrichments = await asyncio.gather(
             *[
-                _enrich_address(r["osm_id"], r["centroid"], r.get("area_km2", 0) or 0)
+                _enrich_address(
+                    r["osm_id"], r["centroid"], r.get("area_km2", 0) or 0, r.get("admin_level")
+                )
                 for r in results
             ],
             return_exceptions=True,
