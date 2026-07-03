@@ -445,6 +445,64 @@ _HOUSENUMBER_RE = re.compile(r"^\d[\w/-]*$")
 # detection or the query gets mis-parsed as an address.
 _ORDINAL_RE = re.compile(r"^\d+(?:st|nd|rd|th)$", re.IGNORECASE)
 
+# ── Ordinal synonym expansion (English) ──────────────────────────────────
+# Place names in this region are written with ordinals in either spelling —
+# "5th Settlement" vs "Fifth Settlement", "1st District" vs "First District" —
+# and the two forms share no tokens, so a digit query never matches a word-named
+# doc (or vice-versa).  ``expand_ordinals`` produces the alternate spelling so
+# the query layer can search both.  This is EXPANSION, not canonicalization:
+# both forms are kept and searched, source names are never rewritten.
+#
+# Scope is deliberately narrow — only *explicit* ordinals (``5th`` / ``fifth``)
+# expand.  Bare cardinals ("5") are never touched: a lone "5" is a house number,
+# and "District 5" is a genuinely different place from "Fifth District", so
+# conflating them would corrupt recall.
+_ORDINAL_WORDS = (
+    "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+    "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
+    "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth",
+)
+_ORD_WORD_TO_NUM = {w: i for i, w in enumerate(_ORDINAL_WORDS)}
+_ORD_DIGIT_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)$", re.IGNORECASE)
+
+
+def _num_to_ordinal_suffix(n: int) -> str:
+    """Return the English ordinal for *n* in digit form (5 → ``5th``)."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def expand_ordinals(q: str) -> list[str]:
+    """Return alternate spellings of *q* with ordinals swapped digit⇆word.
+
+    ``"5th settlement"`` → ``["fifth settlement"]`` and ``"fifth settlement"`` →
+    ``["5th settlement"]``.  Returns ``[]`` when *q* holds no explicit ordinal
+    token (so callers can cheaply skip the extra query clauses).  Only ordinals
+    1st–20th are mapped — the range that actually appears in local place names —
+    and bare cardinals are never converted.
+    """
+    toks = q.split()
+    out: list[str] = []
+    swapped = False
+    for t in toks:
+        low = t.lower()
+        m = _ORD_DIGIT_RE.match(low)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= 20:
+                out.append(_ORDINAL_WORDS[n])
+                swapped = True
+                continue
+        elif low in _ORD_WORD_TO_NUM and _ORD_WORD_TO_NUM[low] >= 1:
+            out.append(_num_to_ordinal_suffix(_ORD_WORD_TO_NUM[low]))
+            swapped = True
+            continue
+        out.append(t)
+    return [" ".join(out)] if swapped else []
+
 
 def is_address_query(q: str) -> bool:
     """Heuristically decide whether *q* looks like a structured address.
