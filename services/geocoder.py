@@ -169,7 +169,7 @@ _enrich_inflight: set[str] = set()
 _enrich_bg_tasks: set[asyncio.Task] = set()
 
 
-def _schedule_enrichment(osm_id: str, centroid: dict | None) -> None:
+def _schedule_enrichment(osm_id: str, centroid: dict | None, self_area: float = 0.0) -> None:
     """Enrich + cache a doc's address once, in the background (non-blocking).
 
     No-op if the doc is already being enriched. The result is persisted to ES by
@@ -181,7 +181,7 @@ def _schedule_enrichment(osm_id: str, centroid: dict | None) -> None:
 
     async def _run():
         try:
-            await _enrich_address(osm_id, centroid)
+            await _enrich_address(osm_id, centroid, self_area)
         except Exception:
             logger.warning("Background enrichment failed for %s", osm_id, exc_info=True)
         finally:
@@ -434,8 +434,18 @@ async def logging_middleware(request: Request, call_next):
 
 
 # ── address enrichment ────────────────────────────────────────────────────
-async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
+async def _enrich_address(
+    osm_id: str, centroid: dict | None, self_area: float = 0.0
+) -> dict | None:
     """Look up address/parent data from PostGIS and cache it in ES.
+
+    ``self_area`` is the feature's own footprint in km². Parents are discovered
+    by point-in-polygon on the centroid, which — for an *area* feature — also
+    returns sub-zones that merely contain the centroid (e.g. a small block
+    *inside* a district). A genuine parent ENCLOSES the feature and is therefore
+    larger than it, so any candidate not strictly larger than ``self_area`` is a
+    child/sibling and is dropped. Point features (``self_area == 0``) keep every
+    enclosing polygon.
 
     Returns the address dict or None if the centroid is missing.
     The address structure:
@@ -549,6 +559,11 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
         seen.add(row_id)
         src = es_data.get(row_id)
         if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
+            cand_area = src.get("area_km2", 0) or 0
+            # Enclosing parent must be larger than the feature; a smaller polygon
+            # that only contains the centroid is a child/sub-zone, not a parent.
+            if self_area > 0 and cand_area <= self_area:
+                continue
             parents.append(
                 {
                     "osm_id": row_id,
@@ -556,7 +571,7 @@ async def _enrich_address(osm_id: str, centroid: dict | None) -> dict | None:
                     "name_en": src.get("name_en", ""),
                     "name_fr": src.get("name_fr", ""),
                     "admin_level": src.get("admin_level"),
-                    "area_km2": src.get("area_km2", 0),
+                    "area_km2": cand_area,
                 }
             )
     # Smallest area first (most specific enclosing polygon), then by admin_level
@@ -1267,14 +1282,20 @@ async def geocode(
         # joins. The value is served from ES on subsequent searches. This keeps
         # the search hot path free of synchronous spatial-join fan-out.
         address = result["address"]
+        self_area = src.get("area_km2", 0) or 0
         if address is None:
-            _schedule_enrichment(src["osm_id"], src.get("centroid"))
+            _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area)
         else:
             cached_parents = address.get("parents") or []
             stale = any("area_km2" not in p for p in cached_parents)
             self_ref = any(p.get("osm_id") == src["osm_id"] for p in cached_parents)
-            if stale or self_ref:
-                _schedule_enrichment(src["osm_id"], src.get("centroid"))
+            # Re-enrich docs cached before the enclosure filter existed — any
+            # parent not larger than the feature is a mis-attributed sub-zone.
+            smaller_parent = self_area > 0 and any(
+                (p.get("area_km2", 0) or 0) <= self_area for p in cached_parents
+            )
+            if stale or self_ref or smaller_parent:
+                _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area)
 
     # ── Address interpolation fallback ────────────────────────────────────
     # When the query contained a housenumber but no result matched it
@@ -2396,7 +2417,10 @@ async def deep_forward(
     # are low-volume and the caller explicitly asked for enriched data).
     if enrich and results:
         enrichments = await asyncio.gather(
-            *[_enrich_address(r["osm_id"], r["centroid"]) for r in results],
+            *[
+                _enrich_address(r["osm_id"], r["centroid"], r.get("area_km2", 0) or 0)
+                for r in results
+            ],
             return_exceptions=True,
         )
         for r, addr in zip(results, enrichments, strict=False):
