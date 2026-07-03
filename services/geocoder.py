@@ -1043,29 +1043,28 @@ async def geocode(
     # ── Ordinal synonym expansion (5th ⇆ fifth) ───────────────────────────
     # Names use either spelling and the two share no tokens, so a digit query
     # ("5th settlement") never matches a word-named doc ("Fifth Settlement").
-    # Add name-field clauses for the alternate spelling so both forms recall the
-    # same places.  Boost sits just below a literal all-tokens match (15) so an
-    # exact-spelling hit still wins, but the alternate surfaces onto page 1 and
-    # is then ordered by its own offline_rank.  No effect when q has no ordinal.
+    # Search the alternate spelling so both forms RECALL the same places — but as
+    # a *plain text match only*: this clause mirrors the base best_fields recall
+    # clause (same fields/boosts) exactly, so an alternate-spelling hit can never
+    # score more than an ordinary text match. Earlier this used exact-AND ^12 +
+    # phrase ^8 boosts, which over-rewarded any doc merely CONTAINING the ordinal
+    # words (e.g. a generic "… home") and let it outrank the real place; keeping
+    # it within text-match bounds lets offline_rank order the recalled set.
     for q_alt in expand_ordinals(q_norm):
         should_clauses.append(
             {
                 "multi_match": {
                     "query": q_alt,
-                    "fields": ["name^4", "name_en^4", "name_fr^4"],
+                    "fields": [
+                        "name^5",
+                        "name.autocomplete^2",
+                        "name_en^5",
+                        "name_en.autocomplete^2",
+                        "name_fr^5",
+                        "name_fr.autocomplete^2",
+                        "tags_text",
+                    ],
                     "type": "best_fields",
-                    "operator": "and",
-                    "boost": 12,
-                }
-            }
-        )
-        should_clauses.append(
-            {
-                "multi_match": {
-                    "query": q_alt,
-                    "fields": ["name", "name_en", "name_fr"],
-                    "type": "phrase",
-                    "boost": 8,
                 }
             }
         )
