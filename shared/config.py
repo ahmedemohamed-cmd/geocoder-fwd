@@ -68,6 +68,14 @@ ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = _safe_int("REDIS_PORT", 6379)
 
+# Redis result cache for /geocode and /reverse (cache-aside; falls back to ES on
+# miss). TTL bounds staleness from background enrichment / popularity feedback.
+GEOCODE_CACHE_ENABLED = _safe_bool("GEOCODE_CACHE_ENABLED", True)
+GEOCODE_CACHE_TTL = _safe_int("GEOCODE_CACHE_TTL", 300)  # seconds
+# lat/lon rounded to this many decimals for the cache key (2 ≈ 1.1 km, well
+# inside the 10 km geo-decay scale — big hit-rate gain, negligible ranking shift).
+GEOCODE_CACHE_COORD_PRECISION = _safe_int("GEOCODE_CACHE_COORD_PRECISION", 2)
+
 # Embeddings
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 EMBEDDING_DIM = 384

@@ -49,7 +49,7 @@ import nats
 import redis.asyncio as aioredis
 from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 # ── structured logger ─────────────────────────────────────────────────────
 _logger = logging.getLogger("geocoder.access")
@@ -66,6 +66,7 @@ logger = get_logger("geocoder")
 
 import httpx
 
+from services.cache_service import ResultCache
 from services.geocoder_helpers import (
     _distance_confidence,
     _element_to_geocode_result,
@@ -113,6 +114,9 @@ from shared.config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
+    GEOCODE_CACHE_COORD_PRECISION,
+    GEOCODE_CACHE_ENABLED,
+    GEOCODE_CACHE_TTL,
     POSTGRES_PORT,
     POSTGRES_USER,
     REDIS_HOST,
@@ -157,6 +161,9 @@ pg_pool: asyncpg.Pool = None  # type: ignore[assignment]
 nc = None  # type: ignore[assignment]
 js = None  # type: ignore[assignment]
 redis_pool: aioredis.Redis = None  # type: ignore[assignment]
+# Cache-aside result cache for /geocode and /reverse. Stays None (disabled) until
+# Redis connects at startup; endpoints guard on `result_cache is not None`.
+result_cache: ResultCache | None = None
 _ac_task: asyncio.Task | None = None  # strong reference to prevent GC
 
 # Background address-enrichment bookkeeping. Parents/nearest-street are computed
@@ -279,7 +286,7 @@ async def _warm_ollama():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global es, pg_pool, nc, js, redis_pool, _ac_task
+    global es, pg_pool, nc, js, redis_pool, _ac_task, result_cache
 
     # Retry logic for connecting to dependencies
     max_retries = 10
@@ -373,6 +380,18 @@ async def lifespan(app: FastAPI):
         )
         await redis_pool.ping()
         logger.info(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+
+        # Result cache (cache-aside) for /geocode + /reverse — offloads ES on
+        # repeated queries. Fail-open: a Redis error just becomes a cache miss.
+        result_cache = ResultCache(
+            redis_pool,
+            enabled=GEOCODE_CACHE_ENABLED,
+            ttl=GEOCODE_CACHE_TTL,
+            coord_precision=GEOCODE_CACHE_COORD_PRECISION,
+        )
+        logger.info(
+            f"[geocoder] Result cache enabled={result_cache.enabled} ttl={GEOCODE_CACHE_TTL}s"
+        )
 
         # Warm autocomplete index from ES in background (store ref to prevent GC)
         _ac_task = asyncio.create_task(_warm_autocomplete())
@@ -957,6 +976,27 @@ async def geocode(
     use_ai = ai and ENABLE_AI
     optimized = effort == "optimized"
 
+    # ── result cache (cache-aside): call cache first, fall back to ES ──────
+    # Skip the cache for AI paths (describe / ai) — those are heavier and less
+    # repeated, and describe mutates ES-side caches. Everything else is cached.
+    cache_key = None
+    if result_cache is not None and result_cache.enabled and not describe and not use_ai:
+        cache_key = result_cache.key(
+            "geocode",
+            q=ResultCache.norm_q(q),
+            lat=result_cache.coord(lat),
+            lon=result_cache.coord(lon),
+            limit=limit,
+            offset=offset,
+            vector=int(use_vectors),
+            effort=effort,
+        )
+        cached = await result_cache.get(cache_key)
+        if cached is not None:
+            request.state.cache_hit = True
+            request.state.result_count = -1  # sentinel: served from cache
+            return Response(content=cached, media_type="application/json")
+
     loop = asyncio.get_running_loop()
 
     # ---- function_score query ----
@@ -1365,7 +1405,7 @@ async def geocode(
         await _attach_descriptions(results)
 
     request.state.result_count = len(results)
-    return {
+    response_body = {
         "features": {
             "vectors_enabled": use_vectors,
             "ai_enabled": use_ai,
@@ -1389,6 +1429,13 @@ async def geocode(
         },
         "results": results,
     }
+    # Cache miss just computed the answer — store the serialized body so the next
+    # identical request is a single Redis GET (never reaches ES).
+    if cache_key is not None:
+        jr = JSONResponse(content=response_body)
+        await result_cache.set(cache_key, jr.body)
+        return jr
+    return response_body
 
 
 # ── autocomplete ──────────────────────────────────────────────────────────
@@ -2199,6 +2246,11 @@ async def reverse(
     - nearest_line: The closest LineString geometry (road/street) with ES metadata
     - enclosing_polygons: Admin boundaries / areas containing the point with ES metadata
     """
+    # NOTE: /reverse is intentionally NOT cached. Here the coordinate *is* the
+    # query and the answer is the specific nearest building/street, so the
+    # coarse coordinate rounding used for /geocode's soft geo-bias would return
+    # a wrong address. At a safe (building-level) precision, continuous GPS
+    # points almost never repeat, so caching would add risk for ~no hit rate.
     point_wkt = f"POINT({lon} {lat})"
 
     async with pg_pool.acquire() as conn:
