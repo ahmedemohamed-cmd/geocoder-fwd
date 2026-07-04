@@ -8,11 +8,12 @@ from shared.config import EMBEDDING_DIM
 
 MAPPING = {
     "settings": {
-        # number_of_shards=3: fan a query across ~3 cores for lower single-query
-        # latency/tail, while keeping concurrency headroom on an 8-core box (a
-        # per-core shard count would oversubscribe the search pool under load).
-        # Fixed at index creation — only takes effect on a fresh (re)build.
-        "index": {"number_of_replicas": 0, "number_of_shards": 3},
+        # Single shard is intentional. Each query uses one search thread PER shard,
+        # and the node's search pool is ~10; at 1 shard that's ~10 concurrent
+        # queries before queueing (well-matched to this workload's concurrency).
+        # More shards would cut concurrent capacity to pool÷shards — the wrong
+        # trade when throughput/concurrency is valued over single-query latency.
+        "index": {"number_of_replicas": 0, "number_of_shards": 1},
         "analysis": {
             "char_filter": {
                 # Normalize Arabic characters at char level before tokenization
