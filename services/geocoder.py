@@ -995,7 +995,11 @@ async def geocode(
         if cached is not None:
             request.state.cache_hit = True
             request.state.result_count = -1  # sentinel: served from cache
-            return Response(content=cached, media_type="application/json")
+            return Response(
+                content=cached,
+                media_type="application/json",
+                headers={"X-Cache": "HIT"},
+            )
 
     loop = asyncio.get_running_loop()
 
@@ -1431,11 +1435,13 @@ async def geocode(
     }
     # Cache miss just computed the answer — store the serialized body so the next
     # identical request is a single Redis GET (never reaches ES).
+    # X-Cache header lets a client see HIT/MISS (BYPASS = cache not applicable,
+    # e.g. describe/ai or cache disabled); it propagates out through APISIX/NPM.
     if cache_key is not None:
-        jr = JSONResponse(content=response_body)
+        jr = JSONResponse(content=response_body, headers={"X-Cache": "MISS"})
         await result_cache.set(cache_key, jr.body)
         return jr
-    return response_body
+    return JSONResponse(content=response_body, headers={"X-Cache": "BYPASS"})
 
 
 # ── autocomplete ──────────────────────────────────────────────────────────
@@ -2598,7 +2604,17 @@ if __name__ == "__main__":
     # uvicorn needs an import string to fork; the per-worker warm-up is guarded by
     # a fleet-wide Redis lock so workers/replicas don't all rescan ES.
     workers = int(os.getenv("GEOCODER_WORKERS", "1"))
+    # Hold idle keep-alive connections longer than uvicorn's 5s default so the
+    # APISIX upstream pool (and any keep-alive client) reuses warm connections
+    # instead of re-handshaking between bursts. Tunable via env.
+    keep_alive = int(os.getenv("GEOCODER_KEEPALIVE_TIMEOUT", "30"))
     if workers > 1:
-        uvicorn.run("services.geocoder:app", host="0.0.0.0", port=8000, workers=workers)
+        uvicorn.run(
+            "services.geocoder:app",
+            host="0.0.0.0",
+            port=8000,
+            workers=workers,
+            timeout_keep_alive=keep_alive,
+        )
     else:
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        uvicorn.run(app, host="0.0.0.0", port=8000, timeout_keep_alive=keep_alive)
