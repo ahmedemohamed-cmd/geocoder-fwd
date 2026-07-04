@@ -49,12 +49,29 @@
 ###   POST /locate             – snap coordinates to the road graph
 ###
 ### Shared query flags: vector=true|false · ai=true|false · describe=true|false
+###
+### PERFORMANCE — keep-alive & the X-Cache header
+###   • Connection reuse (keep-alive): the server holds connections warm, so a
+###     pooled/keep-alive client makes repeat calls ~2 ms round-trips instead of
+###     paying a fresh TLS handshake every time. REST-client tools (VS Code /
+###     IntelliJ) reuse automatically; programmatic clients should use a session
+###     (requests.Session / httpx.Client / a keep-alive agent). With curl, reuse
+###     one connection across calls via --next:
+###
+###       curl -sS -H "X-API-Key: {{apiKey}}" "{{gatewayUrl}}/geocode?q=cairo&limit=5" \
+###         --next -sS -H "X-API-Key: {{apiKey}}" "{{gatewayUrl}}/geocode?q=cairo&limit=5"
+###
+###   • /geocode returns an  X-Cache  response header so you can SEE caching:
+###       HIT    – served from Redis, Elasticsearch not touched
+###       MISS   – computed this time, now cached (next identical call → HIT)
+###       BYPASS – not cacheable (describe/ai, or cache disabled)
+###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
 #@gatewayUrl = http://localhost:8080
 @gatewayUrl = https://places.nourbyte.com/api
 
 # Your tenant API key (create one in the console; shown once). Replace this.
-@apiKey = gk_511357a7_dLpa6A7yrBQX8_wFHZYv1Xt3o2_hZZOG
+@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
 
 
 # ============================================================================
@@ -104,7 +121,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### First few characters
-GET {{gatewayUrl}}/autocomplete?q=cfc
+GET {{gatewayUrl}}/autocomplete?q=fifth settlement
 X-API-Key: {{apiKey}}
 
 ###
@@ -116,7 +133,7 @@ X-API-Key: {{apiKey}}
 ###
 
 ### Arabic prefix
-GET {{gatewayUrl}}/autocomplete?q=fifth settlement
+GET {{gatewayUrl}}/autocomplete?q=5th settlement
 X-API-Key: {{apiKey}}
 
 ###
@@ -141,7 +158,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### Basic name search
-GET {{gatewayUrl}}/geocode?q=5th settlement
+GET {{gatewayUrl}}/geocode?q=5th settlement&limit=20
 X-API-Key: {{apiKey}}
 
 ###
@@ -279,7 +296,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### Describe a node (blocks until ready on first call)
-GET {{gatewayUrl}}/describe?osm_id=n271613766
+GET {{gatewayUrl}}/describe?osm_id=g_6bb77b635d2fd3eb
 X-API-Key: {{apiKey}}
 
 ###
