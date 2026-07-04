@@ -276,11 +276,15 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
             seg_count = stats["indices"][INDEX]["primaries"]["segments"]["count"]
             if seg_count > 10:
                 logger.info(
-                    f"[es-inserter] {seg_count} segments detected, starting background force-merge to 5",
+                f"[es-inserter] {seg_count} segments detected, starting background force-merge to 1",
                 )
+                # Read-heavy index: merge each shard to a single segment for the
+                # lowest per-query overhead. The >10 guard means this only runs
+                # when trickle writes have re-fragmented it, so a settled index
+                # isn't rewritten needlessly.
                 await es.indices.forcemerge(
                     index=INDEX,
-                    max_num_segments=5,
+                    max_num_segments=1,
                     wait_for_completion=False,
                     flush=True,
                 )

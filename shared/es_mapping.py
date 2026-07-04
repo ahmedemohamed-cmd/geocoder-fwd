@@ -8,7 +8,11 @@ from shared.config import EMBEDDING_DIM
 
 MAPPING = {
     "settings": {
-        "index": {"number_of_replicas": 0},
+        # number_of_shards=3: fan a query across ~3 cores for lower single-query
+        # latency/tail, while keeping concurrency headroom on an 8-core box (a
+        # per-core shard count would oversubscribe the search pool under load).
+        # Fixed at index creation — only takes effect on a fresh (re)build.
+        "index": {"number_of_replicas": 0, "number_of_shards": 3},
         "analysis": {
             "char_filter": {
                 # Normalize Arabic characters at char level before tokenization
