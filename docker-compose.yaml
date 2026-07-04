@@ -204,7 +204,9 @@ services:
       - NATS_SUBJECT=osm.elements
       - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
       - ENABLE_VECTORS=false
-      - ENABLE_AI=false
+      # AI place descriptions (/describe, ?describe=true) via Ollama. Vectors stay
+      # off — descriptions don't need them and they'd add ES/CPU load per query.
+      - ENABLE_AI=true
       - TRANSFORMERS_CACHE=/app/models
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2.5:1.5b
