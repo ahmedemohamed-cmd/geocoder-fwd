@@ -15,16 +15,21 @@ services:
 
   redis:
     image: redis:7-alpine
-    # Redis here is a pure derived cache (autocomplete index, rebuilt from ES
-    # every 10 min; watcher node-coord cache during ingest). It needs NO
-    # persistence — and the default RDB background-save fork during the
-    # autocomplete warm-up write storm caused a copy-on-write memory spike that
-    # OOM-killed the container (exit 137), taking autocomplete down to its ES
-    # fallback. So: disable RDB+AOF, and set a maxmemory below the container
-    # limit with LRU eviction so Redis evicts gracefully instead of being killed.
+    # Redis here is a pure derived cache — NO persistence needed:
+    #   • autocomplete index (rebuilt from ES every 10 min; ~600k prefix keys),
+    #   • watcher node-coord cache during ingest,
+    #   • /geocode result cache (cache:v1:* keys, 300s TTL).
+    # The default RDB background-save fork during the autocomplete warm-up write
+    # storm caused a copy-on-write spike that OOM-killed the container (exit 137),
+    # so RDB+AOF are disabled and maxmemory+LRU let Redis evict gracefully.
+    # maxmemory was 850mb, but the autocomplete index alone exceeded it and
+    # thrashed (100M+ evictions → autocomplete silently falling back to ES). With
+    # the result cache added on top it needs real room: 3gb (safely under the 5G
+    # container limit given Redis fragmentation ~1.3x). allkeys-lru keeps the hot
+    # autocomplete keys (touched every request) and sheds cold/TTL'd cache entries.
     command: >
       redis-server --save "" --appendonly no
-      --maxmemory 850mb --maxmemory-policy allkeys-lru
+      --maxmemory 3gb --maxmemory-policy allkeys-lru
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -37,7 +42,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 5G
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
