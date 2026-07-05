@@ -10,12 +10,12 @@ import threading
 import time
 
 import osmium
-import redis
 
 from shared import nats_client
 from shared.config import DATA_DIR, NATS_SUBJECT, REDIS_HOST, REDIS_PORT, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
 from shared.processed import is_processed, load_processed, record_processed
+from shared.redis_client import make_redis
 from shared.valhalla import link_pbf_for_valhalla
 
 logger = get_logger("watcher")
@@ -590,21 +590,8 @@ async def publish_file(filepath: str):
         logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} already exists")
     except Exception:
         logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} does not exist, creating it...")
-        from nats.js.api import RetentionPolicy, StreamConfig
-
         try:
-            await js.add_stream(
-                StreamConfig(
-                    name=nats_client.NATS_STREAM,
-                    subjects=[nats_client.NATS_SUBJECT],
-                    retention=RetentionPolicy.LIMITS,
-                    max_age=86400,  # Keep messages for 24 hours (in seconds)
-                    max_bytes=10737418240,  # 10GB max storage
-                    storage="file",
-                    max_msg_size=-1,  # unlimited
-                    discard="old",  # Discard old messages when limits are reached
-                )
-            )
+            await js.add_stream(nats_client.OSM_STREAM_CFG)
             logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} created successfully")
         except Exception as e:
             logger.error(f"[watcher] Failed to create stream {nats_client.NATS_STREAM}: {e}")
@@ -612,18 +599,7 @@ async def publish_file(filepath: str):
             try:
                 logger.info("[watcher] Attempting to delete and recreate stream...")
                 await js.delete_stream(nats_client.NATS_STREAM)
-                await js.add_stream(
-                    StreamConfig(
-                        name=nats_client.NATS_STREAM,
-                        subjects=[nats_client.NATS_SUBJECT],
-                        retention=RetentionPolicy.LIMITS,
-                        max_age=86400,
-                        max_bytes=10737418240,
-                        storage="file",
-                        max_msg_size=-1,  # unlimited
-                        discard="old",
-                    )
-                )
+                await js.add_stream(nats_client.OSM_STREAM_CFG)
                 logger.info(f"[watcher] Stream {nats_client.NATS_STREAM} recreated successfully")
             except Exception as e2:
                 logger.error(f"[watcher] Failed to recreate stream: {e2}")
@@ -631,8 +607,8 @@ async def publish_file(filepath: str):
 
     q: queue.Queue = queue.Queue(maxsize=QUEUE_MAXSIZE)
 
-    # Initialize Redis client
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    # Initialize Redis client (standalone or cluster, per REDIS_MODE)
+    redis_client = make_redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     try:
         redis_client.ping()
         logger.info(f"[watcher] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
@@ -916,18 +892,29 @@ async def publish_file(filepath: str):
         )
     logger.info(f"[watcher] {os.path.basename(filepath)}: published {published} elements")
 
-    # Clear Redis cache after processing to free up space
+    # Clear Redis cache after processing to free up space. scan_iter + per-key
+    # pipelined deletes work in both standalone and cluster mode (a multi-key
+    # DELETE would be a cross-slot error on a cluster).
     try:
         logger.info("[watcher] Clearing Redis cache...")
-        cursor = 0
         deleted = 0
-        while True:
-            cursor, keys = redis_client.scan(cursor, match=f"{handler.redis_prefix}*", count=1000)
-            if keys:
-                redis_client.delete(*keys)
-                deleted += len(keys)
-            if cursor == 0:
-                break
+        batch: list = []
+
+        def _flush(keys: list) -> None:
+            pipe = redis_client.pipeline(transaction=False)
+            for k in keys:
+                pipe.delete(k)
+            pipe.execute()
+
+        for key in redis_client.scan_iter(match=f"{handler.redis_prefix}*", count=1000):
+            batch.append(key)
+            if len(batch) >= 500:
+                _flush(batch)
+                deleted += len(batch)
+                batch = []
+        if batch:
+            _flush(batch)
+            deleted += len(batch)
         if deleted > 0:
             logger.info(f"[watcher] Redis cache cleared ({deleted} keys)")
         else:

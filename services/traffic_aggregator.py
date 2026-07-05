@@ -46,6 +46,7 @@ from shared.nats_client import (
     reconnect,
     subscribe_traffic,
 )
+from shared.redis_client import make_redis_async
 from shared.traffic_providers import get_provider
 
 logger = get_logger("traffic-aggregator")
@@ -57,8 +58,13 @@ _INDEX_KEY = "tf:idx"
 # aggregator replicas, or the probe consumer racing the provider poller — cannot
 # lose updates on a hot edge. A client-side hgetall→compute→hset would race.
 #
-# KEYS[1] = tf:e:{gid}   KEYS[2] = tf:idx
-# ARGV: alpha, kph, now, ttl, min_samples, gid
+# The script deliberately touches ONLY the edge hash (one key, one hash slot, so
+# it also runs on Redis Cluster). The tf:idx ZADD happens as a separate call in
+# _update_edge — it's an idempotent index insert, not part of the racy fold: if
+# it is lost to a crash the next probe on that edge simply re-adds it.
+#
+# KEYS[1] = tf:e:{gid}
+# ARGV: alpha, kph, now, ttl
 _EWMA_LUA = """
 local prev = redis.call('HGET', KEYS[1], 'kph')
 local n = tonumber(redis.call('HGET', KEYS[1], 'n')) or 0
@@ -73,9 +79,6 @@ end
 n = n + 1
 redis.call('HSET', KEYS[1], 'kph', string.format('%.2f', new_kph), 'n', n, 'ts', ARGV[3])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
-if n >= tonumber(ARGV[5]) then
-  redis.call('ZADD', KEYS[2], tonumber(ARGV[3]), ARGV[6])
-end
 return n
 """
 
@@ -107,18 +110,19 @@ async def _update_edge(r: aioredis.Redis, gid: int, kph: float, weight: float, n
     key = f"tf:e:{gid}"
     alpha = min(1.0, TRAFFIC_EWMA_ALPHA * weight)
     # Atomic server-side fold — see _EWMA_LUA. Safe under concurrent writers.
-    await r.eval(
+    n = await r.eval(
         _EWMA_LUA,
-        2,  # numkeys
+        1,  # numkeys — single key so the script is cluster-slot-safe
         key,
-        _INDEX_KEY,  # KEYS
         f"{alpha}",
         f"{kph}",
         f"{now:.0f}",
         f"{TRAFFIC_EDGE_TTL * 2}",  # GC safety net; writer drives real expiry via zset
-        f"{TRAFFIC_MIN_SAMPLES}",
-        str(gid),
     )
+    if int(n) >= TRAFFIC_MIN_SAMPLES:
+        # Publish the edge to the writer's index (idempotent; separate from the
+        # atomic fold so the script stays single-key for Redis Cluster).
+        await r.zadd(_INDEX_KEY, {str(gid): now})
 
 
 # ── Valhalla map-matching ─────────────────────────────────────────────────────
@@ -314,7 +318,7 @@ async def run():
     _log(
         f"Starting. valhalla={VALHALLA_URL} min_samples={TRAFFIC_MIN_SAMPLES} ewma_alpha={TRAFFIC_EWMA_ALPHA}"
     )
-    r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    r = make_redis_async(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     # One shared HTTP client; generous timeout because map-matching long traces
     # is the slow path.
     async with httpx.AsyncClient(timeout=30) as client:

@@ -4,7 +4,14 @@ Imported by both services/geocoder.py and services/es_inserter.py so
 there is a single source of truth for the index schema.
 """
 
+import os
+
 from shared.config import EMBEDDING_DIM
+
+# 0 on the single-node compose deployment (a replica could never allocate and
+# would leave the cluster yellow); 1 on a multi-node ES cluster so the index
+# survives a node loss and searches spread across the copies.
+ES_INDEX_REPLICAS = int(os.getenv("ES_INDEX_REPLICAS", "0"))
 
 MAPPING = {
     "settings": {
@@ -13,7 +20,7 @@ MAPPING = {
         # queries before queueing (well-matched to this workload's concurrency).
         # More shards would cut concurrent capacity to pool÷shards — the wrong
         # trade when throughput/concurrency is valued over single-query latency.
-        "index": {"number_of_replicas": 0, "number_of_shards": 1},
+        "index": {"number_of_replicas": ES_INDEX_REPLICAS, "number_of_shards": 1},
         "analysis": {
             "char_filter": {
                 # Normalize Arabic characters at char level before tokenization

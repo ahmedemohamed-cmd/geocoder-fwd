@@ -107,6 +107,9 @@ from shared.config import (
     ENABLE_DEEP,
     ENABLE_TRAFFIC,
     ENABLE_VECTORS,
+    GEOCODE_CACHE_COORD_PRECISION,
+    GEOCODE_CACHE_ENABLED,
+    GEOCODE_CACHE_TTL,
     GOOGLE_MAPS_API_KEY,
     NATS_SUBJECT,
     NATS_URL,
@@ -114,9 +117,6 @@ from shared.config import (
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PASSWORD,
-    GEOCODE_CACHE_COORD_PRECISION,
-    GEOCODE_CACHE_ENABLED,
-    GEOCODE_CACHE_TTL,
     POSTGRES_PORT,
     POSTGRES_USER,
     REDIS_HOST,
@@ -142,6 +142,7 @@ from shared.interpolation import (
 )
 from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.nats_client import TRAFFIC_STREAM_CFG, ensure_stream
+from shared.redis_client import make_redis_async
 
 INDEX = "osm_places"
 
@@ -372,7 +373,7 @@ async def lifespan(app: FastAPI):
 
     # Connect to Redis and warm autocomplete index
     try:
-        redis_pool = aioredis.Redis(
+        redis_pool = make_redis_async(
             host=REDIS_HOST,
             port=REDIS_PORT,
             decode_responses=True,
@@ -697,9 +698,11 @@ async def health():
         if redis_pool is not None:
             await redis_pool.ping()
             ac_keys = await redis_pool.dbsize()
+            if isinstance(ac_keys, dict):  # cluster client: per-node counts
+                ac_keys = sum(ac_keys.values())
             checks["redis"] = {"status": "ok", "autocomplete_keys": ac_keys}
         else:
-            r = aioredis.Redis(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
+            r = make_redis_async(host=REDIS_HOST, port=REDIS_PORT, socket_connect_timeout=2)
             await r.ping()
             checks["redis"] = {"status": "ok", "autocomplete": "not_initialised"}
             await r.aclose()

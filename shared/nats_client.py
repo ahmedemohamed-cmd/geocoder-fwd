@@ -6,6 +6,7 @@ from nats.js.api import ConsumerConfig, RetentionPolicy, StreamConfig
 
 from shared.config import (
     NATS_STREAM,
+    NATS_STREAM_REPLICAS,
     NATS_SUBJECT,
     NATS_URL,
     TRAFFIC_STREAM,
@@ -15,7 +16,8 @@ from shared.config import (
 logger = logging.getLogger(__name__)
 
 # Desired stream config — applied whether the stream is new or already exists.
-_STREAM_CFG = StreamConfig(
+# num_replicas follows NATS_STREAM_REPLICAS (1 on compose, 3 on clustered NATS).
+OSM_STREAM_CFG = StreamConfig(
     name=NATS_STREAM,
     subjects=[NATS_SUBJECT],
     retention=RetentionPolicy.LIMITS,
@@ -24,7 +26,9 @@ _STREAM_CFG = StreamConfig(
     storage="file",
     max_msg_size=-1,  # unlimited — server ceiling is 64 MB (nats.conf)
     discard="old",
+    num_replicas=NATS_STREAM_REPLICAS,
 )
+_STREAM_CFG = OSM_STREAM_CFG  # back-compat alias
 
 # Live-traffic probe firehose: high volume, low value once consumed. Short
 # retention + a memory-backed cap so a probe burst can never starve the OSM
@@ -38,6 +42,7 @@ TRAFFIC_STREAM_CFG = StreamConfig(
     storage="file",
     max_msg_size=-1,
     discard="old",
+    num_replicas=NATS_STREAM_REPLICAS,
 )
 
 

@@ -20,6 +20,20 @@ from . import apisix_admin, config, control_plane, db, gateway, repo, usage
 
 
 def _make_redis() -> aioredis.Redis:
+    """Standalone Redis by default; Redis Cluster when BILLING_REDIS_MODE=cluster.
+
+    Cluster mode ignores REDIS_DB (clusters have no SELECT) — billing keys are
+    isolated by config.REDIS_PREFIX instead. (Duplicated from shared.redis_client
+    because the billing image ships without the shared/ package.)
+    """
+    if config.REDIS_MODE == "cluster":
+        from redis.asyncio.cluster import ClusterNode, RedisCluster
+
+        startup = []
+        for node in config.redis_cluster_nodes():
+            host, _, port = node.rpartition(":")
+            startup.append(ClusterNode(host, int(port)))
+        return RedisCluster(startup_nodes=startup, decode_responses=True)
     return aioredis.Redis(
         host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB, decode_responses=True
     )

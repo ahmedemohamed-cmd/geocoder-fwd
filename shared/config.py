@@ -53,6 +53,9 @@ WATCH_POLL_INTERVAL = _safe_int("WATCH_POLL_INTERVAL", 30)
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 NATS_STREAM = "OSM"
 NATS_SUBJECT = "osm.elements"
+# JetStream replication factor for our streams. 1 for the single-node compose
+# deployment; set 3 against a clustered NATS so streams survive a server loss.
+NATS_STREAM_REPLICAS = _safe_int("NATS_STREAM_REPLICAS", 1)
 
 # PostGIS
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
@@ -67,6 +70,12 @@ ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
 # Redis (used by watcher for node location caching)
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = _safe_int("REDIS_PORT", 6379)
+# Topology: "standalone" (default; compose) or "cluster" (Redis Cluster; k8s).
+# All clients are built via shared.redis_client so the mode is applied uniformly.
+REDIS_MODE = os.getenv("REDIS_MODE", "standalone").strip().lower()
+# Cluster bootstrap nodes, "host1:6379,host2:6379". Empty falls back to
+# REDIS_HOST:REDIS_PORT as the sole startup node (fine behind a k8s Service).
+REDIS_NODES = os.getenv("REDIS_NODES", "")
 
 # Redis result cache for /geocode and /reverse (cache-aside; falls back to ES on
 # miss). TTL bounds staleness from background enrichment / popularity feedback.
@@ -122,6 +131,14 @@ TRAFFIC_EXTRACT_PATH = os.getenv("TRAFFIC_EXTRACT_PATH", "/custom_files/valhalla
 TRAFFIC_WRITE_INTERVAL = _safe_int("TRAFFIC_WRITE_INTERVAL", 30)  # seconds between flushes
 TRAFFIC_EDGE_TTL = _safe_int("TRAFFIC_EDGE_TTL", 600)  # secs before an edge speed expires
 TRAFFIC_MIN_SAMPLES = _safe_int("TRAFFIC_MIN_SAMPLES", 3)  # min probes before a speed is trusted
+
+# Horizontal sharding for the traffic-writer: each replica owns the edges whose
+# tile satisfies tile_base_id % SHARDS == SHARD_INDEX, so concurrent writers
+# touch disjoint tiles (and disjoint mmap byte ranges) with no locking.
+# SHARD_INDEX defaults to the trailing ordinal of the hostname (StatefulSet pod
+# names are <name>-<ordinal>); 1 shard = the single-writer compose behavior.
+TRAFFIC_WRITER_SHARDS = _safe_int("TRAFFIC_WRITER_SHARDS", 1)
+TRAFFIC_WRITER_SHARD_INDEX = os.getenv("TRAFFIC_WRITER_SHARD_INDEX", "")
 
 
 def _safe_float(env_var: str, default: float) -> float:

@@ -8,6 +8,27 @@ from it. This service is the thing that *writes* those speeds: every
 ``valhalla-tiles`` volume and both containers mmap it, the running router sees
 the new speeds with no restart.
 
+Horizontal scaling (active-active sharding)
+-------------------------------------------
+The writer's per-cycle work grows with the number of *distinct live edges*
+(≈100k at 1000 probes/s city-wide), not with request rate. Two mechanisms keep
+the cycle fast and allow N concurrent replicas:
+
+* **Tile sharding** — a replica only writes edges whose
+  ``tile_base_id(graphid) % TRAFFIC_WRITER_SHARDS == shard_index``. Ownership is
+  per *tile*, so a tile's speed records AND its header ``last_update`` bytes are
+  written by exactly one replica: concurrent writers touch disjoint mmap byte
+  ranges and need no locking. The shard index defaults to the pod's StatefulSet
+  ordinal (trailing ``-<n>`` of the hostname). 1 shard == the original
+  single-writer behavior.
+* **Pipelined reads** — per-edge HGETALLs are batched through a Redis pipeline
+  (chunks of 500), turning ~100k sequential round-trips into ~200.
+
+Each replica reads the full (cheap) ``tf:idx`` zset and filters client-side, so
+the aggregator is unaware of sharding and resharding is just a replica-count
+change. If a shard dies, its tiles stop refreshing until the pod restarts;
+``TRAFFIC_EDGE_TTL`` bounds the staleness (edges revert to baseline speeds).
+
 Redis schema (written by traffic_aggregator, read here)
 -------------------------------------------------------
     tf:e:{graphid}   hash  {kph, n, ts}     – current smoothed speed for an edge
@@ -20,6 +41,7 @@ falls back to predicted/base speeds, then dropped from the index.
 
 import mmap
 import os
+import socket
 import time
 
 import redis
@@ -31,17 +53,39 @@ from shared.config import (
     TRAFFIC_EDGE_TTL,
     TRAFFIC_EXTRACT_PATH,
     TRAFFIC_WRITE_INTERVAL,
+    TRAFFIC_WRITER_SHARD_INDEX,
+    TRAFFIC_WRITER_SHARDS,
 )
 from shared.logging import get_logger
+from shared.redis_client import make_redis
 
 logger = get_logger("traffic-writer")
 
 _EDGE_KEY_PREFIX = "tf:e:"
 _INDEX_KEY = "tf:idx"
+_PIPELINE_BATCH = 500  # HGETALLs per pipeline round-trip
 
 
 def _log(msg: str) -> None:
     logger.info(f"[traffic-writer] {msg}")
+
+
+def _resolve_shard() -> tuple[int, int]:
+    """Return (shards, shard_index) for this replica.
+
+    The index comes from TRAFFIC_WRITER_SHARD_INDEX when set, otherwise from the
+    hostname's trailing ordinal (StatefulSet pods are named ``<name>-<n>``),
+    otherwise 0. An out-of-range index is a deploy error worth failing loudly on.
+    """
+    shards = max(1, TRAFFIC_WRITER_SHARDS)
+    if TRAFFIC_WRITER_SHARD_INDEX != "":
+        index = int(TRAFFIC_WRITER_SHARD_INDEX)
+    else:
+        tail = socket.gethostname().rsplit("-", 1)[-1]
+        index = int(tail) if tail.isdigit() else 0
+    if not 0 <= index < shards:
+        raise SystemExit(f"[traffic-writer] shard index {index} out of range for {shards} shards")
+    return shards, index
 
 
 def _wait_for_extract(path: str) -> None:
@@ -71,10 +115,16 @@ def _open_mmap(path: str) -> mmap.mmap:
         os.close(fd)  # mmap keeps its own reference to the mapping
 
 
+def _chunks(seq: list, size: int):
+    for i in range(0, len(seq), size):
+        yield seq[i : i + size]
+
+
 def run():
+    shards, shard_index = _resolve_shard()
     _log(
         f"Starting. extract={TRAFFIC_EXTRACT_PATH} interval={TRAFFIC_WRITE_INTERVAL}s "
-        f"ttl={TRAFFIC_EDGE_TTL}s"
+        f"ttl={TRAFFIC_EDGE_TTL}s shard={shard_index}/{shards}"
     )
     _wait_for_extract(TRAFFIC_EXTRACT_PATH)
 
@@ -82,7 +132,10 @@ def run():
     _log(f"Indexed {len(index)} traffic tiles from {TRAFFIC_EXTRACT_PATH}")
 
     mm = _open_mmap(TRAFFIC_EXTRACT_PATH)
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    r = make_redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+    def owns(gid: int) -> bool:
+        return tt.tile_base_id(gid) % shards == shard_index
 
     def write_edge(graphid: int, kph: float | None, congestion: int = 0) -> bool:
         """Overwrite one edge's TrafficSpeed record. Returns True if written."""
@@ -106,36 +159,53 @@ def run():
         cutoff = now - TRAFFIC_EDGE_TTL
 
         try:
-            # Expired edges first: revert to UNKNOWN, then drop from the index.
-            expired = r.zrangebyscore(_INDEX_KEY, "-inf", f"({cutoff}")
+            # Expired edges first: revert this shard's to UNKNOWN, then drop them
+            # from the index. Other shards clean up their own.
+            expired = [
+                gid_s
+                for gid_s in r.zrangebyscore(_INDEX_KEY, "-inf", f"({cutoff}")
+                if owns(int(gid_s))
+            ]
             reverted = 0
-            for gid_s in expired:
-                gid = int(gid_s)
-                if write_edge(gid, None):
-                    reverted += 1
-                r.zrem(_INDEX_KEY, gid_s)
-                r.delete(f"{_EDGE_KEY_PREFIX}{gid_s}")
+            for batch in _chunks(expired, _PIPELINE_BATCH):
+                for gid_s in batch:
+                    if write_edge(int(gid_s), None):
+                        reverted += 1
+                pipe = r.pipeline(transaction=False)
+                for gid_s in batch:
+                    pipe.delete(f"{_EDGE_KEY_PREFIX}{gid_s}")
+                pipe.execute()
+                r.zrem(_INDEX_KEY, *batch)
 
-            # Fresh edges: write their current smoothed speed.
-            fresh = r.zrangebyscore(_INDEX_KEY, cutoff, "+inf")
+            # Fresh edges owned by this shard: write their current smoothed speed.
+            # HGETALLs are pipelined — one round-trip per _PIPELINE_BATCH edges.
+            fresh = [
+                gid_s for gid_s in r.zrangebyscore(_INDEX_KEY, cutoff, "+inf") if owns(int(gid_s))
+            ]
             written = 0
             skipped = 0
-            for gid_s in fresh:
-                h = r.hgetall(f"{_EDGE_KEY_PREFIX}{gid_s}")
-                if not h or "kph" not in h:
-                    continue
-                kph = float(h["kph"])
-                cong = int(float(h.get("congestion", 0)))
-                if write_edge(int(gid_s), kph, cong):
-                    written += 1
-                else:
-                    skipped += 1
+            for batch in _chunks(fresh, _PIPELINE_BATCH):
+                pipe = r.pipeline(transaction=False)
+                for gid_s in batch:
+                    pipe.hgetall(f"{_EDGE_KEY_PREFIX}{gid_s}")
+                hashes = pipe.execute()
+                for gid_s, h in zip(batch, hashes, strict=True):
+                    if not h or "kph" not in h:
+                        continue
+                    kph = float(h["kph"])
+                    cong = int(float(h.get("congestion", 0)))
+                    if write_edge(int(gid_s), kph, cong):
+                        written += 1
+                    else:
+                        skipped += 1
 
             if written or reverted or skipped:
                 mm.flush()
+                cycle_s = time.monotonic() - cycle_start
                 _log(
-                    f"flushed: {written} edges updated, {reverted} reverted, "
-                    f"{skipped} skipped (not in extract)"
+                    f"shard {shard_index}/{shards} flushed: {written} edges updated, "
+                    f"{reverted} reverted, {skipped} skipped (not in extract) "
+                    f"in {cycle_s:.2f}s"
                 )
         except redis.RedisError as e:
             _log(f"Redis error this cycle (will retry): {e}")

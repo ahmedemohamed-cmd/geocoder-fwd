@@ -69,7 +69,11 @@ async def incr_tenant_if_allowed(redis, tenant_id: str, period: str, cap: int) -
     unlike a plain INCR-then-DECR-on-reject — a crash between the two ops can't
     leak a permanently-consumed quota slot, and concurrent requests never observe
     a transiently inflated counter. Implemented with a WATCH/MULTI optimistic
-    transaction (no Lua, so it works against the in-test fakeredis)."""
+    transaction (no Lua, so it works against the in-test fakeredis).
+
+    Standalone-Redis only: WATCH/MULTI is unsupported on cluster clients. That is
+    fine — this path belongs to the legacy reference gateway; the deployed data
+    plane (APISIX) enforces quotas via its limit-count plugin instead."""
     if cap <= 0:
         return await incr_tenant(redis, tenant_id, period)
     key = _tkey(tenant_id, period)

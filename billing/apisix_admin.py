@@ -126,26 +126,35 @@ async def ensure_consumer_group(
         return False
     gid = group_id(tenant_id)
     period = period or current_period()
+    limit_count: dict = {
+        "count": quota,
+        "time_window": config.APISIX_LIMIT_WINDOW,
+        "rejected_code": 429,
+        "key_type": "constant",
+        "key": f"{gid}:{period}",
+    }
+    if config.REDIS_MODE == "cluster":
+        # Redis Cluster has no logical DBs; APISIX namespaces its own counter
+        # keys, so no prefix/database is needed here.
+        limit_count.update(
+            {
+                "policy": "redis-cluster",
+                "redis_cluster_nodes": config.redis_cluster_nodes(),
+                "redis_cluster_name": config.REDIS_CLUSTER_NAME,
+            }
+        )
+    else:
+        limit_count.update(
+            {
+                "policy": "redis",
+                "redis_host": config.REDIS_HOST,
+                "redis_port": config.REDIS_PORT,
+                "redis_database": config.REDIS_DB,
+            }
+        )
     async with _client() as c:
         if hard_cap and quota > 0:
-            await c.put(
-                f"/consumer_groups/{gid}",
-                json={
-                    "plugins": {
-                        "limit-count": {
-                            "count": quota,
-                            "time_window": config.APISIX_LIMIT_WINDOW,
-                            "rejected_code": 429,
-                            "policy": "redis",
-                            "redis_host": config.REDIS_HOST,
-                            "redis_port": config.REDIS_PORT,
-                            "redis_database": config.REDIS_DB,
-                            "key_type": "constant",
-                            "key": f"{gid}:{period}",
-                        }
-                    }
-                },
-            )
+            await c.put(f"/consumer_groups/{gid}", json={"plugins": {"limit-count": limit_count}})
             return True
         await c.delete(f"/consumer_groups/{gid}")
         return False

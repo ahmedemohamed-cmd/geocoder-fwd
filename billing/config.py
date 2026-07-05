@@ -41,12 +41,37 @@ REDIS_HOST = os.getenv("BILLING_REDIS_HOST", os.getenv("REDIS_HOST", "localhost"
 REDIS_PORT = _int("BILLING_REDIS_PORT", _int("REDIS_PORT", 6379))
 REDIS_DB = _int("BILLING_REDIS_DB", 1)  # separate logical db from the geocoder cache
 
+# Topology: "standalone" (default) or "cluster" (Redis Cluster). Cluster mode
+# has no logical DBs (no SELECT), so REDIS_DB is ignored there and key isolation
+# comes from REDIS_PREFIX instead — set BILLING_REDIS_PREFIX="billing:" when
+# running against a cluster. Standalone keeps db=REDIS_DB and an empty prefix,
+# so existing deployments see identical keys.
+REDIS_MODE = os.getenv("BILLING_REDIS_MODE", os.getenv("REDIS_MODE", "standalone")).strip().lower()
+REDIS_NODES = os.getenv("BILLING_REDIS_NODES", os.getenv("REDIS_NODES", ""))
+REDIS_PREFIX = os.getenv("BILLING_REDIS_PREFIX", "")
+
 # Redis keys (shared across all gateway replicas → cluster-wide state)
-KEYCACHE_PREFIX = "apikey:"  # apikey:<hash> -> json{key_id,tenant_id,status}
-LIVE_TENANT_PREFIX = "live:tenant:"  # live:tenant:<tenant>:<period> -> int
-LIVE_KEY_PREFIX = "live:key:"  # live:key:<key_id>:<period>    -> int
-USAGE_EVENTS_LIST = "usage:events"  # durable buffer drained into Postgres rollups
+KEYCACHE_PREFIX = REDIS_PREFIX + "apikey:"  # apikey:<hash> -> json{key_id,tenant_id,status}
+LIVE_TENANT_PREFIX = REDIS_PREFIX + "live:tenant:"  # live:tenant:<tenant>:<period> -> int
+LIVE_KEY_PREFIX = REDIS_PREFIX + "live:key:"  # live:key:<key_id>:<period>    -> int
+USAGE_EVENTS_LIST = REDIS_PREFIX + "usage:events"  # durable buffer drained into PG rollups
 KEYCACHE_TTL = _int("BILLING_KEYCACHE_TTL", 300)  # seconds; cache miss falls back to PG
+
+
+def redis_cluster_nodes() -> list[str]:
+    """REDIS_NODES as a ['host:port', ...] list (APISIX limit-count needs this)."""
+    out = []
+    for item in REDIS_NODES.split(","):
+        item = item.strip()
+        if item:
+            out.append(item if ":" in item else f"{item}:6379")
+    return out or [f"{REDIS_HOST}:{REDIS_PORT}"]
+
+
+# Cluster name required by APISIX's redis-cluster limit-count policy.
+REDIS_CLUSTER_NAME = os.getenv(
+    "BILLING_REDIS_CLUSTER_NAME", os.getenv("REDIS_CLUSTER_NAME", "geocoder-redis")
+)
 
 # ── Auth ───────────────────────────────────────────────────────────────────
 # AUTH_MODE selects the token verifier:
