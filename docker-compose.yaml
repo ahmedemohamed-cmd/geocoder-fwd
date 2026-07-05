@@ -320,6 +320,13 @@ services:
       - TRAFFIC_PROVIDER=${TRAFFIC_PROVIDER:-none}
       - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
       - TRAFFIC_PROVIDER_BBOX=${TRAFFIC_PROVIDER_BBOX:-29.7,31.0,30.2,31.5}
+      # Poll rate for the external provider. Defaults are free-tier-safe: an
+      # N×N grid every INTERVAL seconds = grid² × 86400/INTERVAL calls/day, so
+      # 4²×86400/600 ≈ 2,300/day. Only active when TRAFFIC_PROVIDER != none.
+      - TRAFFIC_PROVIDER_GRID=${TRAFFIC_PROVIDER_GRID:-4}
+      - TRAFFIC_PROVIDER_INTERVAL=${TRAFFIC_PROVIDER_INTERVAL:-600}
+      # Fold weight vs. fresh probes (<1 keeps crowdsourced data dominant).
+      - TRAFFIC_PROVIDER_WEIGHT=${TRAFFIC_PROVIDER_WEIGHT:-0.5}
     depends_on:
       nats:
         condition: service_started
