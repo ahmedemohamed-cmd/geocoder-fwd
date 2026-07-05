@@ -67,11 +67,12 @@
 ###       BYPASS – not cacheable (describe/ai, or cache disabled)
 ###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
-@gatewayUrl = http://localhost:8080
-#@gatewayUrl = https://places.nourbyte.com/api
+#@gatewayUrl = http://localhost:8080
+@gatewayUrl = https://places.nourbyte.com/api
 
 # Your tenant API key (create one in the console; shown once). Replace this.
-@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
+#@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
+@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
 
 
 # ============================================================================
