@@ -42,7 +42,7 @@
 ###
 ### ROUTING (proxied through the geocoder → Valhalla internally)
 ###   GET  /status             – Valhalla engine status
-###   POST /route              – turn-by-turn directions (language=ar supported)
+###   POST /route              – turn-by-turn directions (language=ar; ?traffic=true → live-traffic colouring)
 ###   POST /optimized_route    – reorder stops for shortest tour (TSP)
 ###   POST /sources_to_targets – time/distance matrix (many → many)
 ###   POST /isochrone          – reachability polygons
@@ -67,11 +67,11 @@
 ###       BYPASS – not cacheable (describe/ai, or cache disabled)
 ###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
-#@gatewayUrl = http://localhost:8080
-@gatewayUrl = https://places.nourbyte.com/api
+@gatewayUrl = http://localhost:8080
+#@gatewayUrl = https://places.nourbyte.com/api
 
 # Your tenant API key (create one in the console; shown once). Replace this.
-@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
+@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
 
 
 # ============================================================================
@@ -664,6 +664,31 @@ Content-Type: application/json
   },
   "date_time": { "type": 0 },
   "directions_options": { "units": "kilometers" }
+}
+
+###
+
+### Traffic-coloured route – /route with ?traffic=true adds a live-traffic
+### annotation (no separate endpoint). Each leg gains a `traffic` array of
+### coloured runs that index into that leg's OWN `shape` (polyline6):
+###   { begin_shape_index, end_shape_index, level, live_kph, freeflow_kph, ratio }
+###   level = green | yellow | orange | red | unknown; live_kph/ratio = the run's
+###   slowest (bottleneck) edge; contiguous same-level edges are merged.
+### Plus trip.traffic_coverage = { edges, edges_with_live, coverage_pct }.
+### Colours come from our own per-edge live speeds (Redis tf:e:*, fed by probes +
+### TomTom), NOT from Valhalla — no date_time needed; a stretch lights up wherever
+### we have data (post the slow /traffic/probes above first; uncovered = unknown).
+### Render: decode legs[].shape and colour each run's [begin..end] slice by level.
+POST {{gatewayUrl}}/route?traffic=true
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "locations": [
+    { "lat": 30.0444, "lon": 31.2357, "type": "break" },
+    { "lat": 29.9792, "lon": 31.1342, "type": "break" }
+  ],
+  "costing": "auto"
 }
 
 ###

@@ -13,10 +13,14 @@ import re
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from shared.config import VALHALLA_URL
+from shared.config import REDIS_HOST, REDIS_PORT, VALHALLA_URL
+from shared.logging import get_logger
+from shared.redis_client import make_redis_async
+
+logger = get_logger("routing")
 
 # ── Arabic direction words ────────────────────────────────────────────────────
 _DIRECTIONS: dict[str, str] = {
@@ -241,10 +245,21 @@ async def routing_status():
 
 
 @router.post("/route")
-async def routing_route(request: Request):
-    """Turn-by-turn directions. Supports language=ar for Arabic narration."""
+async def routing_route(request: Request, traffic: bool = Query(False)):
+    """Turn-by-turn directions. Supports language=ar for Arabic narration.
+
+    ``?traffic=true`` adds a live-traffic annotation: each leg gains a ``traffic``
+    list of coloured runs indexing into that leg's ``shape``, plus a trip-level
+    ``traffic_coverage`` summary (see ``_annotate_traffic``). Off by default, so
+    the plain response is unchanged.
+    """
     body = await request.json()
     status_code, result = await proxy("/route", "POST", body)
+    if traffic and status_code == 200 and isinstance(result, dict) and result.get("trip"):
+        try:
+            await _annotate_traffic(result["trip"], body.get("costing", "auto"))
+        except Exception as e:  # annotation is best-effort; never break routing
+            logger.warning("[routing] traffic annotation failed: %s", e)
     return JSONResponse(content=result, status_code=status_code)
 
 
@@ -278,3 +293,132 @@ async def routing_locate(request: Request):
     body = await request.json()
     status_code, result = await proxy("/locate", "POST", body)
     return JSONResponse(content=result, status_code=status_code)
+
+
+# ── live-traffic annotation ───────────────────────────────────────────────────
+# _annotate_traffic (used by /route?traffic=true) decomposes each leg into its
+# Valhalla edges (trace_attributes edge_walk) and colours them by the live speed
+# we keep per edge in Redis (tf:e:{graphid}, fed by probes + the external
+# provider). Contiguous same-level edges merge into runs that index into the
+# leg's own shape. Reads our Redis directly, so it works whether or not the
+# caller passed date_time.
+
+_traffic_redis = None
+
+
+def _get_traffic_redis():
+    global _traffic_redis
+    if _traffic_redis is None:
+        _traffic_redis = make_redis_async(
+            host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, socket_connect_timeout=5
+        )
+    return _traffic_redis
+
+
+# Congestion colouring by live speed as a fraction of free-flow speed.
+_TRAFFIC_BANDS = ((0.75, "green"), (0.5, "yellow"), (0.25, "orange"))
+
+
+def _classify(live_kph: float | None, freeflow_kph: float | None) -> tuple[str, float | None]:
+    if live_kph is None or not freeflow_kph or freeflow_kph <= 0:
+        return "unknown", None
+    ratio = live_kph / freeflow_kph
+    for lo, level in _TRAFFIC_BANDS:
+        if ratio >= lo:
+            return level, round(ratio, 3)
+    return "red", round(ratio, 3)
+
+
+async def _trace_edges(encoded_polyline: str, costing: str) -> list[dict]:
+    """edge_walk a route leg's shape back to its Valhalla edges.
+
+    edge_walk walks the exact input shape, so the edges' begin/end_shape_index
+    index into that shape — i.e. into the leg's own ``shape``. (map_snap is NOT
+    used as a fallback here: it can move/insert vertices, which would misalign
+    the indices against the leg shape.) Returns [] if the walk yields nothing.
+    """
+    url = VALHALLA_URL.rstrip("/") + "/trace_attributes"
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                url,
+                json={
+                    "encoded_polyline": encoded_polyline,
+                    "costing": costing or "auto",
+                    "shape_match": "edge_walk",
+                },
+            )
+        if resp.status_code == 200:
+            return resp.json().get("edges") or []
+    except Exception:
+        pass
+    return []
+
+
+async def _annotate_traffic(trip: dict, costing: str) -> None:
+    """Attach live-traffic annotation to each leg of *trip*, in place.
+
+    Sets ``leg["traffic"]`` to a list of coloured runs that index into
+    ``leg["shape"]``::
+
+        {"begin_shape_index", "end_shape_index", "level",
+         "live_kph", "freeflow_kph", "ratio"}
+
+    ``level`` is green|yellow|orange|red|unknown; ``live_kph``/``ratio`` are the
+    run's bottleneck (slowest) edge. Also sets ``trip["traffic_coverage"]``.
+    """
+    r = _get_traffic_redis()
+    n_edges = n_live = 0
+
+    for leg in trip.get("legs", []):
+        leg["traffic"] = []
+        leg_shape = leg.get("shape")
+        if not leg_shape:
+            continue
+        edges = await _trace_edges(leg_shape, costing)
+        if not edges:
+            continue
+
+        # One pipelined Redis read of the live speed for every edge on the leg.
+        pipe = r.pipeline(transaction=False)
+        for e in edges:
+            pipe.hget(f"tf:e:{e.get('id')}", "kph")
+        try:
+            live_raw = await pipe.execute()
+        except Exception:
+            live_raw = [None] * len(edges)
+
+        runs: list[dict] = []
+        run: dict | None = None
+        for e, live_s in zip(edges, live_raw, strict=True):
+            b, en = e.get("begin_shape_index"), e.get("end_shape_index")
+            if b is None or en is None or en <= b:
+                continue
+            freeflow = e.get("speed")
+            live = float(live_s) if live_s is not None else None
+            n_edges += 1
+            if live is not None:
+                n_live += 1
+            level, ratio = _classify(live, freeflow)
+            if run is not None and run["level"] == level:
+                run["end_shape_index"] = en  # extend the contiguous run
+                # keep the run's bottleneck (slowest live edge)
+                if live is not None and (run["live_kph"] is None or live < run["live_kph"]):
+                    run["live_kph"], run["ratio"], run["freeflow_kph"] = live, ratio, freeflow
+            else:
+                run = {
+                    "begin_shape_index": b,
+                    "end_shape_index": en,
+                    "level": level,
+                    "live_kph": live,
+                    "freeflow_kph": freeflow,
+                    "ratio": ratio,
+                }
+                runs.append(run)
+        leg["traffic"] = runs
+
+    trip["traffic_coverage"] = {
+        "edges": n_edges,
+        "edges_with_live": n_live,
+        "coverage_pct": round(100 * n_live / n_edges, 1) if n_edges else 0.0,
+    }

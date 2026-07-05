@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Traffic-coloured route</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body{margin:0;height:100%}#map{height:100%}
+.legend{background:#fff;padding:8px 10px;border-radius:6px;font:13px system-ui;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.legend i{display:inline-block;width:14px;height:14px;margin-right:6px;border-radius:2px;vertical-align:-2px}</style>
+</head><body><div id="map"></div><script>
+// Data is a snapshot of GET /route?traffic=true (trip.legs[].shape + .traffic runs).
+const COLORS={green:"#2ecc40",yellow:"#ffdc00",orange:"#ff851b",red:"#ff4136",unknown:"#9aa0a6"};
+const data={"legs": [{"shape": "giwhx@wmmqz@zAWrB_ApDcD~ByE`A}FCeGeA{FcCuEsD_DaC_AgCc@sDAmDl@_DzAiCdCsJtA}EpAyCv@}FrGaMtNuJzH}ItG_BhA}GvDgAl@iJdDiPdEkIvCaOrDkO~BiDRmEV}JEaQIcd@JuNNqY|BkPeCgGw@uIcB{F_DyD_DmEcFoIgJcQyR}F{Fyf@sh@oGoHsIyJyCyCq@q@_AwAkAcBwAgCaDiDuA_Bg]k`@}@eAsSwUkGeHoHmImTsV{I}J}w@qy@{HyHeCsC{^u_@oBsBuOmPqE{EqWwXyO_PoOuOqDsDiBmBkG_HyQsR}EeFcAiA{TsTaAkAq_@cb@cBkByOyOke@yf@wFaG_JyF}LjPyQnV{FhJqOz\\eJjQeEfJmCvEyBtAw@y@}@q@cAe@o@QaKoDy@k@s@u@i@}@a@eAWkAMmABwBR_Cz@kFlFiWl@gBt@_Bx@}AuWaMkYcNwAw@oAeAo@u@u@aAy@}@qAkAyAaAc@e@_@k@Uq@QiA?kANkA", "traffic": [{"begin_shape_index": 0, "end_shape_index": 1, "level": "unknown", "live_kph": null, "freeflow_kph": 29, "ratio": null}, {"begin_shape_index": 1, "end_shape_index": 9, "level": "orange", "live_kph": 7.92, "freeflow_kph": 29, "ratio": 0.273}, {"begin_shape_index": 9, "end_shape_index": 11, "level": "unknown", "live_kph": null, "freeflow_kph": 29, "ratio": null}, {"begin_shape_index": 11, "end_shape_index": 15, "level": "orange", "live_kph": 7.92, "freeflow_kph": 29, "ratio": 0.273}, {"begin_shape_index": 15, "end_shape_index": 20, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 20, "end_shape_index": 21, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 21, "end_shape_index": 27, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 27, "end_shape_index": 28, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 28, "end_shape_index": 34, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 34, "end_shape_index": 37, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 37, "end_shape_index": 40, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 40, "end_shape_index": 46, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 46, "end_shape_index": 47, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 47, "end_shape_index": 50, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 50, "end_shape_index": 55, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 55, "end_shape_index": 56, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 56, "end_shape_index": 61, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 61, "end_shape_index": 63, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 63, "end_shape_index": 69, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 69, "end_shape_index": 70, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 70, "end_shape_index": 76, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 76, "end_shape_index": 78, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 78, "end_shape_index": 83, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 83, "end_shape_index": 84, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 84, "end_shape_index": 90, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 90, "end_shape_index": 92, "level": "red", "live_kph": 7.92, "freeflow_kph": 57, "ratio": 0.139}, {"begin_shape_index": 92, "end_shape_index": 95, "level": "unknown", "live_kph": null, "freeflow_kph": 57, "ratio": null}, {"begin_shape_index": 95, "end_shape_index": 128, "level": "orange", "live_kph": 7.92, "freeflow_kph": 30, "ratio": 0.264}]}], "coverage": {"edges": 60, "edges_with_live": 17, "coverage_pct": 28.3}, "summary": {"length_km": 2.744, "time_s": 233.672}};
+// Decode a Valhalla polyline6 string to [[lat,lon],...].
+function decode(s){let out=[],lat=0,lon=0,i=0;const n=s.length;
+ while(i<n){for(const isLon of [0,1]){let sh=0,res=0,b;do{b=s.charCodeAt(i++)-63;res|=(b&0x1f)<<sh;sh+=5;}while(b>=0x20);
+   const d=(res&1)?~(res>>1):(res>>1);if(isLon)lon+=d;else lat+=d;}out.push([lat/1e6,lon/1e6]);}return out;}
+const map=L.map("map");
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+const all=[];
+for(const leg of data.legs){
+  const pts=decode(leg.shape);
+  for(const r of leg.traffic){
+    const seg=pts.slice(r.begin_shape_index, r.end_shape_index+1);
+    if(seg.length<2)continue;
+    const line=L.polyline(seg,{color:COLORS[r.level]||COLORS.unknown,weight:7,opacity:.9}).addTo(map);
+    line.bindTooltip(`<b>${r.level}</b>`+(r.live_kph!=null?`<br>live ${r.live_kph} km/h vs free ${r.freeflow_kph} (${(r.ratio*100).toFixed(0)}%)`:"<br>no live data"),{sticky:true});
+    all.push(line);
+  }
+}
+map.fitBounds(L.featureGroup(all).getBounds(),{padding:[30,30]});
+const lg=L.control({position:"bottomright"});
+lg.onAdd=()=>{const d=L.DomUtil.create("div","legend");
+  d.innerHTML="<b>Live traffic</b><br>"+Object.entries({green:"free-flowing",yellow:"moderate",orange:"heavy",red:"jammed",unknown:"no data"})
+    .map(([k,v])=>`<i style="background:${COLORS[k]}"></i>${v}`).join("<br>");return d;};
+lg.addTo(map);
+const c=data.coverage,s=data.summary;
+const info=L.control({position:"topright"});
+info.onAdd=()=>{const d=L.DomUtil.create("div","legend");
+  d.innerHTML=`<b>Route</b><br>${s.length_km} km · ${(s.time_s/60).toFixed(0)} min<br>traffic coverage: ${c.coverage_pct}% (${c.edges_with_live}/${c.edges} edges)`;return d;};
+info.addTo(map);
+</script></body></html>
