@@ -4,7 +4,13 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install
 COPY . .
-RUN npm run build
+# Base path the SPA is served under. Local compose serves it at the origin root
+# (localhost:8088 → BASE_PATH=/); the public deployment serves it under /console
+# behind the reverse proxy (the compose override sets BASE_PATH=/console/). Vite
+# emits asset URLs, the router basename and the OIDC callback relative to this,
+# so it must match how the app is actually reached.
+ARG BASE_PATH=/console/
+RUN npm run build -- --base="$BASE_PATH"
 
 FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf

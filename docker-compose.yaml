@@ -647,6 +647,10 @@ services:
   billing-frontend:
     build:
       context: ./billing/frontend
+      args:
+        # Local dev serves the console at the origin root (localhost:8088). The
+        # public override rebuilds it under /console (see _docker-compose.override).
+        BASE_PATH: "/"
     ports:
       # Host-private: served to users through the reverse proxy (HTTPS).
       - "127.0.0.1:8088:80"
