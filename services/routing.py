@@ -263,12 +263,19 @@ async def routing_status():
 async def routing_route(request: Request, traffic: bool = Query(False)):
     """Turn-by-turn directions. Supports language=ar for Arabic narration.
 
-    ``?traffic=true`` adds a live-traffic annotation: each leg gains a ``traffic``
-    list of coloured runs indexing into that leg's ``shape``, plus a trip-level
-    ``traffic_coverage`` summary (see ``_annotate_traffic``). Off by default, so
-    the plain response is unchanged.
+    ``?traffic=true`` routes *using* live traffic, not just painting it: it
+    injects ``date_time: {type: 0}`` so Valhalla costs each edge at its live
+    speed from traffic.tar (fed by probes + the on-demand fetch), making the ETA
+    and route choice traffic-aware wherever we have data — then annotates each
+    leg with coloured ``traffic`` runs + a trip-level ``traffic_coverage``. A
+    caller-supplied ``date_time`` is respected; plain ``/route`` is unchanged.
     """
     body = await request.json()
+    if traffic and "date_time" not in body:
+        # Valhalla only reads live speeds on its time-dependent cost path, which
+        # date_time selects; type 0 = depart now. Edges with no live data fall
+        # back to free-flow, so this is upside-only where we have coverage.
+        body = {**body, "date_time": {"type": 0}}
     status_code, result = await proxy("/route", "POST", body)
     if traffic and status_code == 200 and isinstance(result, dict) and result.get("trip"):
         try:
