@@ -9,16 +9,31 @@ using structured Arabic templates driven by the maneuver ``type`` and the
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from shared.config import REDIS_HOST, REDIS_PORT, VALHALLA_URL
+from shared.config import (
+    REDIS_HOST,
+    REDIS_PORT,
+    TOMTOM_API_KEY,
+    TRAFFIC_FETCH_DAILY_BUDGET,
+    TRAFFIC_FETCH_MAX_CALLS,
+    TRAFFIC_FETCH_NEGATIVE_TTL,
+    TRAFFIC_FETCH_ON_DEMAND,
+    TRAFFIC_FETCH_TTL,
+    TRAFFIC_FETCH_WINDOW_KM,
+    VALHALLA_URL,
+)
 from shared.logging import get_logger
 from shared.redis_client import make_redis_async
+from shared.traffic_providers import tomtom_point_speed
 
 logger = get_logger("routing")
 
@@ -298,10 +313,15 @@ async def routing_locate(request: Request):
 # ── live-traffic annotation ───────────────────────────────────────────────────
 # _annotate_traffic (used by /route?traffic=true) decomposes each leg into its
 # Valhalla edges (trace_attributes edge_walk) and colours them by the live speed
-# we keep per edge in Redis (tf:e:{graphid}, fed by probes + the external
-# provider). Contiguous same-level edges merge into runs that index into the
-# leg's own shape. Reads our Redis directly, so it works whether or not the
+# we keep per edge in Redis (tf:e:{graphid}, fed by probes + the on-demand
+# provider fetch). Contiguous same-level edges merge into runs that index into
+# the leg's own shape. Reads our Redis directly, so it works whether or not the
 # caller passed date_time.
+#
+# Cache-first, demand-driven coverage: when a route crosses edges with no recent
+# speed in Redis, we fetch them from TomTom on the spot (capped + budgeted),
+# cache the results in the same tf:e:* keys, and colour immediately. Repeat
+# routes over a warm corridor cost nothing. See _fill_missing_from_provider.
 
 _traffic_redis = None
 
@@ -313,6 +333,30 @@ def _get_traffic_redis():
             host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, socket_connect_timeout=5
         )
     return _traffic_redis
+
+
+def _decode_polyline6(encoded: str) -> list[list[float]]:
+    """Decode a Valhalla polyline6 string to ``[[lon, lat], ...]``."""
+    coords: list[list[float]] = []
+    lat = lon = index = 0
+    n = len(encoded)
+    while index < n:
+        for is_lon in (False, True):
+            shift = result = 0
+            while True:
+                b = ord(encoded[index]) - 63
+                index += 1
+                result |= (b & 0x1F) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            delta = ~(result >> 1) if (result & 1) else (result >> 1)
+            if is_lon:
+                lon += delta
+            else:
+                lat += delta
+        coords.append([lon / 1e6, lat / 1e6])
+    return coords
 
 
 # Congestion colouring by live speed as a fraction of free-flow speed.
@@ -355,6 +399,111 @@ async def _trace_edges(encoded_polyline: str, costing: str) -> list[dict]:
     return []
 
 
+async def _fill_missing_from_provider(
+    r, edges: list[dict], live: list[float | None], leg_shape: str, max_calls: int
+) -> int:
+    """Fetch live speeds from TomTom for a leg's uncovered edges, in place.
+
+    Groups contiguous missing edges (that aren't negatively-marked) into windows
+    of <= TRAFFIC_FETCH_WINDOW_KM, makes one TomTom call per window at its
+    midpoint (capped by ``max_calls`` and the daily budget), writes hits into the
+    shared tf:e:* / tf:idx schema (so the traffic-writer bakes them into
+    traffic.tar too) and marks no-data windows. Updates ``live`` for hit edges
+    and returns the number of provider calls made. Fully fail-open.
+    """
+    missing = [i for i, v in enumerate(live) if v is None]
+    if not missing or max_calls <= 0:
+        return 0
+
+    # Skip edges the provider already told us it has no data for (negative cache).
+    try:
+        pipe = r.pipeline(transaction=False)
+        for i in missing:
+            pipe.exists(f"tf:nd:{edges[i].get('id')}")
+        marked = await pipe.execute()
+    except Exception:
+        marked = [0] * len(missing)
+    fetchable = {i for i, m in zip(missing, marked, strict=True) if not m}
+    if not fetchable:
+        return 0
+
+    # Group contiguous fetchable edges into <= WINDOW_KM windows.
+    windows: list[list[int]] = []
+    cur: list[int] = []
+    cur_km = 0.0
+    for i in range(len(edges)):
+        if i in fetchable:
+            length = edges[i].get("length") or 0.0
+            if cur and cur_km + length > TRAFFIC_FETCH_WINDOW_KM:
+                windows.append(cur)
+                cur, cur_km = [], 0.0
+            cur.append(i)
+            cur_km += length
+        elif cur:
+            windows.append(cur)
+            cur, cur_km = [], 0.0
+    if cur:
+        windows.append(cur)
+    if not windows:
+        return 0
+
+    # Daily budget guard (Redis counter, resets on the calendar day, UTC).
+    bkey = f"tf:budget:{datetime.now(UTC).strftime('%Y-%m-%d')}"
+    try:
+        used = int(await r.get(bkey) or 0)
+    except Exception:
+        used = 0
+    remaining = min(max_calls, TRAFFIC_FETCH_DAILY_BUDGET - used)
+    if remaining <= 0:
+        return 0
+    windows = windows[:remaining]
+
+    coords = _decode_polyline6(leg_shape)  # [[lon, lat], ...]
+
+    def _sample(win: list[int]) -> tuple[float, float] | None:
+        b = edges[win[0]].get("begin_shape_index")
+        en = edges[win[-1]].get("end_shape_index")
+        if b is None or en is None:
+            return None
+        mid = (b + en) // 2
+        if 0 <= mid < len(coords):
+            lon, lat = coords[mid]
+            return lat, lon
+        return None
+
+    samples = [(w, c) for w in windows if (c := _sample(w)) is not None]
+    if not samples:
+        return 0
+
+    async with httpx.AsyncClient(timeout=2.5) as client:
+        results = await asyncio.gather(
+            *[tomtom_point_speed(client, lat, lon) for _, (lat, lon) in samples],
+            return_exceptions=True,
+        )
+
+    now = int(time.time())
+    wpipe = r.pipeline(transaction=False)
+    for (win, _c), speed in zip(samples, results, strict=True):
+        if isinstance(speed, BaseException) or speed is None or speed <= 0:
+            for i in win:  # negative marker: don't re-query this road for a while
+                wpipe.setex(f"tf:nd:{edges[i].get('id')}", TRAFFIC_FETCH_NEGATIVE_TTL, 1)
+            continue
+        for i in win:  # apply the window's speed to every edge in it
+            gid = edges[i].get("id")
+            live[i] = speed
+            key = f"tf:e:{gid}"
+            wpipe.hset(key, mapping={"kph": f"{speed:.2f}", "n": 1, "ts": now})
+            wpipe.expire(key, TRAFFIC_FETCH_TTL)
+            wpipe.zadd("tf:idx", {str(gid): now})
+    wpipe.incrby(bkey, len(samples))
+    wpipe.expire(bkey, 172800)
+    try:
+        await wpipe.execute()
+    except Exception:
+        pass
+    return len(samples)
+
+
 async def _annotate_traffic(trip: dict, costing: str) -> None:
     """Attach live-traffic annotation to each leg of *trip*, in place.
 
@@ -365,10 +514,12 @@ async def _annotate_traffic(trip: dict, costing: str) -> None:
          "live_kph", "freeflow_kph", "ratio"}
 
     ``level`` is green|yellow|orange|red|unknown; ``live_kph``/``ratio`` are the
-    run's bottleneck (slowest) edge. Also sets ``trip["traffic_coverage"]``.
+    run's bottleneck (slowest) edge. Also sets ``trip["traffic_coverage"]``
+    (incl. ``provider_calls`` — TomTom calls made this request).
     """
     r = _get_traffic_redis()
-    n_edges = n_live = 0
+    n_edges = n_live = provider_calls = 0
+    fetch_budget = TRAFFIC_FETCH_MAX_CALLS  # per-request cap, shared across legs
 
     for leg in trip.get("legs", []):
         leg["traffic"] = []
@@ -379,7 +530,7 @@ async def _annotate_traffic(trip: dict, costing: str) -> None:
         if not edges:
             continue
 
-        # One pipelined Redis read of the live speed for every edge on the leg.
+        # 1) Cache-first: one pipelined read of the live speed for every edge.
         pipe = r.pipeline(transaction=False)
         for e in edges:
             pipe.hget(f"tf:e:{e.get('id')}", "kph")
@@ -387,30 +538,41 @@ async def _annotate_traffic(trip: dict, costing: str) -> None:
             live_raw = await pipe.execute()
         except Exception:
             live_raw = [None] * len(edges)
+        live: list[float | None] = [float(x) if x is not None else None for x in live_raw]
 
+        # 2) On miss, fetch the uncovered stretches from TomTom (capped/budgeted).
+        if (
+            TRAFFIC_FETCH_ON_DEMAND
+            and TOMTOM_API_KEY
+            and fetch_budget > 0
+            and any(v is None for v in live)
+        ):
+            made = await _fill_missing_from_provider(r, edges, live, leg_shape, fetch_budget)
+            provider_calls += made
+            fetch_budget -= made
+
+        # 3) Classify + merge contiguous same-level edges into runs.
         runs: list[dict] = []
         run: dict | None = None
-        for e, live_s in zip(edges, live_raw, strict=True):
+        for e, live_v in zip(edges, live, strict=True):
             b, en = e.get("begin_shape_index"), e.get("end_shape_index")
             if b is None or en is None or en <= b:
                 continue
             freeflow = e.get("speed")
-            live = float(live_s) if live_s is not None else None
             n_edges += 1
-            if live is not None:
+            if live_v is not None:
                 n_live += 1
-            level, ratio = _classify(live, freeflow)
+            level, ratio = _classify(live_v, freeflow)
             if run is not None and run["level"] == level:
                 run["end_shape_index"] = en  # extend the contiguous run
-                # keep the run's bottleneck (slowest live edge)
-                if live is not None and (run["live_kph"] is None or live < run["live_kph"]):
-                    run["live_kph"], run["ratio"], run["freeflow_kph"] = live, ratio, freeflow
+                if live_v is not None and (run["live_kph"] is None or live_v < run["live_kph"]):
+                    run["live_kph"], run["ratio"], run["freeflow_kph"] = live_v, ratio, freeflow
             else:
                 run = {
                     "begin_shape_index": b,
                     "end_shape_index": en,
                     "level": level,
-                    "live_kph": live,
+                    "live_kph": live_v,
                     "freeflow_kph": freeflow,
                     "ratio": ratio,
                 }
@@ -421,4 +583,5 @@ async def _annotate_traffic(trip: dict, costing: str) -> None:
         "edges": n_edges,
         "edges_with_live": n_live,
         "coverage_pct": round(100 * n_live / n_edges, 1) if n_edges else 0.0,
+        "provider_calls": provider_calls,
     }

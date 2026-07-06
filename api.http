@@ -67,12 +67,14 @@
 ###       BYPASS – not cacheable (describe/ai, or cache disabled)
 ###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
-#@gatewayUrl = http://localhost:8080
-@gatewayUrl = https://places.nourbyte.com/api
+@gatewayUrl = http://localhost:8080
+@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
 
+#@gatewayUrl = https://places.nourbyte.com/api
+#@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
 # Your tenant API key (create one in the console; shown once). Replace this.
-#@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
-@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
+
+
 
 
 # ============================================================================
@@ -675,11 +677,15 @@ Content-Type: application/json
 ###   { begin_shape_index, end_shape_index, level, live_kph, freeflow_kph, ratio }
 ###   level = green | yellow | orange | red | unknown; live_kph/ratio = the run's
 ###   slowest (bottleneck) edge; contiguous same-level edges are merged.
-### Plus trip.traffic_coverage = { edges, edges_with_live, coverage_pct }.
-### Colours come from our own per-edge live speeds (Redis tf:e:*, fed by probes +
-### TomTom), NOT from Valhalla — no date_time needed; a stretch lights up wherever
-### we have data (post the slow /traffic/probes above first; uncovered = unknown).
+### Plus trip.traffic_coverage = { edges, edges_with_live, coverage_pct, provider_calls }.
 ### Render: decode legs[].shape and colour each run's [begin..end] slice by level.
+###
+### COVERAGE is demand-driven & cache-first: for edges with no recent speed in
+### Redis, the server fetches them from TomTom on the spot (capped at 15 calls,
+### daily-budgeted) and caches them ~10 min. So the FIRST call on a cold corridor
+### is a bit slower and spends budget (see traffic_coverage.provider_calls > 0);
+### repeat the SAME route and it's served from cache (provider_calls: 0, instant).
+### Probes still win where present. Works anywhere TomTom covers (Egypt, Ontario).
 POST {{gatewayUrl}}/route?traffic=true
 X-API-Key: {{apiKey}}
 Content-Type: application/json

@@ -223,6 +223,16 @@ services:
       # VALHALLA_URL is used to snap probe points to road edges.
       - ENABLE_TRAFFIC=${ENABLE_TRAFFIC:-true}
       - VALHALLA_URL=http://valhalla:8002
+      # Demand-driven traffic colouring for /route?traffic=true: on a route's
+      # uncovered edges, fetch live speeds from TomTom on the spot (cache-first,
+      # capped + daily-budgeted), cache them in the shared tf:e:* keys. No-op
+      # without TOMTOM_API_KEY. Replaces the fixed-grid poller for coverage.
+      - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      - TRAFFIC_FETCH_ON_DEMAND=${TRAFFIC_FETCH_ON_DEMAND:-true}
+      - TRAFFIC_FETCH_MAX_CALLS=${TRAFFIC_FETCH_MAX_CALLS:-15}
+      - TRAFFIC_FETCH_WINDOW_KM=${TRAFFIC_FETCH_WINDOW_KM:-2.0}
+      - TRAFFIC_FETCH_TTL=${TRAFFIC_FETCH_TTL:-600}
+      - TRAFFIC_FETCH_DAILY_BUDGET=${TRAFFIC_FETCH_DAILY_BUDGET:-2000}
     depends_on:
       elasticsearch:
         condition: service_healthy

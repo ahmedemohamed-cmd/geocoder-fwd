@@ -110,3 +110,27 @@ def get_provider() -> TrafficProvider | None:
             TRAFFIC_PROVIDER_BBOX, TRAFFIC_PROVIDER_GRID, TOMTOM_API_KEY, TOMTOM_FLOW_URL
         )
     return None
+
+
+async def tomtom_point_speed(client: httpx.AsyncClient, lat: float, lon: float) -> float | None:
+    """Current speed (kph) of the road segment nearest (lat, lon) via TomTom Flow.
+
+    One ``flowSegmentData`` call — used by the on-demand /route?traffic=true fetch
+    to fill uncovered edges. Returns None on any failure / missing key so callers
+    fail open to "unknown". Reuses TOMTOM_FLOW_URL / TOMTOM_API_KEY.
+    """
+    if not TOMTOM_API_KEY:
+        return None
+    try:
+        resp = await client.get(
+            TOMTOM_FLOW_URL,
+            params={"point": f"{lat},{lon}", "unit": "KMPH", "key": TOMTOM_API_KEY},
+        )
+        if resp.status_code != 200:
+            return None
+        seg = resp.json().get("flowSegmentData")
+        if not seg or seg.get("currentSpeed") is None:
+            return None
+        return float(seg["currentSpeed"])
+    except Exception:
+        return None

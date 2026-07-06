@@ -171,6 +171,27 @@ TOMTOM_FLOW_URL = os.getenv(
     "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json",
 )
 
+# ── Demand-driven traffic fetch (the /route?traffic=true fallback) ──────────
+# Instead of (or besides) the fixed grid poller, fetch live speeds from the
+# external provider ON DEMAND for the edges of a traffic-annotated route that
+# have no recent data in Redis. Cache-first: only misses cost a call; results
+# are written to the same tf:e:* keys (TTL below) so repeat routes over the same
+# corridor are free. Needs TOMTOM_API_KEY. Off by default (compose enables it).
+TRAFFIC_FETCH_ON_DEMAND = _safe_bool("TRAFFIC_FETCH_ON_DEMAND", False)
+# Per-request ceiling on provider calls (one call covers one ~window of road).
+TRAFFIC_FETCH_MAX_CALLS = _safe_int("TRAFFIC_FETCH_MAX_CALLS", 15)
+# Uncovered edges are grouped into windows of up to this length; one provider
+# call per window, its speed applied to every edge in the window.
+TRAFFIC_FETCH_WINDOW_KM = _safe_float("TRAFFIC_FETCH_WINDOW_KM", 2.0)
+# TTL (secs) on fetched per-edge speeds — how long a corridor stays "warm".
+TRAFFIC_FETCH_TTL = _safe_int("TRAFFIC_FETCH_TTL", 600)
+# Global daily provider-call budget (Redis counter, resets on the calendar day).
+# Keep under the plan's daily limit; over budget → edges stay unknown (no error).
+TRAFFIC_FETCH_DAILY_BUDGET = _safe_int("TRAFFIC_FETCH_DAILY_BUDGET", 2000)
+# TTL (secs) on the "provider has no data here" negative marker (tf:nd:*), so we
+# don't re-query the provider every request for roads it doesn't cover.
+TRAFFIC_FETCH_NEGATIVE_TTL = _safe_int("TRAFFIC_FETCH_NEGATIVE_TTL", 300)
+
 # Performance tuning
 # When vectors are enabled, use smaller batch sizes to avoid timeouts
 _BATCH_SIZE = _safe_int("BATCH_SIZE", 500)
