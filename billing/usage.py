@@ -30,6 +30,16 @@ def now_parts(ts: datetime | None = None) -> tuple[str, str]:
     return ts.strftime("%Y-%m"), ts.strftime("%Y-%m-%d")
 
 
+def is_free_path(path: str) -> bool:
+    """True for endpoints that are never billed and never counted against quota
+    (see config.FREE_ENDPOINTS): liveness (/health, /status), capability discovery
+    (/features), and contributory writes (/feedback, /insert, /places,
+    /traffic/probe[s]). Everything that answers a user query bills. Matched on the
+    FULL request path (query string ignored), so /traffic/probes is free while
+    /traffic/edge bills."""
+    return config.norm_path(path) in config.FREE_ENDPOINTS
+
+
 # ── key cache (shared across replicas) ───────────────────────────────────────
 async def cache_key(redis, key_hash: str, payload: dict[str, Any]) -> None:
     await redis.set(config.KEYCACHE_PREFIX + key_hash, json.dumps(payload), ex=config.KEYCACHE_TTL)

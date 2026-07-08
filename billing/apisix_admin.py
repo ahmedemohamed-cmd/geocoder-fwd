@@ -52,6 +52,18 @@ def _client() -> httpx.AsyncClient:
     )
 
 
+def _free_filter() -> dict:
+    """APISIX ``_meta.filter`` that makes a plugin skip free/contributory paths.
+
+    ``[["uri", "!", "~~", regex]]`` → the plugin runs only when the request path's
+    first segment is *not* a free endpoint. Applied to ``limit-count`` (so free
+    calls don't consume quota) and ``http-logger`` (so they aren't shipped to the
+    usage sink at all). Empty when no free endpoints are configured."""
+    if not config.FREE_ENDPOINTS:
+        return {}
+    return {"_meta": {"filter": [["uri", "!", "~~", config.free_endpoints_regex()]]}}
+
+
 def _metered_plugins() -> dict:
     plugins: dict = {"key-auth": {"header": config.APISIX_KEY_HEADER}}
     if config.USAGE_SINK_URL:
@@ -61,6 +73,7 @@ def _metered_plugins() -> dict:
             "inactive_timeout": 2,
             "buffer_duration": 2,
             "include_req_body": False,
+            **_free_filter(),
         }
     return plugins
 
@@ -132,6 +145,12 @@ async def ensure_consumer_group(
         "rejected_code": 429,
         "key_type": "constant",
         "key": f"{gid}:{period}",
+        # Don't let free/contributory calls (feedback, traffic uploads, place
+        # inserts, health/features) burn the tenant's quota. Consumer-group
+        # plugins outrank route plugins in APISIX (Consumer Group > Route), so a
+        # route can't disable this — the per-plugin filter is the way to exempt
+        # specific paths while keeping the per-tenant counter on the group.
+        **_free_filter(),
     }
     if config.REDIS_MODE == "cluster":
         # Redis Cluster has no logical DBs; APISIX namespaces its own counter

@@ -71,6 +71,15 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
         if scopes and endpoint not in scopes:
             return _err(403, f"key not scoped for '{endpoint}'")
 
+        # Free endpoints — liveness (/health, /status), capability discovery
+        # (/features) and contributory writes (/feedback, /insert, /places,
+        # /traffic/probe[s]) — are never charged or rate-limited: skip quota +
+        # metering and just proxy. Matched on the full path (so /traffic/edge, a
+        # query, still bills). Mirrors the APISIX limit-count `_meta.filter` +
+        # usage-sink skip.
+        if usage.is_free_path(path):
+            return await _forward(app.state.http_client, request, path)
+
         # 3) enforce quota (cluster-wide via shared Redis) --------------------
         # Atomic check-and-increment: a rejected request never bumps the counter
         # (no transient over-count, no leaked slot if we crash mid-decision).

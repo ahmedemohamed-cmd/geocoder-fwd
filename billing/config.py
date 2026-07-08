@@ -7,6 +7,7 @@ isolated from the geocoding data.
 """
 
 import os
+import re
 
 
 def _int(name: str, default: int) -> int:
@@ -175,6 +176,46 @@ APISIX_LIMIT_WINDOW = _int("APISIX_LIMIT_WINDOW", 2764800)
 # turns them into Redis live counters + durable events.
 USAGE_SINK_URL = os.getenv("USAGE_SINK_URL", "")  # http://billing-control-plane:8100/internal/usage
 USAGE_SINK_SECRET = os.getenv("USAGE_SINK_SECRET", "")
+
+# ── free endpoints ────────────────────────────────────────────────────────────
+# Billing rule: if an endpoint *answers a user query* we count it; otherwise it's
+# free (never billed, never counted against quota). Free = liveness (/health,
+# /status), capability discovery (/features), and contributory writes where the
+# client hands data *to* us (/feedback, /insert, /places, /traffic/probe[s]).
+#
+# Matched on the FULL request path (query string ignored), NOT the first segment,
+# so sibling paths can differ: /traffic/probe[s] (upload) is free while
+# /traffic/edge (a live-speed query) bills. Override with a comma-separated
+# BILLING_FREE_ENDPOINTS of full paths.
+
+
+def norm_path(p: str) -> str:
+    """Normalize a request path for free-endpoint matching: drop the query
+    string, lowercase, collapse to a single leading slash, strip the trailing
+    slash. '' and '/' both normalize to '/'."""
+    return "/" + (p or "").split("?", 1)[0].strip().lower().strip("/")
+
+
+FREE_ENDPOINTS = frozenset(
+    norm_path(s)
+    for s in os.getenv(
+        "BILLING_FREE_ENDPOINTS",
+        "/health,/status,/features,/feedback,/insert,/places,/traffic/probe,/traffic/probes",
+    ).split(",")
+    if s.strip()
+)
+
+
+def free_endpoints_regex() -> str:
+    """Anchored exact-match regex over the request path, for APISIX
+    ``_meta.filter``. Matches a request only when its path *is* a free endpoint
+    (trailing slash tolerated), so /traffic/probes matches but /traffic/edge does
+    not. Empty set → a regex that can never match (filter degrades to "count
+    everything")."""
+    if not FREE_ENDPOINTS:
+        return r"(?!)"  # matches nothing
+    alt = "|".join(re.escape(p) for p in sorted(FREE_ENDPOINTS))
+    return rf"^({alt})/?$"
 
 # Encryption-at-rest for API keys (Fernet). The gateway (APISIX) needs the key
 # material to authenticate requests, so we keep a reversible encrypted copy to

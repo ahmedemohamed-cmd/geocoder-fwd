@@ -783,13 +783,21 @@ def build_app(pool=None, redis=None) -> FastAPI:
                 code = 0
             if not consumer or code >= 400:  # only count served requests
                 continue
+            uri = e.get("uri") or ""
+            if usage.is_free_path(uri):
+                # Free endpoint (liveness /health,/status; discovery /features;
+                # contributory /feedback,/insert,/places,/traffic/probe[s]): never
+                # billed. APISIX normally filters these out of the http-logger too;
+                # this is the durable backstop. Matched on full path so
+                # /traffic/edge (a query) still bills.
+                continue
+            endpoint = uri.strip("/").split("/")[0]
             key_id = apisix_admin.key_id_from_consumer(consumer)
             if not key_id:
                 continue
             tenant_id = await _tenant_for_key(pool, key_id)
             if not tenant_id:
                 continue
-            endpoint = (e.get("uri") or "").strip("/").split("/")[0]
             await usage.record(redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint)
             recorded += 1
         return {"recorded": recorded}
