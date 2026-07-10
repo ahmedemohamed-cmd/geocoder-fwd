@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from shared.categories import CATEGORY_KEYS
+
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
@@ -58,25 +60,9 @@ def _build_user_prompt(place: dict[str, Any]) -> str:
     if place.get("name_fr") and place["name_fr"] != place.get("name"):
         parts.append(f"French name: {place['name_fr']}")
 
-    # Category from OSM tags
+    # Category from OSM tags (same key precedence as the /nearby classifier)
     tags = place.get("tags", {})
-    category_keys = [
-        "amenity",
-        "shop",
-        "tourism",
-        "leisure",
-        "building",
-        "office",
-        "place",
-        "natural",
-        "highway",
-        "railway",
-        "aeroway",
-        "waterway",
-        "historic",
-        "landuse",
-    ]
-    for key in category_keys:
+    for key in CATEGORY_KEYS:
         if key in tags:
             parts.append(f"Type: {key}={tags[key]}")
             break

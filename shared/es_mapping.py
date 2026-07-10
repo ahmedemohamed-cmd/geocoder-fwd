@@ -243,6 +243,12 @@ MAPPING = {
             "area_km2": {"type": "float"},
             "offline_rank": {"type": "float"},
             "popularity": {"type": "float"},
+            # Filterable category derived from the OSM tags at ingest by
+            # shared.categories.classify (tags themselves are enabled:false, so
+            # they can't be filtered). Powers /nearby?category= and ?group=.
+            "category_key": {"type": "keyword"},
+            "category_value": {"type": "keyword"},
+            "category_group": {"type": "keyword"},
             "name_vector": {
                 "type": "dense_vector",
                 "dims": EMBEDDING_DIM,

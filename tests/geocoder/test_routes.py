@@ -23,6 +23,8 @@ EXPECTED_ROUTES = {
     ("/insert", ("POST",)),
     ("/isochrone", ("POST",)),
     ("/locate", ("POST",)),
+    ("/nearby", ("GET",)),
+    ("/nearby/categories", ("GET",)),
     ("/optimized_route", ("POST",)),
     ("/places", ("POST",)),
     ("/reverse", ("GET",)),

@@ -6,6 +6,7 @@ housenumber parsing, address assembly/parsing).
 
 from services.geocoder_helpers import (
     _distance_confidence,
+    _element_to_geocode_result,
     _haversine_m,
     _normalize_confidence,
 )
@@ -17,6 +18,28 @@ def test_normalize_confidence():
     assert _normalize_confidence(5.0, 10.0) == 0.5
     assert _normalize_confidence(20.0, 10.0) == 1.0  # clamped
     assert _normalize_confidence(5.0, 0.0) == 0.0  # guard against div-by-zero
+
+
+def test_deep_result_carries_category():
+    # A Google-resolved element must expose the same category_* the inserter
+    # writes to ES, so /deep/forward responses are consistent with /nearby.
+    extra = {
+        "message": {
+            "osm_id": "g_x",
+            "osm_type": "node",
+            "tags": {"name": "Cafe Riche", "amenity": "cafe", "source": "google"},
+            "geom": {"type": "Point", "coordinates": [31.2, 30.0]},
+            "admin_level": 0,
+            "area_km2": 0.0,
+        },
+        "centroid": {"lat": 30.0, "lon": 31.2},
+    }
+    row = _element_to_geocode_result(extra)
+    assert (row["category_key"], row["category_value"], row["category_group"]) == (
+        "amenity",
+        "cafe",
+        "food",
+    )
 
 
 def test_distance_confidence_buckets():

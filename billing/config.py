@@ -200,7 +200,7 @@ FREE_ENDPOINTS = frozenset(
     norm_path(s)
     for s in os.getenv(
         "BILLING_FREE_ENDPOINTS",
-        "/health,/status,/features,/feedback,/insert,/places,/traffic/probe,/traffic/probes",
+        "/health,/status,/features,/feedback,/insert,/places,/traffic/probe,/traffic/probes,/nearby/categories",
     ).split(",")
     if s.strip()
 )

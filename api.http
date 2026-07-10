@@ -39,6 +39,8 @@
 ###   POST /traffic/probe  – submit one GPS ping
 ###   POST /traffic/probes – submit a GPS trace (batch)
 ###   GET  /traffic/edge   – live speed for the road edge nearest a point
+###   GET  /nearby         – explore nearby places, filter by category/group (metered)
+###   GET  /nearby/categories – list filterable groups + values (free: not metered)
 ###
 ### ROUTING (proxied through the geocoder → Valhalla internally)
 ###   GET  /status             – Valhalla engine status
@@ -68,7 +70,7 @@
 ###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
 @gatewayUrl = http://localhost:8080
-@apiKey = gk_dc29237b_zbdwnHlixMw3rOvAsd37fmcRKdKq2Z75
+@apiKey = gk_5c63f22a_rfUC2bRzpUR8GYk1raYsg6fnRjcrmY-J
 
 #@gatewayUrl = https://places.nourbyte.com/api
 #@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
@@ -273,6 +275,8 @@ X-API-Key: {{apiKey}}
 #   Requires GOOGLE_MAPS_API_KEY + ENABLE_DEEP on the geocoder (else 503).
 #   forward: q, language (required) · limit · region · publish · enrich
 #   reverse: lat, lon, language (required) · publish · describe
+#   Results carry category_key/category_value/category_group (same classifier as
+#   /nearby), so a Google-resolved place is categorised immediately.
 # ============================================================================
 
 ### Deep forward (English) – resolve a place via Google, index it
@@ -415,6 +419,62 @@ Content-Type: application/json
 
 ### Inspect the current live speed for the edge nearest a point
 GET {{gatewayUrl}}/traffic/edge?lat=30.0444&lon=31.2357
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /nearby  –  Explore nearby places (filter by category/group)
+#   lat/lon (required) · radius m (default 1000, max 50000) · sort=best|distance
+#   category=<osm value,…> · group=<food|health|shopping|…> · limit · offset
+#   Each result carries category_key/value/group + distance_m. Admin boundaries
+#   and area "places" (cities/districts) are excluded — POIs only.
+#   Paging: `offset` for shallow pages, or scroll with pagination.next_cursor →
+#   pass it back as `cursor` for the next page (no depth limit; offset ignored).
+# ============================================================================
+
+### Discovery: filterable groups + their category values. FREE — not metered
+### and not counted against quota (still keyed at the gateway).
+GET {{gatewayUrl}}/nearby/categories
+X-API-Key: {{apiKey}}
+
+###
+
+### All nearby POIs within 1 km of Tahrir (default sort=best: distance blended
+### with importance + popularity). Each result has distance_m. This call is metered.
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357
+X-API-Key: {{apiKey}}
+
+###
+
+### Nearest-first restaurants + cafes within 800 m (category = precise OSM value;
+### comma-separate or repeat the param).
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357&radius=800&sort=distance&category=restaurant,cafe
+X-API-Key: {{apiKey}}
+
+###
+
+### Coarse group filter: all food places within 1.5 km.
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357&radius=1500&group=food
+X-API-Key: {{apiKey}}
+
+###
+
+### Paginate: page 2 of pharmacies within 5 km (limit/offset like /geocode).
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&category=pharmacy&limit=10&offset=10
+X-API-Key: {{apiKey}}
+
+###
+
+### Scroll page 1: grab pagination.next_cursor from the response…
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&sort=distance&limit=10
+X-API-Key: {{apiKey}}
+
+###
+
+### …then page 2 via the cursor (offset-free, unbounded depth). Paste the
+### next_cursor from the previous response in place of <CURSOR>.
+GET {{gatewayUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&sort=distance&limit=10&cursor=<CURSOR>
 X-API-Key: {{apiKey}}
 
 ###

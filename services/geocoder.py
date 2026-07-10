@@ -66,6 +66,7 @@ logger = get_logger("geocoder")
 
 import httpx
 
+from services import nearby
 from services.cache_service import ResultCache
 from services.geocoder_helpers import (
     _distance_confidence,
@@ -101,6 +102,7 @@ from shared.autocomplete import (
 from shared.autocomplete import (
     warm_from_es as ac_warm_from_es,
 )
+from shared.categories import classify
 from shared.config import (
     ELASTICSEARCH_URL,
     ENABLE_AI,
@@ -299,6 +301,9 @@ async def lifespan(app: FastAPI):
             es = AsyncElasticsearch(ELASTICSEARCH_URL)
             await es.ping()
             logger.info("[geocoder] Successfully connected to Elasticsearch")
+            # Hand the shared ES client to the /nearby router (avoids an import
+            # cycle — nearby.py must not import services.geocoder).
+            nearby.init(es)
             break
         except Exception as e:
             logger.error(
@@ -361,6 +366,12 @@ async def lifespan(app: FastAPI):
         if not await es.indices.exists(index=INDEX):
             await es.indices.create(index=INDEX, **ES_MAPPING)
             logger.info(f"[geocoder] Created ES index {INDEX}")
+        else:
+            # Additive mapping sync so category_* (and any future scalar field) is
+            # present for /nearby even when the index predates it. No-op if there.
+            await es.indices.put_mapping(
+                index=INDEX, properties=ES_MAPPING["mappings"]["properties"]
+            )
     except Exception as e:
         logger.error(f"[geocoder] Error checking/creating ES index: {e}")
         try:
@@ -2570,6 +2581,7 @@ async def deep_reverse(
         t = best["message"]["tags"]
         c = best["centroid"]
         dist = round(_haversine_m(lat, lon, c["lat"], c["lon"]), 1)
+        bcat = classify(t, best["message"].get("admin_level", 0))
         result["nearest_address"] = {
             "osm_id": best["message"]["osm_id"],
             "osm_type": "node",
@@ -2579,6 +2591,9 @@ async def deep_reverse(
             "postcode": t.get("addr:postcode", ""),
             "country": t.get("addr:country", ""),
             "full_address": best.get("formatted_address", ""),
+            "category_key": bcat.key or "",
+            "category_value": bcat.value or "",
+            "category_group": bcat.group or "",
             "geom": best["message"]["geom"],
             "distance_m": dist,
             "confidence": best.get("confidence", _distance_confidence(dist)),
@@ -2597,6 +2612,11 @@ async def deep_reverse(
 from services.routing import router as routing_router
 
 app.include_router(routing_router)
+
+# /nearby + /nearby/categories — explore nearby places, filterable by category.
+# The router module is imported at the top (no import cycle: nearby.py does not
+# import services.geocoder); its ES client is injected in the lifespan.
+app.include_router(nearby.router)
 
 
 if __name__ == "__main__":

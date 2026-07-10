@@ -14,6 +14,7 @@ from shared.address import (
     extract_address_components,
     normalize_address_text,
 )
+from shared.categories import classify
 from shared.embeddings import build_text
 from shared.interpolation import InterpolatedAddress
 from shared.ranking import compute_offline_rank
@@ -283,12 +284,18 @@ def _element_to_geocode_result(extra: dict) -> dict:
     area_km2 = msg.get("area_km2", 0.0)
     addr = extract_address_components(tags)
     full_addr = normalize_address_text(build_full_address(tags))
+    # Same category derivation the inserter writes to ES, so the deep response row
+    # carries category_* immediately (before the async re-index lands).
+    cat = classify(tags, admin_level)
     return {
         "osm_id": msg["osm_id"],
         "osm_type": msg.get("osm_type", ""),
         "name": tags.get("name", ""),
         "name_en": tags.get("name:en", ""),
         "name_fr": tags.get("name:fr", ""),
+        "category_key": cat.key or "",
+        "category_value": cat.value or "",
+        "category_group": cat.group or "",
         "tags": tags,
         "tags_text": build_text(tags),
         "geom": msg.get("geom"),

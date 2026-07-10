@@ -162,6 +162,7 @@ from shared.address import (
     extract_address_components,
     normalize_address_text,
 )
+from shared.categories import classify
 from shared.es_mapping import MAPPING
 from shared.logging import get_logger
 
@@ -207,7 +208,13 @@ async def ensure_index(es: AsyncElasticsearch):
                 await es.indices.create(index=INDEX, **MAPPING)
                 logger.info(f"[es-inserter] Created index {INDEX}")
             else:
-                logger.info(f"[es-inserter] Index {INDEX} already exists")
+                # Additive, non-breaking on a dynamic:false mapping — brings the
+                # category_* fields (and any future scalar keyword) onto an index
+                # created before they existed. No-op once already present.
+                await es.indices.put_mapping(
+                    index=INDEX, properties=MAPPING["mappings"]["properties"]
+                )
+                logger.info(f"[es-inserter] Index {INDEX} already exists (mapping ensured)")
             return
         except Exception as e:
             logger.error(
@@ -451,6 +458,10 @@ async def run():
                 area_km2 = elem.get("area_km2", 0.0)
                 rank = compute_offline_rank(tags, admin_level, area_km2)
 
+                # filterable category (drives /nearby) — derived from the tags by
+                # the same classifier used at query time and in the backfill
+                cat = classify(tags, admin_level)
+
                 # address fields
                 addr = extract_address_components(tags)
                 full_addr = normalize_address_text(build_full_address(tags))
@@ -467,6 +478,9 @@ async def run():
                     "admin_level": admin_level,
                     "area_km2": area_km2,
                     "offline_rank": rank,
+                    "category_key": cat.key or "",
+                    "category_value": cat.value or "",
+                    "category_group": cat.group or "",
                     # address
                     "has_address": bool(full_addr),
                     "full_address": full_addr,

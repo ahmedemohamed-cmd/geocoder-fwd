@@ -12,12 +12,14 @@ from billing import apisix_admin, config
 FREE_URIS = [
     "/health", "/status", "/features",
     "/feedback", "/insert", "/places", "/traffic/probe", "/traffic/probes",
+    "/nearby/categories",
 ]
 # Everything that answers a user query bills — including /traffic/edge, whose
-# sibling /traffic/probe[s] is free (full-path, not first-segment, matching).
+# sibling /traffic/probe[s] is free (full-path, not first-segment, matching), and
+# /nearby, whose sibling /nearby/categories (discovery metadata) is free.
 PAID_URIS = [
     "/geocode", "/reverse", "/autocomplete", "/address", "/describe",
-    "/deep/forward", "/deep/reverse", "/traffic/edge",
+    "/deep/forward", "/deep/reverse", "/traffic/edge", "/nearby",
     "/route", "/optimized_route", "/isochrone", "/locate",
 ]
 

@@ -16,6 +16,8 @@
 ###   POST /traffic/probe  – submit one GPS ping for live-traffic aggregation
 ###   POST /traffic/probes – submit a GPS trace (batch) for live-traffic aggregation
 ###   GET  /traffic/edge   – current live speed for the road edge nearest a point
+###   GET  /nearby         – explore nearby places, filter by category/group, with distance_m
+###   GET  /nearby/categories – list the filterable groups and their category values
 ###
 ### Routing (Valhalla, on {{routeUrl}} — host port 8001):
 ###   GET  /status            – engine/tileset status & loaded actions
@@ -932,6 +934,50 @@ Content-Type: application/json
 ### Returns the snapped edge_id (Valhalla GraphId), way_id, and live_speed_kph
 ### (null until enough probes have accumulated for that edge).
 GET {{baseUrl}}/traffic/edge?lat=30.0444&lon=31.2357
+
+###
+
+# ============================================================================
+# /nearby  –  Explore nearby places (filter by category/group)
+# ============================================================================
+
+### Discovery: the filterable groups (food, health, shopping, …) and the
+### precise category values in each. Use these to build filter chips.
+GET {{baseUrl}}/nearby/categories
+
+###
+
+### All POIs within 1 km of Tahrir, blended distance+importance ranking (default
+### sort=best). Admin boundaries / area "places" (Cairo, districts) are excluded.
+### Each result carries distance_m. Second identical call returns X-Cache: HIT.
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357
+
+###
+
+### Nearest-first (sort=distance) restaurants and cafes within 800 m.
+### `category` is the precise OSM value; comma-separate or repeat the param.
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357&radius=800&sort=distance&category=restaurant,cafe
+
+###
+
+### Filter by coarse group instead of exact type (all food places within 1.5 km).
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357&radius=1500&group=food
+
+###
+
+### Pagination: page 2 of pharmacies within 5 km (limit/offset like /geocode).
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&category=pharmacy&limit=10&offset=10
+
+###
+
+### Scroll page 1 — take pagination.next_cursor from the response.
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&sort=distance&limit=10
+
+###
+
+### Scroll page 2 — offset-free, unbounded depth. Replace <CURSOR> with the
+### next_cursor returned above (keep every other param identical).
+GET {{baseUrl}}/nearby?lat=30.0444&lon=31.2357&radius=5000&sort=distance&limit=10&cursor=<CURSOR>
 
 ###
 

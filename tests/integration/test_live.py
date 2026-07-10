@@ -54,3 +54,34 @@ def test_reverse_returns_location(http):
 def test_autocomplete_returns_suggestions(http):
     resp = http.get("/autocomplete", params={"q": "Cai", **CAIRO})
     assert resp.status_code == 200
+
+
+def test_nearby_categories_discovery(http):
+    resp = http.get("/nearby/categories")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "food" in body["groups"]
+    assert "restaurant" in body["values"]["food"]
+
+
+def test_nearby_returns_pois_by_distance(http):
+    resp = http.get("/nearby", params={**CAIRO, "radius": 3000, "sort": "distance"})
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    assert len(results) > 0
+    # nearest-first: distances are non-decreasing
+    dists = [r["distance_m"] for r in results]
+    assert dists == sorted(dists)
+    # POI guard: no admin boundaries / place areas leak in
+    for r in results:
+        assert r["category_group"] not in ("place", "boundary")
+        assert (r.get("admin_level") or 0) == 0
+
+
+def test_nearby_category_filter(http):
+    # Requires the category backfill to have run against the live index.
+    resp = http.get("/nearby", params={**CAIRO, "radius": 5000, "category": "restaurant"})
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    for r in results:
+        assert r["category_value"] == "restaurant"

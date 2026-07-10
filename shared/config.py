@@ -85,6 +85,20 @@ GEOCODE_CACHE_TTL = _safe_int("GEOCODE_CACHE_TTL", 300)  # seconds
 # inside the 10 km geo-decay scale — big hit-rate gain, negligible ranking shift).
 GEOCODE_CACHE_COORD_PRECISION = _safe_int("GEOCODE_CACHE_COORD_PRECISION", 2)
 
+# ── /nearby (explore nearby places, filterable by category) ────────────────
+# Its own cache instance, NOT the /geocode one: nearby returns a per-result
+# distance_m, so the coarse 2-decimal (~1.1 km) /geocode key rounding would
+# corrupt both the result set and the distances. 4 decimals ≈ 11 m.
+NEARBY_CACHE_ENABLED = _safe_bool("NEARBY_CACHE_ENABLED", True)
+NEARBY_CACHE_TTL = _safe_int("NEARBY_CACHE_TTL", 120)  # seconds
+NEARBY_CACHE_COORD_PRECISION = _safe_int("NEARBY_CACHE_COORD_PRECISION", 4)  # ~11 m
+NEARBY_DEFAULT_RADIUS_M = _safe_int("NEARBY_DEFAULT_RADIUS_M", 1000)
+NEARBY_MAX_RADIUS_M = _safe_int("NEARBY_MAX_RADIUS_M", 50000)
+# Drop area features bigger than this (districts, cities) while keeping large
+# legitimate POIs like airports and big parks. Stricter than the 0.1 km² used
+# for nearest-street centroid reliability in geocoder.py.
+NEARBY_MAX_AREA_KM2 = float(os.getenv("NEARBY_MAX_AREA_KM2", "5.0"))
+
 # Embeddings
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 EMBEDDING_DIM = 384
