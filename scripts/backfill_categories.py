@@ -78,6 +78,9 @@ async def backfill(batch_size: int, sleep_s: float, reprocess_all: bool) -> None
                     "_op_type": "update",
                     "_index": INDEX,
                     "_id": doc["_id"],
+                    # retry rather than fail if the doc is written concurrently
+                    # (e.g. live ingest re-indexing the same element).
+                    "retry_on_conflict": 3,
                     "doc": {
                         "category_key": cat.key or "",
                         "category_value": cat.value or "",
