@@ -26,6 +26,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from services.cache_service import ResultCache
+from services.enrichment import address_needs_refresh, schedule_enrichment
 from services.geocoder_helpers import _haversine_m
 from shared.categories import GROUPS, VALUES_BY_GROUP, classify
 from shared.config import (
@@ -75,16 +76,23 @@ _SRC = [
     "category_key",
     "category_value",
     "category_group",
+    # reverse-geocode enrichment (nearest_street + parents), cached per-doc in ES
+    "address",
 ]
 
-# ── shared ES client (injected by the geocoder lifespan) ──────────────────────
+# ── shared clients (injected by the geocoder lifespan) ────────────────────────
 _es = None
+_pg_pool = None
 
 
-def init(es) -> None:
-    """Receive the geocoder's Elasticsearch client. Called from its lifespan."""
-    global _es
+def init(es, pg_pool=None) -> None:
+    """Receive the geocoder's ES + PostGIS clients. Called from its lifespan.
+
+    ``pg_pool`` is optional: without it /nearby still surfaces any cached
+    ``address`` from _source but won't schedule new enrichment (fail-open)."""
+    global _es, _pg_pool
     _es = es
+    _pg_pool = pg_pool
 
 
 # ── dedicated result cache (lazy, like routing._get_traffic_redis) ────────────
@@ -360,8 +368,22 @@ async def nearby(
                 "addr_country": src.get("addr_country", ""),
                 "addr_suburb": src.get("addr_suburb", ""),
                 "addr_state": src.get("addr_state", ""),
+                # reverse-geocode enrichment (nearest_street + parents), served
+                # from ES cache; computed once in the background on a miss below.
+                "address": src.get("address"),
             }
         )
+
+        # Same compute-once-in-background flow as /geocode: surface the cached
+        # address above, and (when PostGIS is wired) kick off enrichment for docs
+        # that are missing/stale. Fail-open if no pool was injected.
+        if _pg_pool is not None:
+            self_area = src.get("area_km2", 0) or 0
+            self_admin = src.get("admin_level")
+            if address_needs_refresh(src.get("address"), src["osm_id"], self_area, self_admin):
+                schedule_enrichment(
+                    _pg_pool, _es, INDEX, src["osm_id"], src.get("centroid"), self_area, self_admin
+                )
 
     # has_more: with a cursor we have no absolute position, so a full page implies
     # there may be more; with offset we can use the exact total.

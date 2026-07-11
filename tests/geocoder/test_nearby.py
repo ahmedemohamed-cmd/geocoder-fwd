@@ -31,7 +31,7 @@ class FakeES:
         }
 
 
-def _hit(osm_id, name, lat, lon, *, cat=None, tags=None, score=2.0):
+def _hit(osm_id, name, lat, lon, *, cat=None, tags=None, score=2.0, address=...):
     src = {
         "osm_id": osm_id,
         "osm_type": "node",
@@ -41,6 +41,8 @@ def _hit(osm_id, name, lat, lon, *, cat=None, tags=None, score=2.0):
     }
     if cat:
         src["category_key"], src["category_value"], src["category_group"] = cat
+    if address is not ...:  # sentinel: omit the field entirely unless given
+        src["address"] = address
     # Real ES returns a `sort` array per hit when the query sorts; mirror that so
     # the cursor (search_after) path can build next_cursor from the last hit.
     return {"_source": src, "_score": score, "sort": [score, osm_id]}
@@ -197,3 +199,57 @@ async def test_category_falls_back_to_classify_when_unindexed(client, patched):
     row = resp.json()["results"][0]
     assert row["category_value"] == "restaurant"
     assert row["category_group"] == "food"
+
+
+# ── address enrichment (mirrors /geocode: serve cached, schedule on miss) ─────
+async def test_no_pool_surfaces_address_and_skips_scheduling(client, patched, monkeypatch):
+    # Fail-open: without a PostGIS pool, a cached address is still surfaced and
+    # nothing is scheduled.
+    monkeypatch.setattr(nearby, "_pg_pool", None)
+    calls = []
+    monkeypatch.setattr(nearby, "schedule_enrichment", lambda *a, **k: calls.append(a))
+    resp = await client.get("/nearby?lat=30.0455&lon=31.2440")
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["address"] is None  # hit has no cached address
+    assert calls == []
+
+
+async def test_cached_address_is_returned_and_not_rescheduled(client, patched, monkeypatch):
+    cached = {"nearest_street": {"osm_id": "way/5", "name": "Talaat Harb"}, "parents": []}
+    patched._hits = [_hit("node/1", "Koshary", 30.0455, 31.2440, address=cached)]
+    monkeypatch.setattr(nearby, "_pg_pool", object())  # truthy pool
+    calls = []
+    monkeypatch.setattr(nearby, "schedule_enrichment", lambda *a, **k: calls.append(a))
+    resp = await client.get("/nearby?lat=30.0455&lon=31.2440")
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["address"] == cached
+    assert calls == []  # fresh, non-stale → no reschedule
+
+
+async def test_missing_address_schedules_enrichment(client, patched, monkeypatch):
+    pool = object()
+    monkeypatch.setattr(nearby, "_pg_pool", pool)
+    calls = []
+    monkeypatch.setattr(nearby, "schedule_enrichment", lambda *a, **k: calls.append(a))
+    resp = await client.get("/nearby?lat=30.0455&lon=31.2440")
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["address"] is None  # served null this call
+    assert len(calls) == 1
+    pool_arg, es_arg, index_arg, osm_id_arg, centroid_arg = calls[0][:5]
+    assert pool_arg is pool
+    assert es_arg is patched  # the FakeES injected as nearby._es
+    assert index_arg == "osm_places"
+    assert osm_id_arg == "node/1"
+    assert centroid_arg == {"lat": 30.0455, "lon": 31.2440}
+
+
+async def test_stale_cached_address_reschedules(client, patched, monkeypatch):
+    # A parent missing "area_km2" is the classic stale marker.
+    stale = {"nearest_street": None, "parents": [{"osm_id": "rel/9", "name": "Cairo"}]}
+    patched._hits = [_hit("node/1", "Koshary", 30.0455, 31.2440, address=stale)]
+    monkeypatch.setattr(nearby, "_pg_pool", object())
+    calls = []
+    monkeypatch.setattr(nearby, "schedule_enrichment", lambda *a, **k: calls.append(a))
+    resp = await client.get("/nearby?lat=30.0455&lon=31.2440")
+    assert resp.status_code == 200
+    assert len(calls) == 1  # stale → reschedule

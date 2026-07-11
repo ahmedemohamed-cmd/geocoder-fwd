@@ -68,6 +68,11 @@ import httpx
 
 from services import nearby
 from services.cache_service import ResultCache
+from services.enrichment import (
+    address_needs_refresh,
+    enrich_address,
+    schedule_enrichment,
+)
 from services.geocoder_helpers import (
     _distance_confidence,
     _element_to_geocode_result,
@@ -169,23 +174,6 @@ redis_pool: aioredis.Redis = None  # type: ignore[assignment]
 result_cache: ResultCache | None = None
 _ac_task: asyncio.Task | None = None  # strong reference to prevent GC
 
-# Background address-enrichment bookkeeping. Parents/nearest-street are computed
-# at most ONCE per osm_id and cached in Elasticsearch; the search path never
-# blocks on (or fans out) the heavy PostGIS spatial joins. `_enrich_inflight`
-# dedupes concurrent requests for the same doc; `_enrich_bg_tasks` holds strong
-# refs so fire-and-forget tasks aren't garbage-collected mid-flight.
-_enrich_inflight: set[str] = set()
-_enrich_bg_tasks: set[asyncio.Task] = set()
-
-# Features larger than this (km²) are treated as areas, not point-like places:
-# a "nearest street to the centroid" is meaningless for them, so it's skipped.
-# 0.1 km² = 10 hectares (~316 m square): comfortably above any single building
-# or POI polygon (malls, hospitals, campuses all keep their nearest street) but
-# well below neighbourhood/district scale (Fifth Settlement is 10 km²), where
-# the centroid-nearest line is just noise. Admin-level features are always
-# skipped regardless of size. Tunable.
-_NEAREST_STREET_MAX_AREA_KM2 = 0.1
-
 
 def _schedule_enrichment(
     osm_id: str,
@@ -193,26 +181,9 @@ def _schedule_enrichment(
     self_area: float = 0.0,
     admin_level: int | None = None,
 ) -> None:
-    """Enrich + cache a doc's address once, in the background (non-blocking).
-
-    No-op if the doc is already being enriched. The result is persisted to ES by
-    ``_enrich_address`` so subsequent searches read it straight from the index.
-    """
-    if not osm_id or osm_id in _enrich_inflight:
-        return
-    _enrich_inflight.add(osm_id)
-
-    async def _run():
-        try:
-            await _enrich_address(osm_id, centroid, self_area, admin_level)
-        except Exception:
-            logger.warning("Background enrichment failed for %s", osm_id, exc_info=True)
-        finally:
-            _enrich_inflight.discard(osm_id)
-
-    task = asyncio.create_task(_run())
-    _enrich_bg_tasks.add(task)
-    task.add_done_callback(_enrich_bg_tasks.discard)
+    """Background address enrichment — thin wrapper over services.enrichment that
+    binds this module's live ES/PostGIS clients."""
+    schedule_enrichment(pg_pool, es, INDEX, osm_id, centroid, self_area, admin_level)
 
 
 _AC_MAX_DOCS = 100_000  # top-ranked docs to keep in Redis
@@ -301,9 +272,6 @@ async def lifespan(app: FastAPI):
             es = AsyncElasticsearch(ELASTICSEARCH_URL)
             await es.ping()
             logger.info("[geocoder] Successfully connected to Elasticsearch")
-            # Hand the shared ES client to the /nearby router (avoids an import
-            # cycle — nearby.py must not import services.geocoder).
-            nearby.init(es)
             break
         except Exception as e:
             logger.error(
@@ -327,6 +295,10 @@ async def lifespan(app: FastAPI):
                 max_size=10,
             )
             logger.info("[geocoder] Successfully connected to PostGIS")
+            # Hand the shared ES + PostGIS clients to the /nearby router (avoids an
+            # import cycle — nearby.py must not import services.geocoder). Done here
+            # (not in the ES block) so pg_pool exists before /nearby serves traffic.
+            nearby.init(es, pg_pool)
             break
         except Exception as e:
             logger.error(
@@ -484,175 +456,9 @@ async def _enrich_address(
     self_area: float = 0.0,
     admin_level: int | None = None,
 ) -> dict | None:
-    """Look up address/parent data from PostGIS and cache it in ES.
-
-    ``self_area`` is the feature's own footprint in km². Parents are discovered
-    by point-in-polygon on the centroid, which — for an *area* feature — also
-    returns sub-zones that merely contain the centroid (e.g. a small block
-    *inside* a district). A genuine parent ENCLOSES the feature and is therefore
-    larger than it, so any candidate not strictly larger than ``self_area`` is a
-    child/sibling and is dropped. Point features (``self_area == 0``) keep every
-    enclosing polygon.
-
-    ``nearest_street`` is skipped entirely for features that are administrative
-    boundaries (``admin_level`` not null) or larger than
-    ``_NEAREST_STREET_MAX_AREA_KM2``: for such areas the centroid sits arbitrarily
-    inside the region, so the closest line to it is not a meaningful address and
-    the (heavier) nearest-line query is pure cost. Parents are still computed.
-
-    Returns the address dict or None if the centroid is missing.
-    The address structure:
-        {
-            "nearest_street": {"osm_id": ..., "name": ..., "name_en": ...} | None,
-            "parents": [
-                {"osm_id": ..., "name": ..., "name_en": ..., "admin_level": ...},
-                ...
-            ]
-        }
-    """
-    if not centroid:
-        return None
-
-    # centroid is stored as {"lat": ..., "lon": ...} in ES
-    lat = centroid.get("lat")
-    lon = centroid.get("lon")
-    if lat is None or lon is None:
-        return None
-
-    point_wkt = f"POINT({lon} {lat})"
-
-    # A nearest street only makes sense for point-like features. For admin
-    # boundaries or large areas the centroid is arbitrary, so skip the (heavier)
-    # nearest-line lookup and report no street. admin_level 0/None both mean
-    # "not an administrative boundary" (0 is the Google/deep-path sentinel).
-    skip_nearest = bool(admin_level) or self_area > _NEAREST_STREET_MAX_AREA_KM2
-
-    try:
-        async with pg_pool.acquire() as conn:
-            # Set a query timeout to avoid slow enrichment blocking the API
-            await conn.execute("SET LOCAL statement_timeout = '3000'")  # 3s
-
-            # Find nearest lines (fetch several to find one with a name)
-            nearest_lines = []
-            if not skip_nearest:
-                nearest_lines_query = """
-                    SELECT osm_id, osm_type
-                    FROM osm_geometries
-                    WHERE ST_GeometryType(geom) = 'ST_LineString'
-                      AND ST_DWithin(geom, ST_GeomFromText($1, 4326), 0.005)
-                    ORDER BY ST_Distance(geom, ST_GeomFromText($1, 4326))
-                    LIMIT 10
-                """
-                nearest_lines = await conn.fetch(nearest_lines_query, point_wkt)
-
-            # Find enclosing polygons/multipolygons
-            enclosing_query = """
-                SELECT osm_id, osm_type
-                FROM osm_geometries
-                WHERE ST_GeometryType(geom) IN ('ST_Polygon', 'ST_MultiPolygon')
-                AND ST_Contains(geom, ST_GeomFromText($1, 4326))
-            """
-            enclosing_polygons = await conn.fetch(enclosing_query, point_wkt)
-
-            # Also check closed LineStrings that form boundaries around the point
-            closed_lines_query = """
-                SELECT osm_id, osm_type
-                FROM osm_geometries
-                WHERE ST_GeometryType(geom) = 'ST_LineString'
-                AND ST_IsClosed(geom)
-                AND ST_NPoints(geom) >= 4
-                AND ST_Contains(ST_MakePolygon(geom), ST_GeomFromText($1, 4326))
-            """
-            closed_lines = await conn.fetch(closed_lines_query, point_wkt)
-    except Exception as e:
-        logger.error(f"[geocoder] Enrichment PostGIS query failed for {osm_id}: {e}")
-        return None
-
-    # Collect all osm_ids to fetch from ES.
-    # Exclude the element's own osm_id: a polygon's centroid falls inside itself,
-    # so without this filter the element would list itself as its own parent.
-    line_ids = [row["osm_id"] for row in nearest_lines if row["osm_id"] != osm_id]
-    parent_ids = [row["osm_id"] for row in enclosing_polygons if row["osm_id"] != osm_id]
-    parent_ids.extend(row["osm_id"] for row in closed_lines if row["osm_id"] != osm_id)
-
-    all_ids = list(set(line_ids + parent_ids))
-    if not all_ids:
-        address = {"nearest_street": None, "parents": []}
-        # Cache even empty results to avoid repeated lookups
-        try:
-            await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
-        except Exception:
-            logger.debug("Failed to cache empty address for %s", osm_id, exc_info=True)
-        return address
-
-    # Batch-fetch metadata from ES
-    es_data: dict[str, dict] = {}
-    try:
-        resp = await es.mget(index=INDEX, ids=all_ids, request_timeout=5)
-        for doc in resp["docs"]:
-            if doc.get("found"):
-                es_data[doc["_id"]] = doc["_source"]
-    except Exception as e:
-        logger.error(f"[geocoder] Error fetching address data from ES: {e}")
-
-    # Find nearest street: first line in distance order t
-    #
-    #
-    # hat has a name
-    nearest_street = None
-    for row in nearest_lines:
-        src = es_data.get(row["osm_id"])
-        if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
-            nearest_street = {
-                "osm_id": row["osm_id"],
-                "name": src.get("name", ""),
-                "name_en": src.get("name_en", ""),
-                "name_fr": src.get("name_fr", ""),
-            }
-            break
-
-    # Build parents list from enclosing polygons + closed lines
-    parents = []
-    seen = set()
-    for row_id in parent_ids:
-        if row_id in seen:
-            continue
-        seen.add(row_id)
-        src = es_data.get(row_id)
-        if src and (src.get("name") or src.get("name_en") or src.get("name_fr")):
-            cand_area = src.get("area_km2", 0) or 0
-            # Enclosing parent must be larger than the feature; a smaller polygon
-            # that only contains the centroid is a child/sub-zone, not a parent.
-            if self_area > 0 and cand_area <= self_area:
-                continue
-            parents.append(
-                {
-                    "osm_id": row_id,
-                    "name": src.get("name", ""),
-                    "name_en": src.get("name_en", ""),
-                    "name_fr": src.get("name_fr", ""),
-                    "admin_level": src.get("admin_level"),
-                    "area_km2": cand_area,
-                }
-            )
-    # Smallest area first (most specific enclosing polygon), then by admin_level
-    # descending as a tiebreaker. None admin_level sorts last within same area.
-    parents.sort(
-        key=lambda p: (
-            p.get("area_km2", 0),
-            -p["admin_level"] if p["admin_level"] is not None else float("inf"),
-        )
-    )
-
-    address = {"nearest_street": nearest_street, "parents": parents}
-
-    # Cache the address data in ES
-    try:
-        await es.update(index=INDEX, id=osm_id, body={"doc": {"address": address}})
-    except Exception as e:
-        logger.error(f"[geocoder] Error caching address for {osm_id}: {e}")
-
-    return address
+    """Address enrichment — thin wrapper over services.enrichment that binds
+    this module's live ES/PostGIS clients (e.g. /deep/forward's sync path)."""
+    return await enrich_address(pg_pool, es, INDEX, osm_id, centroid, self_area, admin_level)
 
 
 # ── feature flags discovery ──────────────────────────────────────────────
@@ -1339,25 +1145,10 @@ async def geocode(
         # write-back) instead of blocking the response on heavy PostGIS spatial
         # joins. The value is served from ES on subsequent searches. This keeps
         # the search hot path free of synchronous spatial-join fan-out.
-        address = result["address"]
         self_area = src.get("area_km2", 0) or 0
         self_admin = src.get("admin_level")
-        if address is None:
+        if address_needs_refresh(result["address"], src["osm_id"], self_area, self_admin):
             _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area, self_admin)
-        else:
-            cached_parents = address.get("parents") or []
-            stale = any("area_km2" not in p for p in cached_parents)
-            self_ref = any(p.get("osm_id") == src["osm_id"] for p in cached_parents)
-            # Re-enrich docs cached before the enclosure filter existed — any
-            # parent not larger than the feature is a mis-attributed sub-zone.
-            smaller_parent = self_area > 0 and any(
-                (p.get("area_km2", 0) or 0) <= self_area for p in cached_parents
-            )
-            # Re-enrich admin/large-area docs cached with a (now-unwanted) street.
-            skip_nearest = bool(self_admin) or self_area > _NEAREST_STREET_MAX_AREA_KM2
-            street_on_area = skip_nearest and address.get("nearest_street") is not None
-            if stale or self_ref or smaller_parent or street_on_area:
-                _schedule_enrichment(src["osm_id"], src.get("centroid"), self_area, self_admin)
 
     # ── Address interpolation fallback ────────────────────────────────────
     # When the query contained a housenumber but no result matched it
