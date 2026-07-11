@@ -30,11 +30,28 @@ async def test_features_reports_flags(client):
         "/reverse?lat=30.0",  # missing lon
         "/reverse?lat=foo&lon=bar",  # non-numeric
         "/deep/forward?q=cairo",  # missing mandatory language
+        "/deep/nearby?lat=30.0&lon=31.2",  # missing mandatory language
+        "/deep/nearby?language=en&lon=31.2",  # missing lat
         "/traffic/edge?lat=30.0",  # missing lon
     ],
 )
 async def test_missing_or_bad_params_return_422(client, url):
     resp = await client.get(url)
+    assert resp.status_code == 422
+
+
+async def test_deep_nearby_disabled_by_flag(client, monkeypatch):
+    monkeypatch.setattr(geocoder, "ENABLE_DEEP", False)
+    resp = await client.get("/deep/nearby?lat=30.0&lon=31.2&language=en")
+    assert resp.status_code == 503
+
+
+async def test_deep_nearby_requires_type_or_keyword(client, monkeypatch):
+    # Past gating (enabled + key present); Text Search needs a query, so a
+    # request with neither type nor keyword is rejected before calling Google.
+    monkeypatch.setattr(geocoder, "ENABLE_DEEP", True)
+    monkeypatch.setattr(geocoder, "GOOGLE_MAPS_API_KEY", "test-key")
+    resp = await client.get("/deep/nearby?lat=30.0&lon=31.2&language=en")
     assert resp.status_code == 422
 
 

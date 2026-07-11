@@ -9,6 +9,7 @@
 ###   GET  /reverse       – reverse geocoding (lat/lon → nearest address / interpolated / street / boundaries)
 ###   GET  /deep/forward  – deep forward geocoding via Google Maps (maps→OSM tags, publishes to NATS, geocode-shaped)
 ###   GET  /deep/reverse  – deep reverse geocoding via Google Maps (maps→OSM tags, publishes to NATS, reverse-shaped)
+###   GET  /deep/nearby   – deep nearby search via Google Places (maps→OSM tags, publishes to NATS, nearby-shaped)
 ###   GET  /describe      – AI-generated title + description for a place
 ###   POST /feedback      – popularity feedback loop
 ###   POST /places        – add a custom place
@@ -462,6 +463,41 @@ GET {{baseUrl}}/deep/forward?q=15 Tahrir Street, Cairo&language=en&publish=false
 
 ### Deep reverse – resolve an address for a point via Google, index it, return reverse-shaped
 GET {{baseUrl}}/deep/reverse?lat=30.0444&lon=31.2357&language=en
+
+###
+
+# ============================================================================
+# /deep/nearby  –  Deep nearby search via Google Places API (New) Text Search
+#   Maps each place → OSM tags, publishes to NATS for indexing, returns
+#   nearby-shaped rows (distance_m + category).
+#   lat/lon/language + (type OR keyword) required · radius = location bias
+#   rankby=prominence|distance · limit ≤20/page · cursor (scroll) · publish
+#   Scroll: pass a response's pagination.next_cursor back as cursor.
+#   Needs GOOGLE_MAPS_API_KEY + ENABLE_DEEP + "Places API (New)" on the project.
+# ============================================================================
+
+### Nearby restaurants, relevance-ranked, indexed + returned
+GET {{baseUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1000&type=restaurant&language=en
+
+###
+
+### Nearest-first cafes (rankby=distance)
+GET {{baseUrl}}/deep/nearby?lat=30.0444&lon=31.2357&type=cafe&rankby=distance&language=en
+
+###
+
+### Keyword search (Arabic names), preview only without indexing
+GET {{baseUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=2000&keyword=صيدلية&language=ar&publish=false
+
+###
+
+### Scroll page 1 — take pagination.next_cursor from the response.
+GET {{baseUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1500&type=restaurant&language=en&limit=20
+
+###
+
+### Scroll page 2 — replace <CURSOR> with next_cursor (keep other params identical).
+GET {{baseUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1500&type=restaurant&language=en&limit=20&cursor=<CURSOR>
 
 ###
 

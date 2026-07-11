@@ -26,6 +26,7 @@ import hashlib
 from shared.config import (
     GOOGLE_MAPS_API_KEY,
     GOOGLE_MAPS_GEOCODE_URL,
+    GOOGLE_PLACES_SEARCH_TEXT_URL,
 )
 
 
@@ -133,8 +134,9 @@ _LOCATION_TYPE_CONFIDENCE = {
 }
 
 
-async def _request(params: dict) -> dict:
-    """Call the Google Geocoding API and return its parsed JSON, or raise."""
+async def _request(params: dict, url: str = GOOGLE_MAPS_GEOCODE_URL) -> dict:
+    """Call a Google Maps API (Geocoding or Places, same status contract) and
+    return its parsed JSON, or raise."""
     import httpx  # lazy: keep the pure mapping helpers importable without httpx
 
     if not GOOGLE_MAPS_API_KEY:
@@ -142,7 +144,7 @@ async def _request(params: dict) -> dict:
     params = {**params, "key": GOOGLE_MAPS_API_KEY}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(GOOGLE_MAPS_GEOCODE_URL, params=params)
+            resp = await client.get(url, params=params)
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPError as e:
@@ -173,6 +175,105 @@ async def forward_geocode(
 async def reverse_geocode(lat: float, lon: float, language: str) -> list[dict]:
     """Reverse geocode. ``language`` is required (drives result name language)."""
     return (await _request({"latlng": f"{lat},{lon}", "language": language})).get("results", [])
+
+
+# Field mask for Places API (New) Text Search. Only these fields are returned
+# (and billed for); `nextPageToken` is required for scrolling.
+_PLACES_FIELD_MASK = ",".join(
+    [
+        "places.id",
+        "places.displayName",
+        "places.location",
+        "places.types",
+        "places.formattedAddress",
+        "places.businessStatus",
+        "places.rating",
+        "places.userRatingCount",
+        "nextPageToken",
+    ]
+)
+
+
+async def _places_post(body: dict, field_mask: str) -> dict:
+    """POST to the Places API (New) and return parsed JSON, or raise.
+
+    Unlike the legacy Geocoding API (GET + a ``status`` field), the new API
+    authenticates via the ``X-Goog-Api-Key`` header, takes a required
+    ``X-Goog-FieldMask``, and signals errors with HTTP status codes.
+    """
+    import httpx  # lazy: keep the pure mapping helpers importable without httpx
+
+    if not GOOGLE_MAPS_API_KEY:
+        raise GoogleMapsError("GOOGLE_MAPS_API_KEY is not configured")
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": field_mask,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(GOOGLE_PLACES_SEARCH_TEXT_URL, json=body, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            detail = e.response.json().get("error", {}).get("message", "")
+        except Exception:
+            detail = e.response.text[:200]
+        raise GoogleMapsError(
+            f"Google Places API error: {e.response.status_code} {detail}".strip()
+        ) from e
+    except httpx.HTTPError as e:
+        raise GoogleMapsError(f"Google Places request failed: {e}") from e
+
+
+async def nearby_search(
+    lat: float,
+    lon: float,
+    radius: int,
+    *,
+    language: str,
+    place_type: str | None = None,
+    keyword: str | None = None,
+    rankby: str = "prominence",
+    page_size: int = 20,
+    page_token: str | None = None,
+) -> tuple[list[dict], str | None]:
+    """Places API (New) Text Search biased around a point, with pagination.
+
+    Text Search (not searchNearby) is used because only it returns a
+    ``nextPageToken``. ``radius`` is applied as a **location bias** circle (the
+    new API's Text Search restricts only to rectangles, so the radius is a
+    preference, not a hard cut). Requires a ``place_type`` or ``keyword`` (the
+    Text Search query). ``rankby=distance`` → nearest-first.
+
+    Returns ``(places, next_page_token)``. When ``page_token`` is given, every
+    other argument MUST match the original call (a Google requirement).
+    """
+    text_query = keyword or place_type
+    if not text_query:
+        raise GoogleMapsError("nearby_search requires a place_type or keyword")
+
+    body: dict = {
+        "textQuery": text_query,
+        "languageCode": language,
+        "pageSize": page_size,
+        "locationBias": {
+            "circle": {
+                "center": {"latitude": lat, "longitude": lon},
+                "radius": float(radius),
+            }
+        },
+        "rankPreference": "DISTANCE" if rankby == "distance" else "RELEVANCE",
+    }
+    if place_type:
+        body["includedType"] = place_type
+    if page_token:
+        body["pageToken"] = page_token
+
+    data = await _places_post(body, _PLACES_FIELD_MASK)
+    return data.get("places", []), data.get("nextPageToken")
 
 
 def place_osm_id(place_id: str, lat, lon, name: str) -> str:
@@ -296,4 +397,71 @@ def map_result_to_element(result: dict, language: str) -> dict:
         "confidence": confidence,
         "formatted_address": result.get("formatted_address", ""),
         "place_id": place_id,
+    }
+
+
+def map_place_to_element(place: dict, language: str) -> dict:
+    """Map a Places API (New) Text Search place into an OSM-element NATS message
+    + extras (same shape as :func:`map_result_to_element`).
+
+    The new API's schema is camelCase: ``id``, ``displayName.text``,
+    ``location.latitude/longitude``, ``types``, ``formattedAddress``. The place
+    already carries a name and (in this field mask) no structured components — so
+    no ``addr:*`` tags are set; the local reverse-geocode enrichment fills
+    nearest-street/parents once the place is indexed. ``formattedAddress`` is
+    surfaced as ``formatted_address`` for the response only.
+    """
+    loc = place.get("location") or {}
+    lat, lon = loc.get("latitude"), loc.get("longitude")
+    place_id = place.get("id", "")
+    types = place.get("types", [])
+    name = (place.get("displayName") or {}).get("text", "")
+
+    tags: dict[str, str] = {}
+
+    # feature tag (amenity/shop/tourism/…) from the most specific place type
+    for t in types:
+        if t in _FEATURE_TYPE_MAP:
+            k, v = _FEATURE_TYPE_MAP[t]
+            tags.setdefault(k, v)
+            break
+
+    # admin/place classification (rare for POIs, kept for parity)
+    admin_level = 0
+    for t in types:
+        if t in _ADMIN_TYPE_MAP:
+            admin_level, place_val = _ADMIN_TYPE_MAP[t]
+            tags.setdefault("place", place_val)
+            break
+
+    if name:
+        tags["name"] = name
+        if language:
+            tags[f"name:{language}"] = name
+    tags["source"] = "google"
+    if place_id:
+        tags["ref:google_place_id"] = place_id
+
+    message = {
+        "osm_id": place_osm_id(place_id, lat, lon, name),
+        "osm_type": "node",
+        "tags": tags,
+        "geom": {"type": "Point", "coordinates": [lon, lat]},
+        "admin_level": admin_level,
+        "area_km2": 0.0,
+    }
+
+    # No location_type in Text Search; a permanently-closed place is low value.
+    confidence = 0.6
+    if place.get("businessStatus") in ("CLOSED_PERMANENTLY", "CLOSED_TEMPORARILY"):
+        confidence = 0.3
+
+    return {
+        "message": message,
+        "centroid": {"lat": lat, "lon": lon},
+        "confidence": confidence,
+        "formatted_address": place.get("formattedAddress", ""),
+        "place_id": place_id,
+        "rating": place.get("rating"),
+        "user_ratings_total": place.get("userRatingCount"),
     }

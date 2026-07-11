@@ -134,10 +134,14 @@ from shared.config import (
 from shared.embeddings import embed_texts
 from shared.google_maps import (
     GoogleMapsError,
+    map_place_to_element,
     map_result_to_element,
 )
 from shared.google_maps import (
     forward_geocode as gmaps_forward,
+)
+from shared.google_maps import (
+    nearby_search as gmaps_nearby,
 )
 from shared.google_maps import (
     reverse_geocode as gmaps_reverse,
@@ -2394,6 +2398,108 @@ async def deep_reverse(
     result["source"] = "google"
     result["published"] = published
     return result
+
+
+@app.get("/deep/nearby")
+async def deep_nearby(
+    request: Request,
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    language: str = Query(
+        ..., min_length=2, max_length=10, description="Result language (mandatory), e.g. en, ar, fr"
+    ),
+    radius: int = Query(1500, ge=1, le=50000, description="Location-bias radius in metres"),
+    type: str | None = Query(
+        None, description="Google place type, e.g. restaurant, cafe, pharmacy"
+    ),
+    keyword: str | None = Query(None, description="Free-text query (one of type/keyword required)"),
+    rankby: str = Query(
+        "prominence",
+        pattern="^(prominence|distance)$",
+        description="prominence = ranked by relevance; distance = nearest first",
+    ),
+    limit: int = Query(20, ge=1, le=20, description="Results per page (Google max 20)"),
+    cursor: str | None = Query(
+        None,
+        description="pagination.next_cursor from a previous response (keep other params identical)",
+    ),
+    publish: bool = Query(True, description="Publish mapped results to NATS for indexing"),
+):
+    """Deep nearby search via Google Places API (New) Text Search.
+
+    Queries Google around ``(lat, lon)`` (radius applied as a location bias), maps
+    each place into the OSM-element NATS format (so the inserters index/merge it
+    like native data), publishes it, then returns the places nearby-shaped (with
+    ``distance_m`` + category). Freshly-discovered places have ``address: null``;
+    the /nearby PostGIS enrichment fills nearest-street/parents once indexed.
+
+    Scroll with ``pagination.next_cursor`` → pass it back as ``cursor`` for the
+    next page (it's Google's page token; keep every other param identical).
+    ``type`` or ``keyword`` is required (it is the text query).
+    """
+    _deep_guard()
+    if not (type or keyword):
+        raise HTTPException(status_code=422, detail="a type or keyword is required")
+    try:
+        places, next_token = await gmaps_nearby(
+            lat,
+            lon,
+            radius,
+            language=language,
+            place_type=type,
+            keyword=keyword,
+            rankby=rankby,
+            page_size=limit,
+            page_token=cursor,
+        )
+    except GoogleMapsError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    mapped = []
+    for p in places:
+        try:
+            mapped.append(map_place_to_element(p, language))
+        except Exception as e:
+            logger.warning(f"[geocoder] deep/nearby: skipped a result ({e})")
+
+    published = 0
+    if publish:
+        for extra in mapped:
+            published += int(await _publish_element(extra["message"]))
+
+    results = []
+    for extra in mapped:
+        row = _element_to_geocode_result(extra)
+        c = extra.get("centroid") or {}
+        if c.get("lat") is not None and c.get("lon") is not None:
+            row["distance_m"] = round(_haversine_m(lat, lon, c["lat"], c["lon"]), 1)
+        else:
+            row["distance_m"] = None
+        results.append(row)
+
+    if rankby == "distance":
+        results.sort(key=lambda r: (r["distance_m"] is None, r["distance_m"] or 0))
+
+    request.state.result_count = len(results)
+    return {
+        "features": {"vectors_enabled": False, "ai_enabled": False},
+        "source": "google",
+        "published": published,
+        "query": {
+            "lat": lat,
+            "lon": lon,
+            "radius": radius,
+            "type": type,
+            "keyword": keyword,
+            "rankby": rankby,
+        },
+        "pagination": {
+            "limit": limit,
+            "next_cursor": next_token,
+            "has_more": next_token is not None,
+        },
+        "results": results,
+    }
 
 
 # ── Valhalla routing proxy (with Arabic narration) ────────────────────────────

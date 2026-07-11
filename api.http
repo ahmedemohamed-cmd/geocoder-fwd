@@ -32,6 +32,7 @@
 ###   GET  /reverse       – reverse geocoding
 ###   GET  /deep/forward  – deep forward geocoding via Google Maps
 ###   GET  /deep/reverse  – deep reverse geocoding via Google Maps
+###   GET  /deep/nearby   – deep nearby search via Google Places (indexes + returns)
 ###   GET  /describe      – AI title + description for a place
 ###   POST /feedback      – popularity feedback loop
 ###   POST /places        – add a custom place
@@ -293,6 +294,50 @@ X-API-Key: {{apiKey}}
 
 ### Deep reverse – resolve an address for a point via Google
 GET {{gatewayUrl}}/deep/reverse?lat=30.0444&lon=31.2357&language=en
+X-API-Key: {{apiKey}}
+
+###
+
+# ============================================================================
+# /deep/nearby  –  Deep nearby search via Google Places API (New) Text Search
+#   Queries Google, maps each place to OSM tags, publishes to NATS for indexing,
+#   then returns nearby-shaped rows (distance_m + category).
+#   lat/lon/language (required) · type OR keyword (required — it's the query)
+#   radius m (a location BIAS, not a hard cut) · rankby=prominence|distance
+#   limit (≤20/page) · cursor (scroll) · publish
+#   Scroll: take pagination.next_cursor and pass it back as cursor for the next
+#   page (it's Google's page token — keep the other params identical).
+#   Freshly discovered places have address:null; /nearby enrichment fills it in.
+#   Requires GOOGLE_MAPS_API_KEY + ENABLE_DEEP + "Places API (New)" enabled on
+#   the Google Cloud project (else 502/503).
+# ============================================================================
+
+### Nearby restaurants near Tahrir (relevance-ranked), indexed + returned
+GET {{gatewayUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1000&type=restaurant&language=en
+X-API-Key: {{apiKey}}
+
+###
+
+### Nearest-first cafes (rankby=distance)
+GET {{gatewayUrl}}/deep/nearby?lat=30.0444&lon=31.2357&type=cafe&rankby=distance&language=en
+X-API-Key: {{apiKey}}
+
+###
+
+### Keyword search, Arabic result names, preview only (publish=false)
+GET {{gatewayUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=2000&keyword=صيدلية&language=ar&publish=false
+X-API-Key: {{apiKey}}
+
+###
+
+### Scroll page 1 — grab pagination.next_cursor from the response…
+GET {{gatewayUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1500&type=restaurant&language=en&limit=20
+X-API-Key: {{apiKey}}
+
+###
+
+### …then page 2 via the cursor (keep every other param identical). Replace <CURSOR>.
+GET {{gatewayUrl}}/deep/nearby?lat=30.0444&lon=31.2357&radius=1500&type=restaurant&language=en&limit=20&cursor=<CURSOR>
 X-API-Key: {{apiKey}}
 
 ###

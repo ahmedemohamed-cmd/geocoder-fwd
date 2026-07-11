@@ -116,6 +116,13 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GOOGLE_MAPS_GEOCODE_URL = os.getenv(
     "GOOGLE_MAPS_GEOCODE_URL", "https://maps.googleapis.com/maps/api/geocode/json"
 )
+# Places API (New) Text Search — powers /deep/nearby. Same API key, but the
+# "Places API (New)" product must be enabled on the project. Text Search is used
+# (not searchNearby) because only it returns a nextPageToken for scrolling.
+GOOGLE_PLACES_SEARCH_TEXT_URL = os.getenv(
+    "GOOGLE_PLACES_SEARCH_TEXT_URL",
+    "https://places.googleapis.com/v1/places:searchText",
+)
 # Note: result language is a mandatory per-request query param on /deep/*,
 # not an env default.
 # ENABLE_DEEP gates the /deep/* endpoints; they also require an API key.

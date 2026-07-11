@@ -14,6 +14,7 @@ EXPECTED_ROUTES = {
     ("/address", ("GET",)),
     ("/autocomplete", ("GET",)),
     ("/deep/forward", ("GET",)),
+    ("/deep/nearby", ("GET",)),
     ("/deep/reverse", ("GET",)),
     ("/describe", ("GET",)),
     ("/features", ("GET",)),
