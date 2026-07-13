@@ -249,6 +249,23 @@ MAPPING = {
             "category_key": {"type": "keyword"},
             "category_value": {"type": "keyword"},
             "category_group": {"type": "keyword"},
+            # The place's *type* as searchable text, English + Arabic, from
+            # shared.categories.category_text. Distinct from the keyword fields
+            # above (which are exact filters for /nearby) and from tags_text
+            # (which holds raw tag *values* only — a metro station's tags never
+            # contain the word "metro"). This is what lets /autocomplete answer
+            # a type query like "metro" / "مستشفى" / "pharmacy".
+            "category_text": {
+                "type": "text",
+                "analyzer": "arabic_name",
+                "fields": {
+                    "autocomplete": {
+                        "type": "text",
+                        "analyzer": "address_autocomplete",
+                        "search_analyzer": "address_search",
+                    },
+                },
+            },
             "name_vector": {
                 "type": "dense_vector",
                 "dims": EMBEDDING_DIM,

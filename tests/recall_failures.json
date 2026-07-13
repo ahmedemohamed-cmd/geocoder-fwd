@@ -14,8 +14,8 @@
     "query": "Al Zahraa",
     "osm_id": "w376085481",
     "strict_rank": null,
-    "lenient_rank": 1,
-    "top": "Al-Zahraa"
+    "lenient_rank": 3,
+    "top": "Al-Zahraa Private Schools"
    },
    {
     "kind": "named",
@@ -24,6 +24,14 @@
     "strict_rank": null,
     "lenient_rank": null,
     "top": "Al Mashtal Street"
+   },
+   {
+    "kind": "named",
+    "query": "City Center",
+    "osm_id": "w755926168",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "City Center"
    },
    {
     "kind": "named",
@@ -63,7 +71,15 @@
     "osm_id": "w690453101",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "On The Run"
+    "top": "Green Area Homestay"
+   },
+   {
+    "kind": "named",
+    "query": "Officer's Housing",
+    "osm_id": "w692556528",
+    "strict_rank": null,
+    "lenient_rank": 5,
+    "top": "Officers Housing"
    },
    {
     "kind": "named",
@@ -79,7 +95,7 @@
     "osm_id": "w715006293",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Amal Street"
+    "top": "Al Amal Tower برج الأمل"
    }
   ],
   "named_lenient_miss": [
@@ -113,7 +129,7 @@
     "osm_id": "w690453101",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "On The Run"
+    "top": "Green Area Homestay"
    },
    {
     "kind": "named",
@@ -121,19 +137,10 @@
     "osm_id": "w715006293",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Amal Street"
+    "top": "Al Amal Tower برج الأمل"
    }
   ],
   "address_street_miss": [
-   {
-    "kind": "address",
-    "query": "8 أ شارع أحمد فخري, Cairo",
-    "osm_id": "n4907015222",
-    "exact_rank": null,
-    "street_rank": null,
-    "interp_state": "fail",
-    "top": "Cairo SSS"
-   },
    {
     "kind": "address",
     "query": "b215 طريق القاهرة, الاسكندرية الصحراوي الجانبي القريه الذكية, Cairo",
@@ -150,25 +157,25 @@
     "exact_rank": null,
     "street_rank": null,
     "interp_state": "na",
-    "top": "Cairo SSS"
+    "top": "Cairo"
    },
    {
     "kind": "address",
-    "query": "b61 شارع 233, Cairo",
-    "osm_id": "n12246167895",
+    "query": "13B شارع الشهيد وائل عبد الجابر, القاهرة الجديدة",
+    "osm_id": "n6382884377",
     "exact_rank": null,
     "street_rank": null,
-    "interp_state": "fail",
-    "top": "Cairo SSS"
+    "interp_state": "ok",
+    "top": "مسجد الشهيد عبد المنعم رياض"
    },
    {
     "kind": "address",
-    "query": "13` شارع اللبينى, Cairo",
-    "osm_id": "n6766648981",
+    "query": "District 1, Region 3 شارع 35, مدينة الشيخ زايد",
+    "osm_id": "n4805841724",
     "exact_rank": null,
     "street_rank": null,
-    "interp_state": "fail",
-    "top": "Cairo SSS"
+    "interp_state": "na",
+    "top": "District 1"
    }
   ],
   "address_exact_miss": [
@@ -183,12 +190,12 @@
    },
    {
     "kind": "address",
-    "query": "8 أ شارع أحمد فخري, Cairo",
-    "osm_id": "n4907015222",
+    "query": "Downtown Mall Road 90, Cairo",
+    "osm_id": "n4997492280",
     "exact_rank": null,
-    "street_rank": null,
-    "interp_state": "fail",
-    "top": "Cairo SSS"
+    "street_rank": 3,
+    "interp_state": "na",
+    "top": "900 degrees | Downtown Mall"
    },
    {
     "kind": "address",
@@ -206,7 +213,16 @@
     "exact_rank": null,
     "street_rank": null,
     "interp_state": "na",
-    "top": "Cairo SSS"
+    "top": "Cairo"
+   },
+   {
+    "kind": "address",
+    "query": "13B شارع الشهيد وائل عبد الجابر, القاهرة الجديدة",
+    "osm_id": "n6382884377",
+    "exact_rank": null,
+    "street_rank": null,
+    "interp_state": "ok",
+    "top": "مسجد الشهيد عبد المنعم رياض"
    },
    {
     "kind": "address",
@@ -219,21 +235,21 @@
    },
    {
     "kind": "address",
-    "query": "b61 شارع 233, Cairo",
-    "osm_id": "n12246167895",
+    "query": "District 1, Region 3 شارع 35, مدينة الشيخ زايد",
+    "osm_id": "n4805841724",
     "exact_rank": null,
     "street_rank": null,
-    "interp_state": "fail",
-    "top": "Cairo SSS"
+    "interp_state": "na",
+    "top": "District 1"
    },
    {
     "kind": "address",
     "query": "13` شارع اللبينى, Cairo",
     "osm_id": "n6766648981",
     "exact_rank": null,
-    "street_rank": null,
+    "street_rank": 6,
     "interp_state": "fail",
-    "top": "Cairo SSS"
+    "top": "Cairo"
    }
   ]
  },
@@ -245,7 +261,7 @@
     "osm_id": "n271613766",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Hilton Cairo Grand Nile"
+    "top": "Cairo Plaza"
    },
    {
     "kind": "named",
@@ -260,8 +276,8 @@
     "query": "Al Zahraa",
     "osm_id": "w376085481",
     "strict_rank": null,
-    "lenient_rank": 1,
-    "top": "Al-Zahraa"
+    "lenient_rank": 2,
+    "top": "Al-Zahraa Private Schools"
    },
    {
     "kind": "named",
@@ -273,11 +289,27 @@
    },
    {
     "kind": "named",
+    "query": "City Center",
+    "osm_id": "w755926168",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "City Center"
+   },
+   {
+    "kind": "named",
     "query": "Al Tawfiq",
     "osm_id": "w701533384",
     "strict_rank": null,
     "lenient_rank": null,
     "top": "Al Tawfiq Street"
+   },
+   {
+    "kind": "named",
+    "query": "Al Hada'ek",
+    "osm_id": "w712074894",
+    "strict_rank": null,
+    "lenient_rank": 8,
+    "top": "Al Hadaek Street"
    },
    {
     "kind": "named",
@@ -305,11 +337,11 @@
    },
    {
     "kind": "named",
-    "query": "Area R",
-    "osm_id": "w690453101",
+    "query": "Officer's Housing",
+    "osm_id": "w692556528",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Parking Area"
+    "top": "Officers Housing"
    },
    {
     "kind": "named",
@@ -335,7 +367,7 @@
     "osm_id": "n271613766",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Hilton Cairo Grand Nile"
+    "top": "Cairo Plaza"
    },
    {
     "kind": "named",
@@ -363,11 +395,11 @@
    },
    {
     "kind": "named",
-    "query": "Area R",
-    "osm_id": "w690453101",
+    "query": "Officer's Housing",
+    "osm_id": "w692556528",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Parking Area"
+    "top": "Officers Housing"
    },
    {
     "kind": "named",

@@ -1,16 +1,20 @@
 """In-place backfill of the category_* fields onto existing ``osm_places`` docs.
 
-Adding ``category_key`` / ``category_value`` / ``category_group`` to the mapping
-is additive, but docs indexed before that change have no values — so
-``/nearby?category=`` / ``?group=`` would miss them until they are re-ingested.
-This script fills them **in place**, reading each doc's ``tags`` (still stored in
-``_source`` even though the field is ``enabled: false``) and running the exact
-same :func:`shared.categories.classify` used at ingest and at query time — so the
-derivation can never drift. No reindex, no multi-hour PBF re-run.
+Adding ``category_key`` / ``category_value`` / ``category_group`` / ``category_text``
+to the mapping is additive, but docs indexed before that change have no values — so
+``/nearby?category=`` / ``?group=`` would miss them, and ``/autocomplete`` could not
+answer a type query like "metro", until they are re-ingested. This script fills them
+**in place**, reading each doc's ``tags`` (still stored in ``_source`` even though the
+field is ``enabled: false``) and running the exact same
+:func:`shared.categories.classify` / :func:`shared.categories.category_text` used at
+ingest and at query time — so the derivation can never drift. No reindex, no
+multi-hour PBF re-run.
 
-It is idempotent: by default it only touches docs with no ``category_group`` yet
-(``--all`` reprocesses every doc). It throttles between bulk batches so it doesn't
-starve live query serving. Safe to re-run and safe to interrupt.
+It is idempotent: by default it only touches docs with no ``category_text`` yet
+(``--all`` reprocesses every doc). Selecting on ``category_text`` — the newest of the
+four fields — means docs left behind by an earlier run of this script, which wrote
+only the three keyword fields, are still picked up. It throttles between bulk batches
+so it doesn't starve live query serving. Safe to re-run and safe to interrupt.
 
 Usage (inside a container on the compose network, or with PYTHONPATH=repo root):
 
@@ -31,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.helpers import async_bulk, async_scan
 
-from shared.categories import classify
+from shared.categories import category_text, classify
 from shared.config import ELASTICSEARCH_URL
 
 INDEX = "osm_places"
@@ -39,12 +43,31 @@ INDEX = "osm_places"
 
 async def backfill(batch_size: int, sleep_s: float, reprocess_all: bool) -> None:
     es = AsyncElasticsearch(ELASTICSEARCH_URL)
-    # A doc with any category_group value (including "") has already been done;
-    # missing-only selects docs that predate the field entirely.
+    # Missing-only = "has a type, but no category_text yet".
+    #
+    # Keyed on category_text (the newest field) rather than category_group, so
+    # docs written by an earlier run — which wrote only the three keyword fields
+    # — are still picked up. The category_key clause matters for both speed and
+    # idempotency: only ~400k of 3M docs carry a type tag, and `category_text` is
+    # empty for the rest. An empty string produces no tokens in a `text` field, so
+    # `exists` stays false however many times we write it — without this clause
+    # every run would rescan (and rewrite) all 3M docs forever.
+    #
+    # Edge case: a doc tagged *only* `healthcare=`/`cuisine=`/`station=` (which are
+    # in CATEGORY_TEXT_KEYS but not CATEGORY_KEYS) has an empty category_key yet a
+    # non-empty category_text. Rare — a lab or a subway platform almost always
+    # carries an `amenity`/`railway` tag too. Use `--all` to sweep those in.
     query = (
         {"match_all": {}}
         if reprocess_all
-        else {"bool": {"must_not": [{"exists": {"field": "category_group"}}]}}
+        else {
+            "bool": {
+                "must_not": [
+                    {"exists": {"field": "category_text"}},
+                    {"term": {"category_key": ""}},
+                ]
+            }
+        }
     )
 
     scanned = 0
@@ -72,7 +95,8 @@ async def backfill(batch_size: int, sleep_s: float, reprocess_all: bool) -> None
         ):
             scanned += 1
             src = doc.get("_source", {})
-            cat = classify(src.get("tags", {}), src.get("admin_level"))
+            tags = src.get("tags", {})
+            cat = classify(tags, src.get("admin_level"))
             actions.append(
                 {
                     "_op_type": "update",
@@ -85,6 +109,7 @@ async def backfill(batch_size: int, sleep_s: float, reprocess_all: bool) -> None
                         "category_key": cat.key or "",
                         "category_value": cat.value or "",
                         "category_group": cat.group or "",
+                        "category_text": category_text(tags),
                     },
                 }
             )

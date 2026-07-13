@@ -162,7 +162,7 @@ from shared.address import (
     extract_address_components,
     normalize_address_text,
 )
-from shared.categories import classify
+from shared.categories import category_text, classify
 from shared.es_mapping import MAPPING
 from shared.logging import get_logger
 
@@ -481,6 +481,10 @@ async def run():
                     "category_key": cat.key or "",
                     "category_value": cat.value or "",
                     "category_group": cat.group or "",
+                    # the type rendered as searchable EN+AR text, so /autocomplete
+                    # can answer "metro" / "مستشفى" — tags_text holds tag values
+                    # only, which never contain the word users actually type
+                    "category_text": category_text(tags),
                     # address
                     "has_address": bool(full_addr),
                     "full_address": full_addr,

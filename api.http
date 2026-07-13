@@ -70,11 +70,11 @@
 ###       BYPASS – not cacheable (describe/ai, or cache disabled)
 ###     Add  -i  (curl) or check response headers to watch it flip HIT on a repeat.
 
-#@gatewayUrl = http://localhost:8080
-#@apiKey = gk_5c63f22a_rfUC2bRzpUR8GYk1raYsg6fnRjcrmY-J
+@gatewayUrl = http://localhost:8080
+@apiKey = gk_5c63f22a_rfUC2bRzpUR8GYk1raYsg6fnRjcrmY-J
 
-@gatewayUrl = https://places.nourbyte.com/api
-@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
+#@gatewayUrl = https://places.nourbyte.com/api
+#@apiKey = gk_5e464d92_hOKluH0XC-yClI7IO_Yvwc401bNOS4Vm
 # Your tenant API key (create one in the console; shown once). Replace this.
 
 
@@ -127,7 +127,7 @@ X-API-Key: {{apiKey}}
 # ============================================================================
 
 ### First few characters
-GET {{gatewayUrl}}/autocomplete?q=fifth settlement
+GET {{gatewayUrl}}/autocomplete?q=metro
 X-API-Key: {{apiKey}}
 
 ###
@@ -145,7 +145,7 @@ X-API-Key: {{apiKey}}
 ###
 
 ### Geo-biased – prefer suggestions near downtown Cairo
-GET {{gatewayUrl}}/autocomplete?q=corn&lat=30.0444&lon=31.2357
+GET {{gatewayUrl}}/autocomplete?q=dokki metro&lat=30.0444&lon=31.2357
 X-API-Key: {{apiKey}}
 
 ###

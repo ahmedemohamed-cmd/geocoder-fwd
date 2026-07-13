@@ -9,15 +9,15 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| strict (same osm_id) | 88.7% | 97.5% | 98.7% |
-| lenient (name or ≤150 m) | 96.3% | 99.1% | 99.3% |
+| strict (same osm_id) | 86.8% | 96.9% | 98.4% |
+| lenient (name or ≤150 m) | 95.5% | 98.9% | 99.3% |
 
 ## Addresses (250)
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| exact (same osm_id) | 90.8% | 95.2% | 97.2% |
-| correct street | 96.4% | 97.6% | 98.0% |
+| exact (same osm_id) | 90.0% | 94.0% | 96.8% |
+| correct street | 95.6% | 96.8% | 98.4% |
 
 ## Interpolation probe (addresses, 250)
 
@@ -31,14 +31,14 @@ Each effort below is the `effort` query param: identical test set, identical ind
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| strict (same osm_id) | 88.9% | 97.5% | 98.5% |
-| lenient (name or ≤150 m) | 96.7% | 98.9% | 99.2% |
+| strict (same osm_id) | 86.7% | 96.8% | 98.3% |
+| lenient (name or ≤150 m) | 95.6% | 98.8% | 99.2% |
 
 ## Addresses (250)
 
 | metric | @1 | @5 | @10 |
 |---|---|---|---|
-| exact (same osm_id) | 93.2% | 97.6% | 99.2% |
+| exact (same osm_id) | 92.8% | 97.6% | 99.2% |
 | correct street | 99.6% | 100.0% | 100.0% |
 
 ## Interpolation probe (addresses, 250)

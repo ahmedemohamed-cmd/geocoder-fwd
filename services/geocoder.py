@@ -107,6 +107,12 @@ from shared.autocomplete import (
 from shared.autocomplete import (
     warm_from_es as ac_warm_from_es,
 )
+from shared.autocomplete import (
+    POPULARITY_CAP as _POPULARITY_CAP,
+)
+from shared.autocomplete import (
+    is_category_query as ac_is_category_query,
+)
 from shared.categories import classify
 from shared.config import (
     ELASTICSEARCH_URL,
@@ -193,6 +199,10 @@ def _schedule_enrichment(
 _AC_MAX_DOCS = 100_000  # top-ranked docs to keep in Redis
 _AC_BATCH_SIZE = 2_000  # ES fetch size per round-trip
 _AC_REWARM_SECS = 600  # re-warm interval (10 minutes)
+# Serve /autocomplete from the Redis prefix index when it is confident. Set false
+# to route every query to Elasticsearch — a kill switch, and the control arm when
+# A/B-ing the fast path's effect on recall.
+_AC_REDIS_FAST_PATH = os.getenv("AC_REDIS_FAST_PATH", "true").lower() != "false"
 
 
 async def _warm_autocomplete():
@@ -1264,21 +1274,44 @@ async def autocomplete(
     lon: float | None = Query(None, description="Longitude for geo-bias"),
     limit: int = Query(7, ge=1, le=20, description="Max suggestions"),
 ):
-    """Fast prefix-based autocomplete backed by Redis sorted sets.
+    """Fast prefix-based autocomplete, Redis fast path over an Elasticsearch base.
 
-    Designed for keystroke-by-keystroke suggestions.  Lookups hit a
-    pre-built Redis prefix index (~1-3 ms) with automatic fallback to
-    Elasticsearch edge-ngram queries if Redis is unavailable.
+    Designed for keystroke-by-keystroke suggestions.  The Redis prefix index
+    (~1-3 ms) answers only when it is *confident*: it found ``limit`` genuine
+    matches for the full query and matched at least at whole-name-prefix strength.
+    Anything less — a thin bucket, a weak match, a category query like "metro"
+    that no name prefix satisfies — defers to the Elasticsearch edge-ngram query
+    below, which indexes the whole corpus (Redis holds only the top 100k by
+    ``offline_rank``) and can additionally match on category.
 
-    Ranking is driven by ``offline_rank`` and ``popularity`` (updated
-    via ``/feedback``).  When ``lat``/``lon`` are provided, geo-local
-    results from the same geohash-4 cell are preferred.
+    This gate is load-bearing.  Redis used to answer whenever it returned
+    *anything*, and because it silently truncated the query to a 2-char prefix it
+    always returned something — so ES was never consulted and ``q=metro`` came
+    back with MEDITOWN and Mena Garden City.
+
+    Ranking blends match quality, ``offline_rank``, ``popularity`` (updated via
+    ``/feedback``) and, when ``lat``/``lon`` are given, a gaussian distance decay
+    matching the ES one.
     """
-    # ── Redis autocomplete (primary path) ──────────────────────────────
-    if redis_pool is not None:
+    # ── Redis autocomplete (fast path — only when confident) ────────────
+    # AC_REDIS_FAST_PATH=false forces every query to Elasticsearch. Kept as a
+    # kill switch (Redis index stale or evicted → turn it off, lose latency not
+    # correctness) and as the control arm for A/B-ing the fast path's effect on
+    # recall with tests/run_autocomplete_recall.py.
+    # Is the user naming a place, or a *kind* of place? Decided once, and it
+    # drives two things: whether Redis may answer at all, and how hard the ES
+    # query leans on `category_text`.
+    is_category = ac_is_category_query(q)
+
+    # A type query ("metro", "مستشفى") must skip Redis: the prefix index holds
+    # names only, so it would confidently answer with the Metro supermarket chain
+    # and never surface a station. Only ES sees `category_text`.
+    if redis_pool is not None and _AC_REDIS_FAST_PATH and not is_category:
         try:
-            redis_hits = await ac_query(redis_pool, q, limit=limit, lat=lat, lon=lon)
-            if redis_hits:
+            redis_hits, confident = await ac_query(
+                redis_pool, q, limit=limit, lat=lat, lon=lon
+            )
+            if confident:
                 request.state.result_count = len(redis_hits)
                 return {"source": "redis", "results": redis_hits}
         except Exception as e:
@@ -1286,6 +1319,26 @@ async def autocomplete(
 
     # ── Elasticsearch edge-ngram autocomplete (fallback) ────────────────
     q_norm = normalize_address_text(q)
+
+    # Type search ("metro", "مستشفى", "pharmacy"). The boost is conditional
+    # because the two cases genuinely want different answers:
+    #
+    #   "Metro Market"  → a name. category_text stays at ^1 so a place that merely
+    #                     *is* a supermarket never displaces one actually named
+    #                     that.
+    #   "metro"         → a kind. `is_category_query` already established this, so
+    #                     lean on category_text hard enough that the 88 stations
+    #                     can compete with the ~10 shops literally called "Metro".
+    #                     At ^1 the shops saturate the whole page.
+    #
+    # 20 is measured, not guessed (mean category hit-rate over the probe set:
+    # ^1 → 62%, ^20 → 96%, ^30 → 100%). It is deliberately NOT 30: at 30 "metro"
+    # returns only stations and the Metro supermarket chain disappears, which
+    # scores better only because the probe declines to credit name matches. At 20
+    # the page carries both readings of an genuinely ambiguous word — two Metro
+    # stores and then the stations. A name match must never be *erased* by a type
+    # match, only shared with it.
+    category_boost = 20 if is_category else 1
 
     should: list[dict] = [
         {
@@ -1298,6 +1351,7 @@ async def autocomplete(
                     "addr_street.autocomplete^3",
                     "addr_city.autocomplete^2",
                     "full_address.autocomplete^2",
+                    f"category_text.autocomplete^{category_boost}",
                 ],
                 "type": "best_fields",
             }
@@ -1413,7 +1467,6 @@ async def autocomplete(
 
 
 # ── feedback loop ─────────────────────────────────────────────────────────
-_POPULARITY_CAP = 1000.0
 
 
 @app.post("/feedback")

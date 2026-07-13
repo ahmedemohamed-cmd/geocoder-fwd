@@ -287,3 +287,179 @@ def classify(tags: dict, admin_level: int | None = None) -> Category:
 
     group = GROUP_BY_KEY_VALUE.get((key, value)) or GROUP_BY_KEY.get(key)
     return Category(key=key, value=value, group=group, is_poi=True)
+
+
+# ── searchable category text ─────────────────────────────────────────────────
+#
+# `build_text` (shared/embeddings.py) concatenates tag *values* only — tag keys
+# are never emitted — so a Cairo metro station tagged
+# ``{name: Sadat, railway: station, station: subway}`` yields the text
+# "Sadat station subway". The token "metro" never appears, and a user typing
+# "metro" can never reach it. `category_text` closes that gap: it renders a
+# place's *type* as natural search vocabulary, in English and Arabic.
+#
+# Indexed into the `category_text` field (see shared/es_mapping.py) and queried
+# at a deliberately LOW boost by /autocomplete, so a name match always outranks
+# a type match — users searching "Metro" usually want the supermarket chain.
+
+# Tag keys that denote a feature's *type*. Deliberately narrower than
+# CATEGORY_KEYS: `building`, `place`, `highway`, `landuse`, `natural` and
+# `waterway` are excluded because their values ("residential", "neighbourhood",
+# "yes") are noise for type search rather than things people search *for*.
+#
+# `station`, `public_transport`, `healthcare`, `emergency` and `cuisine` are
+# included here but are absent from CATEGORY_KEYS. Reading the raw tag dict lets
+# us see `station=subway` WITHOUT touching `classify()` — adding keys there would
+# silently change how /nearby buckets existing places.
+CATEGORY_TEXT_KEYS = (
+    "amenity",
+    "shop",
+    "tourism",
+    "leisure",
+    "office",
+    "historic",
+    "healthcare",
+    "emergency",
+    "cuisine",
+    "railway",
+    "station",
+    "public_transport",
+    "aeroway",
+)
+
+# Values that carry no meaning on their own (`building=yes`).
+_JUNK_VALUES = frozenset({"yes", "no", "true", "false", "unknown", "none"})
+
+# "key=value" → extra search terms. The raw value is always emitted anyway
+# (`amenity=pharmacy` → "pharmacy"), so this map only needs to add *aliases* and
+# non-English vocabulary.
+CATEGORY_SYNONYMS: dict[str, list[str]] = {
+    # transit — the motivating case
+    "station=subway": ["metro", "subway", "underground", "metro station", "مترو", "محطة مترو", "مترو الأنفاق"],
+    "railway=station": ["train station", "railway station", "محطة", "محطة قطار", "قطار", "gare"],
+    "railway=subway_entrance": ["metro", "metro entrance", "subway entrance", "مترو", "مدخل مترو"],
+    "railway=halt": ["train stop", "محطة"],
+    "railway=tram_stop": ["tram", "ترام", "محطة ترام"],
+    "public_transport=station": ["station", "محطة"],
+    "public_transport=stop_position": ["stop", "موقف"],
+    "amenity=bus_station": ["bus station", "bus", "أتوبيس", "موقف أتوبيس", "محطة أتوبيس"],
+    "highway=bus_stop": ["bus stop", "موقف أتوبيس"],
+    "aeroway=aerodrome": ["airport", "مطار", "aéroport"],
+    "aeroway=terminal": ["airport terminal", "صالة مطار", "مطار"],
+    # health
+    "amenity=hospital": ["hospital", "مستشفى", "مستشفي", "hôpital"],
+    "amenity=clinic": ["clinic", "عيادة", "clinique"],
+    "amenity=doctors": ["doctor", "طبيب", "عيادة"],
+    "amenity=pharmacy": ["pharmacy", "chemist", "صيدلية", "pharmacie"],
+    "amenity=dentist": ["dentist", "طبيب أسنان", "أسنان"],
+    "healthcare=laboratory": ["lab", "laboratory", "معمل", "مختبر", "تحاليل"],
+    # food & drink
+    "amenity=restaurant": ["restaurant", "مطعم", "أكل"],
+    "amenity=fast_food": ["fast food", "takeaway", "وجبات سريعة", "مطعم"],
+    "amenity=cafe": ["cafe", "coffee", "coffee shop", "مقهى", "كافيه", "قهوة"],
+    "amenity=bar": ["bar", "بار"],
+    "amenity=food_court": ["food court", "مطاعم"],
+    "shop=bakery": ["bakery", "مخبز", "فرن", "boulangerie"],
+    "shop=pastry": ["pastry", "حلواني", "حلويات"],
+    # shopping
+    "shop=supermarket": ["supermarket", "grocery", "سوبر ماركت", "بقالة", "supermarché"],
+    "shop=convenience": ["convenience store", "grocery", "بقالة", "ميني ماركت"],
+    "shop=mall": ["mall", "shopping mall", "مول", "مركز تجاري"],
+    "shop=clothes": ["clothes", "clothing", "ملابس"],
+    "shop=butcher": ["butcher", "جزارة", "لحوم"],
+    "shop=greengrocer": ["greengrocer", "خضار", "فاكهة"],
+    "shop=mobile_phone": ["mobile", "phone shop", "محمول", "موبايل"],
+    "shop=car_repair": ["car repair", "mechanic", "ورشة", "ميكانيكي"],
+    # money
+    "amenity=bank": ["bank", "بنك", "مصرف", "banque"],
+    "amenity=atm": ["atm", "cash machine", "صراف آلي", "ماكينة صراف"],
+    "amenity=bureau_de_change": ["exchange", "money exchange", "صرافة"],
+    # fuel & car
+    "amenity=fuel": ["fuel", "petrol", "gas station", "بنزين", "محطة بنزين", "وقود"],
+    "amenity=parking": ["parking", "car park", "موقف", "جراج", "parking"],
+    "amenity=car_wash": ["car wash", "غسيل سيارات"],
+    # education
+    "amenity=school": ["school", "مدرسة", "école"],
+    "amenity=kindergarten": ["kindergarten", "nursery", "حضانة", "روضة"],
+    "amenity=university": ["university", "جامعة", "université"],
+    "amenity=college": ["college", "institute", "معهد", "كلية"],
+    "amenity=library": ["library", "مكتبة"],
+    # worship
+    "amenity=place_of_worship": ["mosque", "masjid", "church", "مسجد", "جامع", "كنيسة", "زاوية"],
+    # public & civic
+    "amenity=police": ["police", "police station", "شرطة", "قسم شرطة", "بوليس"],
+    "amenity=fire_station": ["fire station", "مطافي", "الحماية المدنية"],
+    "amenity=post_office": ["post office", "بريد", "مكتب بريد"],
+    "amenity=townhall": ["town hall", "مجلس المدينة", "حي"],
+    "amenity=courthouse": ["court", "محكمة"],
+    "amenity=embassy": ["embassy", "سفارة", "ambassade"],
+    "office=government": ["government office", "مصلحة حكومية", "إدارة"],
+    "amenity=toilets": ["toilet", "wc", "حمام", "دورة مياه"],
+    # leisure / tourism
+    "leisure=park": ["park", "حديقة", "منتزه", "parc"],
+    "leisure=garden": ["garden", "حديقة"],
+    "leisure=stadium": ["stadium", "استاد", "ملعب"],
+    "leisure=fitness_centre": ["gym", "fitness", "جيم", "صالة رياضية"],
+    "leisure=sports_centre": ["sports centre", "نادي", "مركز رياضي"],
+    "leisure=pitch": ["pitch", "playground", "ملعب"],
+    "tourism=hotel": ["hotel", "فندق", "hôtel"],
+    "tourism=hostel": ["hostel", "نزل"],
+    "tourism=museum": ["museum", "متحف", "musée"],
+    "tourism=attraction": ["attraction", "معلم سياحي"],
+    "tourism=viewpoint": ["viewpoint", "مطل"],
+    "amenity=cinema": ["cinema", "movie theatre", "سينما"],
+    "amenity=theatre": ["theatre", "مسرح"],
+    "historic=monument": ["monument", "نصب تذكاري", "أثر"],
+    "historic=archaeological_site": ["archaeological site", "ruins", "آثار", "موقع أثري"],
+}
+
+
+# Every word a user might type to mean "a place of this type", derived from the
+# same map that builds `category_text` so the two can never drift. Used by
+# /autocomplete to recognise a *type* query and route it to Elasticsearch — the
+# Redis prefix index holds names only, so left to itself it answers "metro" with
+# the Metro supermarket chain and never surfaces a single station.
+CATEGORY_QUERY_TERMS: frozenset[str] = frozenset(
+    term.lower()
+    for terms in CATEGORY_SYNONYMS.values()
+    for term in terms
+) | frozenset(
+    key.split("=", 1)[1].replace("_", " ").lower() for key in CATEGORY_SYNONYMS
+)
+
+
+def category_text(tags: dict) -> str:
+    """Render a place's *type* as searchable text (English + Arabic).
+
+    Pure function of the raw tag dict, mirroring `classify`'s contract. Emits
+    each type-denoting tag value (underscores spaced out, so ``fast_food`` is
+    reachable as "fast food") plus any aliases from `CATEGORY_SYNONYMS`.
+
+    ``{"name": "Sadat", "railway": "station", "station": "subway"}``
+        → ``"station train station railway station محطة … subway metro underground مترو …"``
+
+    Order is stable and duplicates are dropped so the output is deterministic.
+    """
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    def add(term: str) -> None:
+        t = term.strip()
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            terms.append(t)
+
+    for key in CATEGORY_TEXT_KEYS:
+        value = tags.get(key)
+        if not isinstance(value, str) or not value:
+            continue
+        # Multi-values ("cuisine=pizza;burger") and junk ("building=yes").
+        for v in value.split(";"):
+            v = v.strip()
+            if not v or v.lower() in _JUNK_VALUES:
+                continue
+            add(v.replace("_", " "))
+            for syn in CATEGORY_SYNONYMS.get(f"{key}={v}", ()):
+                add(syn)
+
+    return " ".join(terms)
