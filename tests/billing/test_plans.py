@@ -6,8 +6,14 @@ from conftest import admin_token, bearer, make_tenant
 async def test_list_seeded_plans(cp_client):
     atok = await admin_token(cp_client)
     plans = (await cp_client.get("/admin/plans", headers=bearer(atok))).json()
-    ids = {p["id"] for p in plans}
-    assert {"free", "starter", "pro"} <= ids
+    by_id = {p["id"]: p for p in plans}
+    assert {"free", "starter", "pro", "scale"} <= set(by_id)
+    # 2026-07 repricing: quotas are credits, overage is ¢/credit
+    assert by_id["free"]["monthly_quota"] == 10_000 and by_id["free"]["hard_cap"]
+    assert by_id["starter"]["monthly_quota"] == 100_000
+    assert by_id["starter"]["overage_cents_per_unit"] == 0.04
+    assert by_id["pro"]["monthly_quota"] == 1_500_000
+    assert by_id["scale"]["base_price_cents"] == 99900
 
 
 async def test_create_get_update_delete_plan(cp_client):

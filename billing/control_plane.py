@@ -10,11 +10,19 @@ from __future__ import annotations
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Path as FastApiPath
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import apisix_admin, billing_engine, config, repo, security, usage, zitadel_admin
+from . import apisix_admin, billing_engine, config, repo, security, usage, weights, zitadel_admin
 
 _log = logging.getLogger("billing.control_plane")
+
+
+async def _projected_request_cap(pool, quota_credits: int) -> int:
+    """Raw-request limit projected to APISIX limit-count for hard-cap plans.
+    APISIX counts requests, not credits, so the backstop assumes every call is
+    the cheapest endpoint; the credit quota in Postgres stays authoritative."""
+    return weights.projected_request_cap(await weights.get_weights(pool), quota_credits)
 
 
 async def _sync_tenant(pool, tenant_id: str) -> None:
@@ -33,7 +41,7 @@ async def _sync_tenant(pool, tenant_id: str) -> None:
         plan = await repo.tenant_with_plan(pool, tenant_id)
         in_group = await apisix_admin.ensure_consumer_group(
             tenant_id,
-            quota=int(plan.get("monthly_quota") or 0),
+            quota=await _projected_request_cap(pool, int(plan.get("monthly_quota") or 0)),
             hard_cap=bool(plan.get("hard_cap")),
         )
         for k in keys:
@@ -85,6 +93,8 @@ from .models import (
     TenantUserUpdate,
     TokenResponse,
     UsageHistoryRow,
+    WeightOut,
+    WeightUpsert,
 )
 
 router_tag_admin = "admin"
@@ -552,6 +562,33 @@ def build_app(pool=None, redis=None) -> FastAPI:
             raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
         return Response(status_code=204)
 
+    # ── admin: endpoint credit weights ───────────────────────────────────────
+    @app.get("/admin/weights", response_model=list[WeightOut], tags=[router_tag_admin])
+    async def list_weights(_: Identity = Depends(require_admin), pool=Depends(get_pool)):
+        return await repo.list_weights(pool)
+
+    @app.put("/admin/weights/{endpoint}", response_model=WeightOut, tags=[router_tag_admin])
+    async def upsert_weight(
+        body: WeightUpsert,
+        endpoint: str = FastApiPath(pattern=r"^[a-z0-9_-]+$", max_length=60),
+        _: Identity = Depends(require_admin),
+        pool=Depends(get_pool),
+    ):
+        rec = await repo.upsert_weight(pool, endpoint, body.milli_credits)
+        weights.invalidate()  # other processes converge within the cache TTL
+        return rec
+
+    @app.delete("/admin/weights/{endpoint}", status_code=204, tags=[router_tag_admin])
+    async def delete_weight(
+        endpoint: str, _: Identity = Depends(require_admin), pool=Depends(get_pool)
+    ):
+        try:
+            await repo.delete_weight(pool, endpoint)
+        except repo.NotFound as e:
+            raise _not_found(e) from e
+        weights.invalidate()
+        return Response(status_code=204)
+
     # ── admin: billing ───────────────────────────────────────────────────────
     @app.post("/admin/billing/run", response_model=list[InvoiceOut], tags=[router_tag_admin])
     async def run_billing(
@@ -621,7 +658,9 @@ def build_app(pool=None, redis=None) -> FastAPI:
                 plan = await repo.tenant_with_plan(pool, ident.tenant_id)
                 in_group = await apisix_admin.ensure_consumer_group(
                     ident.tenant_id,
-                    quota=int(plan.get("monthly_quota") or 0),
+                    quota=await _projected_request_cap(
+                        pool, int(plan.get("monthly_quota") or 0)
+                    ),
                     hard_cap=bool(plan.get("hard_cap")),
                 )
                 await apisix_admin.upsert_consumer(
@@ -668,7 +707,9 @@ def build_app(pool=None, redis=None) -> FastAPI:
                     plan = await repo.tenant_with_plan(pool, ident.tenant_id)
                     in_group = await apisix_admin.ensure_consumer_group(
                         ident.tenant_id,
-                        quota=int(plan.get("monthly_quota") or 0),
+                        quota=await _projected_request_cap(
+                            pool, int(plan.get("monthly_quota") or 0)
+                        ),
                         hard_cap=bool(plan.get("hard_cap")),
                     )
                     await apisix_admin.upsert_consumer(
@@ -709,20 +750,27 @@ def build_app(pool=None, redis=None) -> FastAPI:
         await usage.flush_events(pool, redis)
         period, _day = usage.now_parts()
         plan = await repo.tenant_with_plan(pool, ident.tenant_id)
-        quota = int(plan.get("monthly_quota") or 0)
-        total = await repo.usage_total_for_period(pool, ident.tenant_id, period)
+        quota = int(plan.get("monthly_quota") or 0)  # credits
+        totals = await repo.usage_totals_for_period(pool, ident.tenant_id, period)
+        credits_used = totals["milli"] / 1000
         by_key = await repo.usage_by_key_for_period(pool, ident.tenant_id, period)
         per_key = [
-            KeyUsage(key_id=k["id"], key_name=k["name"], requests=by_key.get(k["id"], 0))
+            KeyUsage(
+                key_id=k["id"],
+                key_name=k["name"],
+                requests=by_key.get(k["id"], {}).get("requests", 0),
+                credits=by_key.get(k["id"], {}).get("milli", 0) / 1000,
+            )
             for k in await repo.list_keys(pool, ident.tenant_id)
         ]
         return CurrentUsage(
             tenant_id=ident.tenant_id,
             period=period,
-            requests=total,
+            requests=totals["requests"],
+            credits_used=credits_used,
             quota=quota,
-            remaining=max(0, quota - total),
-            over_quota=total > quota,
+            remaining=max(0, quota - credits_used),
+            over_quota=credits_used > quota,
             plan_id=plan.get("plan_id"),
             per_key=per_key,
         )
@@ -741,7 +789,11 @@ def build_app(pool=None, redis=None) -> FastAPI:
         )
         return [
             UsageHistoryRow(
-                period=r["period"], day=r["day"], endpoint=r["endpoint"], requests=r["requests"]
+                period=r["period"],
+                day=r["day"],
+                endpoint=r["endpoint"],
+                requests=r["requests"],
+                credits=int(r["milli"]) / 1000,
             )
             for r in rows
         ]
@@ -774,6 +826,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
         except Exception:
             return {"recorded": 0}
         entries = payload if isinstance(payload, list) else [payload]
+        w = await weights.get_weights(pool)  # cached; one DB read per process per TTL
         recorded = 0
         for e in entries:
             consumer = e.get("consumer")
@@ -791,14 +844,21 @@ def build_app(pool=None, redis=None) -> FastAPI:
                 # this is the durable backstop. Matched on full path so
                 # /traffic/edge (a query) still bills.
                 continue
-            endpoint = uri.strip("/").split("/")[0]
+            # first path segment, query string stripped (weight lookup key)
+            endpoint = uri.split("?", 1)[0].strip("/").split("/")[0]
             key_id = apisix_admin.key_id_from_consumer(consumer)
             if not key_id:
                 continue
             tenant_id = await _tenant_for_key(pool, key_id)
             if not tenant_id:
                 continue
-            await usage.record(redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint)
+            await usage.record(
+                redis,
+                tenant_id=tenant_id,
+                key_id=key_id,
+                endpoint=endpoint,
+                milli=weights.weight_for(w, endpoint),
+            )
             recorded += 1
         return {"recorded": recorded}
 

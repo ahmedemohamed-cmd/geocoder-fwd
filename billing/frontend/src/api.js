@@ -19,6 +19,7 @@ export function makeApi(token, base) {
   return {
     get: (p) => req("GET", p),
     post: (p, b) => req("POST", p, b),
+    put: (p, b) => req("PUT", p, b),
     patch: (p, b) => req("PATCH", p, b),
     del: (p) => req("DELETE", p),
   };

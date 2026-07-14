@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import PlansCard from "./PlansCard.jsx";
+import WeightsCard from "./WeightsCard.jsx";
 import AdminsCard from "./AdminsCard.jsx";
 import AccountCard from "./AccountCard.jsx";
 import Tabs from "./Tabs.jsx";
@@ -7,6 +8,7 @@ import Tabs from "./Tabs.jsx";
 const TABS = [
   { id: "tenants", label: "Tenants" },
   { id: "plans", label: "Plans" },
+  { id: "weights", label: "Weights" },
   { id: "admins", label: "Admins" },
   { id: "account", label: "Account" },
 ];
@@ -242,12 +244,12 @@ export default function AdminDashboard({ api }) {
 
             <h3>Invoices</h3>
             <table>
-              <thead><tr><th>Period</th><th>Requests</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Period</th><th>Credits</th><th>Amount</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {invoices.map((i) => (
                   <tr key={i.id}>
                     <td>{i.period}</td>
-                    <td>{i.total_requests}</td>
+                    <td>{(i.total_credits ?? i.total_requests).toLocaleString()}</td>
                     <td>${(i.amount_cents / 100).toFixed(2)}</td>
                     <td><span className={`pill ${i.status}`}>{i.status}</span></td>
                     <td>{i.status === "pending" &&
@@ -263,6 +265,9 @@ export default function AdminDashboard({ api }) {
 
       {tab === "plans" && (
         <div className="grid single"><PlansCard api={api} onChange={setPlans} /></div>
+      )}
+      {tab === "weights" && (
+        <div className="grid single"><WeightsCard api={api} /></div>
       )}
       {tab === "admins" && (
         <div className="grid single"><AdminsCard api={api} /></div>

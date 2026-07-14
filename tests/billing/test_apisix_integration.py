@@ -46,8 +46,9 @@ async def test_usage_sink_records_served_only(cp_client, pool, redis):
     assert r.json()["recorded"] == 1  # only the served, known-key request
 
     period, _ = usage.now_parts()
-    assert await usage.get_tenant_live(redis, tenant["id"], period) == 1
-    assert await usage.get_key_live(redis, key["id"], period) == 1
+    # live counters hold milli-credits; geocode = 1 credit = 1000
+    assert await usage.get_tenant_live(redis, tenant["id"], period) == 1000
+    assert await usage.get_key_live(redis, key["id"], period) == 1000
 
     # and it surfaces through the tenant's real-time usage endpoint
     cur = await cp_client.get("/usage/current", headers=bearer(ttok))

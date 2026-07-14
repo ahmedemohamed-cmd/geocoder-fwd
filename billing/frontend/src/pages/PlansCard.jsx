@@ -68,7 +68,7 @@ export default function PlansCard({ api, onChange }) {
               <td>{p.name}</td>
               <td>{p.monthly_quota.toLocaleString()}</td>
               <td>${(p.base_price_cents / 100).toFixed(2)}</td>
-              <td>{p.overage_cents_per_unit}¢/req</td>
+              <td>{p.overage_cents_per_unit}¢/credit</td>
               <td>{p.hard_cap ? "hard" : "soft"}</td>
               <td>
                 <button onClick={() => edit(p)}>Edit</button>
@@ -88,7 +88,7 @@ export default function PlansCard({ api, onChange }) {
         )}
         <input placeholder="Display name" value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <label className="field">Monthly quota (included requests)
+        <label className="field">Monthly quota (included credits)
           <input type="number" min="0" value={form.monthly_quota}
             onChange={(e) => setForm({ ...form, monthly_quota: e.target.value })} required />
         </label>
@@ -96,8 +96,8 @@ export default function PlansCard({ api, onChange }) {
           <input type="number" min="0" step="0.01" value={form.base_dollars}
             onChange={(e) => setForm({ ...form, base_dollars: e.target.value })} required />
         </label>
-        <label className="field">Overage (¢ per request over quota)
-          <input type="number" min="0" step="0.01" value={form.overage_cents_per_unit}
+        <label className="field">Overage (¢ per credit over quota — 0.04 = $0.40/1k credits)
+          <input type="number" min="0" step="0.001" value={form.overage_cents_per_unit}
             onChange={(e) => setForm({ ...form, overage_cents_per_unit: e.target.value })} required />
         </label>
         <label className="check">

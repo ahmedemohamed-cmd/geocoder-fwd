@@ -16,33 +16,83 @@ async def test_flush_events_aggregates_into_rollups(cp_client, gw_client, pool, 
 
     processed = await usage.flush_events(pool, redis)
     assert processed == 5
-    total = await pool.fetchval(
-        "SELECT SUM(count)::bigint FROM usage_rollups WHERE key_id=$1", key["id"]
+    row = await pool.fetchrow(
+        "SELECT SUM(count)::bigint AS milli, SUM(requests)::bigint AS req "
+        "FROM usage_rollups WHERE key_id=$1",
+        key["id"],
     )
-    assert total == 5
+    assert row["milli"] == 5000  # 5 geocode calls × 1 credit (1000 milli)
+    assert row["req"] == 5
     # idempotent drain — nothing left to process
     assert await usage.flush_events(pool, redis) == 0
 
 
-# ── pricing maths ────────────────────────────────────────────────────────────
+async def test_flush_handles_pre_credit_events(pool, redis, cp_client):
+    """Events buffered by pre-credits code lack the "m" field → 1 credit each."""
+    _, ttok = await make_tenant(cp_client, admin_email="legacy@acme.test", plan_id="starter")
+    key = await create_key(cp_client, ttok)
+    tenant_id = key["tenant_id"]
+    period, day = usage.now_parts()
+    import json as _json
+
+    from billing import config as _config
+
+    await redis.rpush(
+        _config.USAGE_EVENTS_LIST,
+        _json.dumps({"t": tenant_id, "k": key["id"], "e": "geocode", "p": period, "d": day}),
+    )
+    assert await usage.flush_events(pool, redis) == 1
+    row = await pool.fetchrow(
+        "SELECT count, requests FROM usage_rollups WHERE key_id=$1", key["id"]
+    )
+    assert row["count"] == 1000 and row["requests"] == 1
+
+
+# ── pricing maths (credits; counters in milli-credits) ───────────────────────
 def test_compute_charge_within_quota():
     amount, items = compute_charge(
-        total_requests=100, base_price_cents=2900, overage_cents_per_unit=0.05, monthly_quota=50000
+        total_milli_credits=100_000,  # 100 credits
+        base_price_cents=2900,
+        overage_cents_per_credit=0.05,
+        monthly_quota_credits=50000,
     )
     assert amount == 2900
     assert items[0]["amount_cents"] == 2900
 
 
 def test_compute_charge_with_overage():
-    # 60000 requests, 50000 included, 0.05c each over → 10000 * 0.05 = 500c
+    # 60000 credits used, 50000 included, 0.05c per credit over → 10000 * 0.05 = 500c
     amount, items = compute_charge(
-        total_requests=60000,
+        total_milli_credits=60_000_000,
         base_price_cents=2900,
-        overage_cents_per_unit=0.05,
-        monthly_quota=50000,
+        overage_cents_per_credit=0.05,
+        monthly_quota_credits=50000,
     )
     assert amount == 2900 + 500
     assert items[-1]["quantity"] == 10000
+
+
+def test_compute_charge_starter_plan_math():
+    # 101k credits on starter (100k included, 0.04c/credit) → 2900 + ceil(1000×0.04) = 2940
+    amount, _ = compute_charge(
+        total_milli_credits=101_000_000,
+        base_price_cents=2900,
+        overage_cents_per_credit=0.04,
+        monthly_quota_credits=100_000,
+    )
+    assert amount == 2940
+
+
+def test_compute_charge_partial_credit_rounds_up():
+    # 250 milli (one autocomplete) over quota bills as a whole credit
+    amount, items = compute_charge(
+        total_milli_credits=10_000_250,
+        base_price_cents=0,
+        overage_cents_per_credit=1.0,
+        monthly_quota_credits=10_000,
+    )
+    assert amount == 1
+    assert items[-1]["quantity"] == 1
 
 
 # ── end-to-end billing ───────────────────────────────────────────────────────
@@ -61,6 +111,7 @@ async def test_billing_run_marks_and_pays(cp_client, gw_client, pool, redis):
     assert run.status_code == 200
     inv = next(i for i in run.json() if i["tenant_id"] == tenant["id"])
     assert inv["total_requests"] == 5
+    assert inv["total_credits"] == 5.0  # geocode = 1 credit/request
     assert inv["amount_cents"] == 1030
     assert inv["status"] == "pending"
 
@@ -98,6 +149,7 @@ async def test_usage_history_report(cp_client, gw_client, pool, redis):
     assert rep.status_code == 200
     rows = rep.json()
     assert sum(r["requests"] for r in rows) == 4
+    assert sum(r["credits"] for r in rows) == 4.0  # geocode = 1 credit/request
     assert all(r["period"] == period for r in rows)
     assert rows[0]["endpoint"] == "geocode"
 

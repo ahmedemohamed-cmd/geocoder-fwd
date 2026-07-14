@@ -368,10 +368,11 @@ async def get_key_by_hash(pool, key_hash: str) -> dict | None:
     return _row(rec)
 
 
-# ── usage history (durable rollups) ──────────────────────────────────────────
+# ── usage history (durable rollups; count = milli-credits) ───────────────────
 async def usage_history(pool, tenant_id: str, *, period_from: str, period_to: str) -> list[dict]:
     rows = await pool.fetch(
-        """SELECT period, day::text AS day, endpoint, SUM(count)::bigint AS requests
+        """SELECT period, day::text AS day, endpoint,
+                  SUM(requests)::bigint AS requests, SUM(count)::bigint AS milli
              FROM usage_rollups
             WHERE tenant_id=$1 AND period BETWEEN $2 AND $3
          GROUP BY period, day, endpoint
@@ -383,24 +384,29 @@ async def usage_history(pool, tenant_id: str, *, period_from: str, period_to: st
     return [dict(r) for r in rows]
 
 
-async def usage_total_for_period(pool, tenant_id: str, period: str) -> int:
-    val = await pool.fetchval(
-        "SELECT COALESCE(SUM(count),0)::bigint FROM usage_rollups WHERE tenant_id=$1 AND period=$2",
+async def usage_totals_for_period(pool, tenant_id: str, period: str) -> dict[str, int]:
+    """{"milli": milli-credits, "requests": raw requests} for the period."""
+    rec = await pool.fetchrow(
+        """SELECT COALESCE(SUM(count),0)::bigint AS milli,
+                  COALESCE(SUM(requests),0)::bigint AS requests
+             FROM usage_rollups WHERE tenant_id=$1 AND period=$2""",
         tenant_id,
         period,
     )
-    return int(val or 0)
+    return {"milli": int(rec["milli"]), "requests": int(rec["requests"])}
 
 
-async def usage_by_key_for_period(pool, tenant_id: str, period: str) -> dict[str, int]:
-    """Durable per-key request counts for the period (from Postgres rollups)."""
+async def usage_by_key_for_period(pool, tenant_id: str, period: str) -> dict[str, dict[str, int]]:
+    """Durable per-key usage for the period: {key_id: {milli, requests}}."""
     rows = await pool.fetch(
-        "SELECT key_id, SUM(count)::bigint AS c FROM usage_rollups "
-        "WHERE tenant_id=$1 AND period=$2 GROUP BY key_id",
+        """SELECT key_id, SUM(count)::bigint AS milli, SUM(requests)::bigint AS requests
+             FROM usage_rollups WHERE tenant_id=$1 AND period=$2 GROUP BY key_id""",
         tenant_id,
         period,
     )
-    return {str(r["key_id"]): int(r["c"]) for r in rows}
+    return {
+        str(r["key_id"]): {"milli": int(r["milli"]), "requests": int(r["requests"])} for r in rows
+    }
 
 
 # ── invoices ─────────────────────────────────────────────────────────────────
@@ -410,22 +416,26 @@ async def upsert_invoice(
     tenant_id: str,
     period: str,
     total_requests: int,
+    total_milli_credits: int,
     amount_cents: int,
     line_items: list[dict],
 ) -> dict:
     rec = await pool.fetchrow(
-        """INSERT INTO invoices (tenant_id, period, total_requests, amount_cents, line_items)
-           VALUES ($1,$2,$3,$4,$5)
+        """INSERT INTO invoices (tenant_id, period, total_requests, total_milli_credits,
+                                 amount_cents, line_items)
+           VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (tenant_id, period) DO UPDATE
-             SET total_requests = EXCLUDED.total_requests,
-                 amount_cents   = EXCLUDED.amount_cents,
-                 line_items     = EXCLUDED.line_items,
-                 generated_at   = now()
+             SET total_requests      = EXCLUDED.total_requests,
+                 total_milli_credits = EXCLUDED.total_milli_credits,
+                 amount_cents        = EXCLUDED.amount_cents,
+                 line_items          = EXCLUDED.line_items,
+                 generated_at        = now()
            WHERE invoices.status = 'pending'
            RETURNING *""",
         tenant_id,
         period,
         total_requests,
+        total_milli_credits,
         amount_cents,
         json.dumps(line_items),
     )
@@ -486,6 +496,7 @@ def _invoice_row(rec: asyncpg.Record) -> dict:
     li = out.get("line_items")
     if isinstance(li, str):
         out["line_items"] = json.loads(li)
+    out["total_credits"] = int(out.get("total_milli_credits") or 0) / 1000
     return out
 
 
@@ -596,6 +607,32 @@ async def delete_plan(pool, plan_id: str) -> None:
         raise Conflict(f"plan is in use by {n} tenant(s); reassign them first") from None
     if res.endswith("0"):
         raise NotFound("plan not found")
+
+
+# ── endpoint credit weights ──────────────────────────────────────────────────
+async def list_weights(pool) -> list[dict]:
+    rows = await pool.fetch("SELECT * FROM endpoint_weights ORDER BY endpoint")
+    return [dict(r) for r in rows]
+
+
+async def upsert_weight(pool, endpoint: str, milli_credits: int) -> dict:
+    rec = await pool.fetchrow(
+        """INSERT INTO endpoint_weights (endpoint, milli_credits)
+           VALUES ($1,$2)
+           ON CONFLICT (endpoint)
+           DO UPDATE SET milli_credits = EXCLUDED.milli_credits, updated_at = now()
+           RETURNING *""",
+        endpoint,
+        milli_credits,
+    )
+    return dict(rec)
+
+
+async def delete_weight(pool, endpoint: str) -> None:
+    """Remove an endpoint's weight so it reverts to the default (1 credit)."""
+    res = await pool.execute("DELETE FROM endpoint_weights WHERE endpoint=$1", endpoint)
+    if res.endswith("0"):
+        raise NotFound("weight not found")
 
 
 async def active_tenants_with_plan(pool) -> list[dict]:

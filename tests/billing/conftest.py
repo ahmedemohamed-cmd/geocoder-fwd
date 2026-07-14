@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 # Point the subsystem at the isolated test database before importing it.
 os.environ.setdefault("BILLING_PG_DB", "billing_test")
 
-from billing import config, control_plane, db, gateway  # noqa: E402
+from billing import config, control_plane, db, gateway, weights  # noqa: E402
 
 TEST_DSN = config.pg_dsn("billing_test")
 
@@ -32,6 +32,7 @@ async def pool():
     pg = await asyncpg.create_pool(TEST_DSN, min_size=1, max_size=5)
     await db.drop_all(pg)
     await db.bootstrap(pg)
+    weights.invalidate()  # per-process cache must not leak across test databases
     try:
         yield pg
     finally:

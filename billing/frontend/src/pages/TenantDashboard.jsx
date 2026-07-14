@@ -58,7 +58,9 @@ export default function TenantDashboard({ api }) {
     catch (e) { setErr(e.message); }
   };
 
-  const pct = usage && usage.quota ? Math.min(100, (usage.requests / usage.quota) * 100) : 0;
+  // credits_used drives the meter; fall back to requests for a pre-credits API
+  const used = usage ? (usage.credits_used ?? usage.requests) : 0;
+  const pct = usage && usage.quota ? Math.min(100, (used / usage.quota) * 100) : 0;
 
   return (
     <>
@@ -76,19 +78,24 @@ export default function TenantDashboard({ api }) {
         </div>
         {usage ? (
           <>
-            <div className="bignum">{usage.requests.toLocaleString()}
-              <span className="muted"> / {usage.quota.toLocaleString()} req</span></div>
+            <div className="bignum">{used.toLocaleString()}
+              <span className="muted"> / {usage.quota.toLocaleString()} credits</span></div>
             <div className="bar"><div className={`fill ${usage.over_quota ? "over" : ""}`}
               style={{ width: `${pct}%` }} /></div>
             <p className="muted">
-              {usage.over_quota ? "Over quota — overage billed" : `${usage.remaining.toLocaleString()} remaining`}
+              {usage.over_quota ? "Over quota — overage billed" : `${usage.remaining.toLocaleString()} credits remaining`}
+              {" · "}{usage.requests.toLocaleString()} requests
               {" · plan "}{usage.plan_id}
             </p>
             <table>
-              <thead><tr><th>Key</th><th>Requests (month)</th></tr></thead>
+              <thead><tr><th>Key</th><th>Credits (month)</th><th>Requests</th></tr></thead>
               <tbody>
                 {usage.per_key.map((k) => (
-                  <tr key={k.key_id}><td>{k.key_name}</td><td>{k.requests.toLocaleString()}</td></tr>
+                  <tr key={k.key_id}>
+                    <td>{k.key_name}</td>
+                    <td>{(k.credits ?? k.requests).toLocaleString()}</td>
+                    <td>{k.requests.toLocaleString()}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -97,11 +104,11 @@ export default function TenantDashboard({ api }) {
 
         <h2 style={{ marginTop: 24 }}>Invoices</h2>
         <table>
-          <thead><tr><th>Period</th><th>Requests</th><th>Amount</th><th>Status</th></tr></thead>
+          <thead><tr><th>Period</th><th>Credits</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
             {invoices.map((i) => (
               <tr key={i.id}>
-                <td>{i.period}</td><td>{i.total_requests}</td>
+                <td>{i.period}</td><td>{(i.total_credits ?? i.total_requests).toLocaleString()}</td>
                 <td>${(i.amount_cents / 100).toFixed(2)}</td>
                 <td><span className={`pill ${i.status}`}>{i.status}</span></td>
               </tr>

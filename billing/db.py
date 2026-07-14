@@ -1,10 +1,11 @@
 """asyncpg pool, schema DDL and idempotent seeding."""
 
 import logging
+from decimal import Decimal
 
 import asyncpg
 
-from . import config, security
+from . import config, security, weights
 
 _log = logging.getLogger("billing.db")
 
@@ -12,9 +13,9 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS plans (
     id                     TEXT PRIMARY KEY,
     name                   TEXT NOT NULL,
-    monthly_quota          BIGINT NOT NULL DEFAULT 0,   -- included requests / month
+    monthly_quota          BIGINT NOT NULL DEFAULT 0,   -- included credits / month
     base_price_cents       BIGINT NOT NULL DEFAULT 0,   -- flat monthly fee
-    overage_cents_per_unit NUMERIC NOT NULL DEFAULT 0,  -- price per request over quota
+    overage_cents_per_unit NUMERIC NOT NULL DEFAULT 0,  -- cents per credit over quota
     hard_cap               BOOLEAN NOT NULL DEFAULT FALSE,
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -64,30 +65,47 @@ CREATE TABLE IF NOT EXISTS usage_rollups (
     period    TEXT NOT NULL,                        -- YYYY-MM
     day       DATE NOT NULL,
     endpoint  TEXT NOT NULL DEFAULT '',
-    count     BIGINT NOT NULL DEFAULT 0,
+    count     BIGINT NOT NULL DEFAULT 0,               -- milli-credits (1 credit = 1000)
+    requests  BIGINT NOT NULL DEFAULT 0,               -- raw served requests
     PRIMARY KEY (tenant_id, key_id, day, endpoint)
 );
 CREATE INDEX IF NOT EXISTS idx_rollups_period ON usage_rollups(tenant_id, period);
 
 CREATE TABLE IF NOT EXISTS invoices (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      UUID NOT NULL REFERENCES tenants(id),
-    period         TEXT NOT NULL,                   -- YYYY-MM
-    total_requests BIGINT NOT NULL DEFAULT 0,
-    amount_cents   BIGINT NOT NULL DEFAULT 0,
-    line_items     JSONB NOT NULL DEFAULT '[]',
-    status         TEXT NOT NULL DEFAULT 'pending', -- pending | paid
-    generated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    paid_at        TIMESTAMPTZ,
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           UUID NOT NULL REFERENCES tenants(id),
+    period              TEXT NOT NULL,                   -- YYYY-MM
+    total_requests      BIGINT NOT NULL DEFAULT 0,
+    total_milli_credits BIGINT NOT NULL DEFAULT 0,
+    amount_cents        BIGINT NOT NULL DEFAULT 0,
+    line_items          JSONB NOT NULL DEFAULT '[]',
+    status              TEXT NOT NULL DEFAULT 'pending', -- pending | paid
+    generated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    paid_at             TIMESTAMPTZ,
     UNIQUE (tenant_id, period)
+);
+
+-- Billable cost of one request per endpoint (first path segment), in
+-- milli-credits. Endpoints without a row cost weights.DEFAULT_WEIGHT_MILLI.
+CREATE TABLE IF NOT EXISTS endpoint_weights (
+    endpoint      TEXT PRIMARY KEY,
+    milli_credits INTEGER NOT NULL CHECK (milli_credits >= 0),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One-time data migrations already applied (see _run_once).
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id         TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
 
 DEFAULT_PLANS = [
-    # id,       name,       quota,   base_cents, overage_per_unit, hard_cap
-    ("free", "Free", 1000, 0, 0.0, True),
-    ("starter", "Starter", 50000, 2900, 0.05, False),
-    ("pro", "Pro", 1000000, 29900, 0.02, False),
+    # id,       name,     quota (credits), base_cents, overage ¢/credit, hard_cap
+    ("free", "Free", 10_000, 0, 0.0, True),
+    ("starter", "Starter", 100_000, 2900, 0.04, False),  # $0.40 / 1k credits
+    ("pro", "Pro", 1_500_000, 29900, 0.025, False),  # $0.25 / 1k credits
+    ("scale", "Scale", 6_000_000, 99900, 0.015, False),  # $0.15 / 1k credits
 ]
 
 
@@ -117,6 +135,13 @@ async def init_schema(pool: asyncpg.Pool) -> None:
         await conn.execute(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'"
         )
+        await conn.execute(
+            "ALTER TABLE usage_rollups ADD COLUMN IF NOT EXISTS requests BIGINT NOT NULL DEFAULT 0"
+        )
+        await conn.execute(
+            "ALTER TABLE invoices "
+            "ADD COLUMN IF NOT EXISTS total_milli_credits BIGINT NOT NULL DEFAULT 0"
+        )
         # Key names must be unique per tenant (soft-deleted keys excluded, so a
         # name can be reused after deletion). Best-effort: a pre-existing database
         # with duplicate names would make the index build fail — log and continue
@@ -132,6 +157,49 @@ async def init_schema(pool: asyncpg.Pool) -> None:
                 "deduplicate existing api_keys names to enable it: %s",
                 e,
             )
+        await _run_once(conn, "2026-07-credit-units", _migrate_credit_units)
+
+
+async def _run_once(conn, mig_id: str, fn) -> None:
+    """Run a one-time data migration exactly once across all replicas: the
+    schema_migrations insert claims the id under an advisory lock, and the
+    body runs in the same transaction only when the claim succeeds."""
+    async with conn.transaction():
+        await conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtext('billing_schema_migrations'))"
+        )
+        claimed = await conn.fetchval(
+            "INSERT INTO schema_migrations (id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id",
+            mig_id,
+        )
+        if claimed:
+            await fn(conn)
+            _log.info("applied one-time migration %s", mig_id)
+
+
+async def _migrate_credit_units(conn) -> None:
+    """Switch metering units from raw requests to credits (2026-07 repricing).
+
+    Existing rollup counts are raw requests; convert 1 request = 1 credit
+    (= 1000 milli). Per-endpoint retro-weighting from the endpoint column would
+    be possible but isn't worth it for one partial month. Pre-existing invoices
+    keep their request-based semantics (total_milli_credits stays 0)."""
+    for pid, name, quota, base, overage, hard in DEFAULT_PLANS:
+        if pid == "scale":
+            continue  # new tier — seed_plans inserts it
+        await conn.execute(
+            """UPDATE plans SET name=$2, monthly_quota=$3, base_price_cents=$4,
+                                overage_cents_per_unit=$5, hard_cap=$6 WHERE id=$1""",
+            pid,
+            name,
+            quota,
+            base,
+            Decimal(str(overage)),  # exact decimal, not the float's binary expansion
+            hard,
+        )
+    await conn.execute(
+        "UPDATE usage_rollups SET requests = count, count = count * 1000 WHERE requests = 0"
+    )
 
 
 async def seed_plans(pool: asyncpg.Pool) -> None:
@@ -146,8 +214,21 @@ async def seed_plans(pool: asyncpg.Pool) -> None:
                 name,
                 quota,
                 base,
-                overage,
+                Decimal(str(overage)),  # exact decimal, not the float's binary expansion
                 hard,
+            )
+
+
+async def seed_weights(pool: asyncpg.Pool) -> None:
+    """Insert the default per-endpoint credit weights; never overwrites an
+    admin's edits (ON CONFLICT DO NOTHING)."""
+    async with pool.acquire() as conn:
+        for endpoint, milli in weights.DEFAULT_WEIGHTS.items():
+            await conn.execute(
+                """INSERT INTO endpoint_weights (endpoint, milli_credits)
+                   VALUES ($1,$2) ON CONFLICT (endpoint) DO NOTHING""",
+                endpoint,
+                milli,
             )
 
 
@@ -165,6 +246,7 @@ async def seed_admin(pool: asyncpg.Pool) -> None:
 async def bootstrap(pool: asyncpg.Pool) -> None:
     await init_schema(pool)
     await seed_plans(pool)
+    await seed_weights(pool)
     await seed_admin(pool)
 
 
@@ -172,5 +254,6 @@ async def drop_all(pool: asyncpg.Pool) -> None:
     """Test helper: wipe all subsystem tables."""
     async with pool.acquire() as conn:
         await conn.execute(
-            "DROP TABLE IF EXISTS invoices, usage_rollups, api_keys, users, tenants, plans CASCADE"
+            "DROP TABLE IF EXISTS invoices, usage_rollups, api_keys, users, tenants, plans, "
+            "endpoint_weights, schema_migrations CASCADE"
         )

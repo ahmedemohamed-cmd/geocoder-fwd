@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from . import apisix_admin, db, main, repo, usage
+from . import apisix_admin, db, main, repo, usage, weights
 
 _log = logging.getLogger("billing.aggregator")
 _last_quota_period: str | None = None
@@ -26,11 +26,15 @@ async def reproject_quotas_for_new_period(pool) -> bool:
     if period == _last_quota_period:
         return False
     if apisix_admin.enabled():
+        w = await weights.get_weights(pool)
         for spec in await repo.list_active_tenant_quota_specs(pool):
             try:
                 await apisix_admin.ensure_consumer_group(
                     str(spec["tenant_id"]),
-                    quota=int(spec.get("monthly_quota") or 0),
+                    # credit quota → raw-request backstop (APISIX counts requests)
+                    quota=weights.projected_request_cap(
+                        w, int(spec.get("monthly_quota") or 0)
+                    ),
                     hard_cap=bool(spec.get("hard_cap")),
                     period=period,
                 )

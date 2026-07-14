@@ -67,25 +67,30 @@ def _kkey(key_id: str, period: str) -> str:
     return f"{config.LIVE_KEY_PREFIX}{key_id}:{period}"
 
 
-async def incr_tenant(redis, tenant_id: str, period: str) -> int:
-    return int(await redis.incr(_tkey(tenant_id, period)))
+async def incr_tenant(redis, tenant_id: str, period: str, milli: int = 1000) -> int:
+    return int(await redis.incrby(_tkey(tenant_id, period), milli))
 
 
-async def incr_tenant_if_allowed(redis, tenant_id: str, period: str, cap: int) -> int | None:
-    """Atomically bump the tenant counter unless it would exceed ``cap``.
+async def incr_tenant_if_allowed(
+    redis, tenant_id: str, period: str, cap_milli: int, milli: int = 1000
+) -> int | None:
+    """Atomically add ``milli`` (the request's weight in milli-credits) to the
+    tenant counter unless the result would exceed ``cap_milli``.
 
-    Returns the new count if allowed, or ``None`` when already at/over the cap
-    (``cap <= 0`` means unlimited). A rejected request never increments, so —
-    unlike a plain INCR-then-DECR-on-reject — a crash between the two ops can't
-    leak a permanently-consumed quota slot, and concurrent requests never observe
-    a transiently inflated counter. Implemented with a WATCH/MULTI optimistic
-    transaction (no Lua, so it works against the in-test fakeredis).
+    Returns the new count if allowed, or ``None`` when the increment would break
+    the cap (``cap_milli <= 0`` means unlimited). Note the check is per-request:
+    an expensive (high-weight) request can be rejected while a cheaper one would
+    still fit in the remaining allowance. A rejected request never increments,
+    so — unlike a plain INCR-then-DECR-on-reject — a crash between the two ops
+    can't leak a permanently-consumed quota slot, and concurrent requests never
+    observe a transiently inflated counter. Implemented with a WATCH/MULTI
+    optimistic transaction (no Lua, so it works against the in-test fakeredis).
 
     Standalone-Redis only: WATCH/MULTI is unsupported on cluster clients. That is
     fine — this path belongs to the legacy reference gateway; the deployed data
     plane (APISIX) enforces quotas via its limit-count plugin instead."""
-    if cap <= 0:
-        return await incr_tenant(redis, tenant_id, period)
+    if cap_milli <= 0:
+        return await incr_tenant(redis, tenant_id, period, milli)
     key = _tkey(tenant_id, period)
     async with redis.pipeline() as pipe:
         while True:
@@ -93,23 +98,23 @@ async def incr_tenant_if_allowed(redis, tenant_id: str, period: str, cap: int) -
                 await pipe.watch(key)
                 raw = await pipe.get(key)
                 cur = int(raw) if raw is not None else 0
-                if cur >= cap:
+                if cur + milli > cap_milli:
                     await pipe.unwatch()
                     return None
                 pipe.multi()
-                pipe.incr(key)
+                pipe.incrby(key, milli)
                 res = await pipe.execute()
                 return int(res[0])
             except WatchError:  # concurrent writer touched the key; retry
                 continue
 
 
-async def decr_tenant(redis, tenant_id: str, period: str) -> int:
-    return int(await redis.decr(_tkey(tenant_id, period)))
+async def decr_tenant(redis, tenant_id: str, period: str, milli: int = 1000) -> int:
+    return int(await redis.decrby(_tkey(tenant_id, period), milli))
 
 
-async def incr_key(redis, key_id: str, period: str) -> int:
-    return int(await redis.incr(_kkey(key_id, period)))
+async def incr_key(redis, key_id: str, period: str, milli: int = 1000) -> int:
+    return int(await redis.incrby(_kkey(key_id, period), milli))
 
 
 async def get_tenant_live(redis, tenant_id: str, period: str) -> int:
@@ -124,25 +129,34 @@ async def get_key_live(redis, key_id: str, period: str) -> int:
 
 # ── durable event buffer ─────────────────────────────────────────────────────
 async def push_event(
-    redis, *, tenant_id: str, key_id: str, endpoint: str, period: str, day: str
+    redis, *, tenant_id: str, key_id: str, endpoint: str, period: str, day: str, milli: int = 1000
 ) -> None:
     await redis.rpush(
         config.USAGE_EVENTS_LIST,
-        json.dumps({"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day}),
+        json.dumps(
+            {"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day, "m": milli}
+        ),
     )
 
 
-async def record(redis, *, tenant_id: str, key_id: str, endpoint: str) -> None:
-    """Record one served request: bump live counters + enqueue a durable event.
-    Used by the APISIX usage sink and the legacy gateway. The live counters are
-    the reference gateway's quota-enforcement state and a real-time observability
-    read (e.g. ``get_tenant_live``); durable billing/display reads the Postgres
-    rollups the durable event feeds."""
+async def record(redis, *, tenant_id: str, key_id: str, endpoint: str, milli: int = 1000) -> None:
+    """Record one served request at its credit weight (``milli`` milli-credits):
+    bump live counters + enqueue a durable event. Used by the APISIX usage sink
+    and the legacy gateway. The live counters are the reference gateway's
+    quota-enforcement state and a real-time observability read (e.g.
+    ``get_tenant_live``); durable billing/display reads the Postgres rollups the
+    durable event feeds."""
     period, day = now_parts()
-    await incr_tenant(redis, tenant_id, period)
-    await incr_key(redis, key_id, period)
+    await incr_tenant(redis, tenant_id, period, milli)
+    await incr_key(redis, key_id, period, milli)
     await push_event(
-        redis, tenant_id=tenant_id, key_id=key_id, endpoint=endpoint, period=period, day=day
+        redis,
+        tenant_id=tenant_id,
+        key_id=key_id,
+        endpoint=endpoint,
+        period=period,
+        day=day,
+        milli=milli,
     )
 
 
@@ -160,23 +174,30 @@ async def flush_events(pool, redis, *, batch: int = 1000) -> int:
     if not events:
         return 0
 
-    agg: dict[tuple, int] = defaultdict(int)
+    # count = milli-credits, requests = raw event count. Events written before
+    # the credit-units migration lack "m" and default to 1000 (1 credit).
+    agg: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
     for e in events:
-        agg[(e["t"], e["k"], e["p"], e["d"], e.get("e", ""))] += 1
+        entry = agg[(e["t"], e["k"], e["p"], e["d"], e.get("e", ""))]
+        entry[0] += int(e.get("m", 1000))
+        entry[1] += 1
 
     async with pool.acquire() as conn:
         async with conn.transaction():
-            for (tenant_id, key_id, period, day, endpoint), n in agg.items():
+            for (tenant_id, key_id, period, day, endpoint), (milli, n) in agg.items():
                 await conn.execute(
-                    """INSERT INTO usage_rollups (tenant_id, key_id, period, day, endpoint, count)
-                       VALUES ($1,$2,$3,$4,$5,$6)
+                    """INSERT INTO usage_rollups
+                           (tenant_id, key_id, period, day, endpoint, count, requests)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7)
                        ON CONFLICT (tenant_id, key_id, day, endpoint)
-                       DO UPDATE SET count = usage_rollups.count + EXCLUDED.count""",
+                       DO UPDATE SET count = usage_rollups.count + EXCLUDED.count,
+                                     requests = usage_rollups.requests + EXCLUDED.requests""",
                     tenant_id,
                     key_id,
                     period,
                     date.fromisoformat(day),
                     endpoint,
+                    milli,
                     n,
                 )
     return len(events)

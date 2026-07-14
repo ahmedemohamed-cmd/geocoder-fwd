@@ -19,7 +19,7 @@ from __future__ import annotations
 import httpx
 from fastapi import FastAPI, Request, Response
 
-from . import config, repo, security, usage
+from . import config, repo, security, usage, weights
 
 _HOP_BY_HOP = {
     "content-length",
@@ -81,12 +81,16 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
             return await _forward(app.state.http_client, request, path)
 
         # 3) enforce quota (cluster-wide via shared Redis) --------------------
-        # Atomic check-and-increment: a rejected request never bumps the counter
-        # (no transient over-count, no leaked slot if we crash mid-decision).
+        # Atomic check-and-increment of the request's credit weight: a rejected
+        # request never bumps the counter (no transient over-count, no leaked
+        # slot if we crash mid-decision). Quota is in credits; counters in milli.
         period, day = usage.now_parts()
-        quota = int(info.get("quota") or 0)
-        cap = quota if info.get("hard_cap") else 0  # 0 ⇒ soft plan, unlimited at gateway
-        count = await usage.incr_tenant_if_allowed(redis, info["tenant_id"], period, cap)
+        milli = weights.weight_for(await weights.get_weights(pool), endpoint)
+        quota = int(info.get("quota") or 0)  # credits
+        cap_milli = quota * 1000 if info.get("hard_cap") else 0  # 0 ⇒ soft, unlimited
+        count = await usage.incr_tenant_if_allowed(
+            redis, info["tenant_id"], period, cap_milli, milli
+        )
         if count is None:
             return _err(429, "monthly quota exceeded")
 
@@ -94,12 +98,12 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
         resp = await _forward(app.state.http_client, request, path)
 
         # 5) meter — only count *served* requests (status < 400), matching the
-        # APISIX usage sink. An upstream error/4xx/5xx refunds the quota slot
+        # APISIX usage sink. An upstream error/4xx/5xx refunds the credits
         # taken in step 3 and is not metered per-key or billed.
         if resp.status_code >= 400:
-            await usage.decr_tenant(redis, info["tenant_id"], period)
+            await usage.decr_tenant(redis, info["tenant_id"], period, milli)
             return resp
-        await usage.incr_key(redis, info["key_id"], period)
+        await usage.incr_key(redis, info["key_id"], period, milli)
         await usage.push_event(
             redis,
             tenant_id=info["tenant_id"],
@@ -107,6 +111,7 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
             endpoint=endpoint,
             period=period,
             day=day,
+            milli=milli,
         )
         return resp
 

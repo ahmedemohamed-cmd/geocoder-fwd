@@ -95,7 +95,7 @@ class TenantOut(BaseModel):
     created_at: datetime
 
 
-# ── plans (admin) ────────────────────────────────────────────────────────────
+# ── plans (admin) — quota in credits, overage in cents per credit ────────────
 class PlanCreate(BaseModel):
     id: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_-]+$")
     name: str = Field(min_length=1)
@@ -151,19 +151,32 @@ class KeyCreated(KeyOut):
     api_key: str
 
 
-# ── usage / reports ──────────────────────────────────────────────────────────
+# ── endpoint credit weights (admin) ──────────────────────────────────────────
+class WeightUpsert(BaseModel):
+    milli_credits: int = Field(ge=0)
+
+
+class WeightOut(BaseModel):
+    endpoint: str
+    milli_credits: int
+    updated_at: datetime
+
+
+# ── usage / reports (credits = milli / 1000) ─────────────────────────────────
 class KeyUsage(BaseModel):
     key_id: str
     key_name: str
     requests: int
+    credits: float = 0
 
 
 class CurrentUsage(BaseModel):
     tenant_id: str
     period: str
     requests: int
-    quota: int
-    remaining: int
+    credits_used: float
+    quota: int  # credits
+    remaining: float  # credits
     over_quota: bool
     plan_id: str | None
     per_key: list[KeyUsage]
@@ -174,6 +187,7 @@ class UsageHistoryRow(BaseModel):
     day: str
     endpoint: str
     requests: int
+    credits: float = 0
 
 
 # ── billing ──────────────────────────────────────────────────────────────────
@@ -182,6 +196,7 @@ class InvoiceOut(BaseModel):
     tenant_id: str
     period: str
     total_requests: int
+    total_credits: float = 0
     amount_cents: int
     line_items: list[dict[str, Any]]
     status: str

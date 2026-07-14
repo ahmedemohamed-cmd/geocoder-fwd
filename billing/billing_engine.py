@@ -13,31 +13,42 @@ from . import repo
 
 
 def compute_charge(
-    *, total_requests: int, base_price_cents: int, overage_cents_per_unit: float, monthly_quota: int
+    *,
+    total_milli_credits: int,
+    base_price_cents: int,
+    overage_cents_per_credit: float,
+    monthly_quota_credits: int,
 ) -> tuple[int, list[dict]]:
-    """Return (amount_cents, line_items)."""
+    """Return (amount_cents, line_items). Usage is metered in milli-credits;
+    overage is billed in whole credits (rounded up)."""
     line_items: list[dict] = [
         {"description": "Base subscription", "quantity": 1, "amount_cents": int(base_price_cents)}
     ]
     amount = int(base_price_cents)
 
-    overage_units = max(0, total_requests - int(monthly_quota))
-    if overage_units > 0 and overage_cents_per_unit > 0:
-        overage_cents = math.ceil(overage_units * float(overage_cents_per_unit))
+    quota_milli = int(monthly_quota_credits) * 1000
+    overage_milli = max(0, total_milli_credits - quota_milli)
+    overage_credits = math.ceil(overage_milli / 1000)
+    if overage_credits > 0 and overage_cents_per_credit > 0:
+        overage_cents = math.ceil(overage_credits * float(overage_cents_per_credit))
         amount += overage_cents
         line_items.append(
             {
-                "description": f"Overage ({overage_units} requests over {monthly_quota} included)",
-                "quantity": overage_units,
-                "unit_cents": float(overage_cents_per_unit),
+                "description": (
+                    f"Overage ({overage_credits} credits over "
+                    f"{monthly_quota_credits} included)"
+                ),
+                "quantity": overage_credits,
+                "unit_cents": float(overage_cents_per_credit),
                 "amount_cents": overage_cents,
             }
         )
     else:
+        used_credits = total_milli_credits / 1000
         line_items.append(
             {
-                "description": f"Included requests ({total_requests}/{monthly_quota})",
-                "quantity": total_requests,
+                "description": f"Included credits ({used_credits:g}/{monthly_quota_credits})",
+                "quantity": used_credits,
                 "amount_cents": 0,
             }
         )
@@ -45,18 +56,19 @@ def compute_charge(
 
 
 async def generate_invoice_for_tenant(pool, tenant: dict, period: str) -> dict:
-    total = await repo.usage_total_for_period(pool, tenant["tenant_id"], period)
+    totals = await repo.usage_totals_for_period(pool, tenant["tenant_id"], period)
     amount, line_items = compute_charge(
-        total_requests=total,
+        total_milli_credits=totals["milli"],
         base_price_cents=tenant.get("base_price_cents") or 0,
-        overage_cents_per_unit=tenant.get("overage_cents_per_unit") or 0,
-        monthly_quota=tenant.get("monthly_quota") or 0,
+        overage_cents_per_credit=tenant.get("overage_cents_per_unit") or 0,
+        monthly_quota_credits=tenant.get("monthly_quota") or 0,
     )
     return await repo.upsert_invoice(
         pool,
         tenant_id=tenant["tenant_id"],
         period=period,
-        total_requests=total,
+        total_requests=totals["requests"],
+        total_milli_credits=totals["milli"],
         amount_cents=amount,
         line_items=line_items,
     )
