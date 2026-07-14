@@ -1372,6 +1372,18 @@ async def autocomplete(
         }
     }
 
+    # For a TYPE query, a name match that is a village, a road, a boundary or a
+    # station doorway is never the thing meant. Toronto has a "Black Bank" and a
+    # "Creek Bank" (villages), a "Mosque Gate" (residential street) and a
+    # "Pharmacy" transit stop (on Pharmacy Avenue) — all of which outranked the
+    # actual banks, mosques and pharmacies. Applied ONLY to the name list of a type
+    # query: someone who types the *name* "Black Bank" should still find it.
+    if is_category:
+        name_query["bool"]["must_not"] = [
+            {"terms": {"category_key": ["place", "boundary", "landuse", "highway", "natural", "waterway"]}},
+            {"terms": {"category_value": ["subway_entrance", "platform", "stop", "stop_position", "elevator"]}},
+        ]
+
     # Matches the place's TYPE ("metro", "مستشفى", "pharmacy").
     type_query: dict = {"match": {"category_text.autocomplete": q_norm}}
 
