@@ -12,6 +12,11 @@
 # local dev; these overrides (merged by env-var key) point at the public host.
 services:
   zitadel:
+    # TLS terminates at NPM, so run --tlsMode external (not disabled): Zitadel
+    # then emits https URLs in its own console's environment.json (api field).
+    # With disabled it emits http://, which the browser's CSP blocks on the
+    # https page — Zitadel's management UI white-pages with "Failed to fetch".
+    command: 'start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode external'
     environment:
       # TLS is terminated at NPM; Zitadel advertises the https issuer via these
       # and trusts the proxy's X-Forwarded-* headers (runs with --tlsMode disabled).
