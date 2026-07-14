@@ -69,15 +69,42 @@ NEAR_M = 150  # lenient match radius, same as run_recall
 PREFIX_LENS = [3, 5, 8]
 
 
+# ── category probe origins ───────────────────────────────────────────────────
+# The category probe runs from TWO cities, and that is the whole point.
+#
+# Every probe used to be geo-biased to Cairo, which made a locale-specific failure
+# structurally invisible — and one shipped: `railway=subway_entrance` nodes were
+# indexed as searchable "metro", so a Toronto user got six station *doorways*
+# ("Delaware Avenue", "5775 Yonge St Entrance") and one station. Cairo could never
+# reveal it: within 50km it holds 2 subway_entrance nodes against 88 stations,
+# while Vaughan holds 245 against 68. A single-origin harness cannot see that.
+CATEGORY_ORIGINS = {
+    "Cairo": (30.0444, 31.2357),
+    "Vaughan": (43.8414059, -79.5109262),
+}
+
+# Category values that must NEVER appear in a type-search result: they are parts
+# of a place (a doorway, a platform), not places. Any hit here is a hard failure,
+# reported separately from the hit-rate so it cannot be averaged away.
+FORBIDDEN_CATEGORIES = {
+    ("railway", "subway_entrance"),
+    ("railway", "platform"),
+    ("railway", "elevator"),
+    ("public_transport", "stop_position"),
+    ("public_transport", "platform"),
+}
+
 # ── category probe set ───────────────────────────────────────────────────────
 # Each entry: query -> set of acceptable (category_key, category_value) pairs.
-# A hit is a top-k result whose ES category matches. Names that merely *contain*
-# the word (the "Metro" supermarket chain) are NOT counted — this probe measures
-# type search specifically.
+# A hit is a top-k result whose ES category matches.
+#
+# "metro" accepts BOTH station and supermarket: the word is ambiguous by locale
+# (the subway in Cairo, a grocery chain in Canada) and both readings are correct.
+# The endpoint blends them, so either counts.
 CATEGORY_QUERIES = [
-    ("metro", {("railway", "station"), ("railway", "subway_entrance")}),
-    ("metro station", {("railway", "station"), ("railway", "subway_entrance")}),
-    ("مترو", {("railway", "station"), ("railway", "subway_entrance")}),
+    ("metro", {("railway", "station"), ("shop", "supermarket"), ("shop", "convenience")}),
+    ("metro station", {("railway", "station")}),
+    ("مترو", {("railway", "station"), ("shop", "supermarket")}),
     ("hospital", {("amenity", "hospital"), ("amenity", "clinic")}),
     ("مستشفى", {("amenity", "hospital"), ("amenity", "clinic")}),
     ("cafe", {("amenity", "cafe")}),
@@ -94,10 +121,10 @@ CATEGORY_QUERIES = [
 ]
 
 
-def autocomplete(q, limit=LIMIT):
+def autocomplete(q, limit=LIMIT, origin=CAIRO):
     """Query the live endpoint. Returns (results, source, elapsed_ms)."""
     qs = urllib.parse.urlencode(
-        {"q": q, "lat": CAIRO[0], "lon": CAIRO[1], "limit": limit}
+        {"q": q, "lat": origin[0], "lon": origin[1], "limit": limit}
     )
     url = f"{BASE}/autocomplete?{qs}"
     t0 = time.perf_counter()
@@ -203,17 +230,22 @@ def eval_case(case):
 
 
 def eval_category(entry):
-    q, expected = entry
-    results, source, ms = autocomplete(q, limit=5)
+    (city, origin), (q, expected) = entry
+    results, source, ms = autocomplete(q, limit=5, origin=origin)
     ids = [r.get("osm_id") for r in results if r.get("osm_id")]
     cats = es_categories(ids)
     matched = [i for i in ids if cats.get(i) in expected]
+    # Sub-features (station doorways, platforms) are never a valid suggestion.
+    # Tracked separately from hit_rate so a run of them cannot be averaged away.
+    forbidden = [i for i in ids if cats.get(i) in FORBIDDEN_CATEGORIES]
     return {
+        "city": city,
         "query": q,
         "source": source,
         "ms": ms,
         "n_results": len(results),
         "n_matched": len(matched),
+        "n_forbidden": len(forbidden),
         "hit_rate": (len(matched) / len(results)) if results else 0.0,
         "top5": [
             {
@@ -240,8 +272,14 @@ def main():
         nested = list(ex.map(eval_case, named))
     rows = [r for sub in nested for r in sub]
 
+    # Cross-product: every category query, from every origin.
+    cat_jobs = [
+        (city_origin, query)
+        for city_origin in CATEGORY_ORIGINS.items()
+        for query in CATEGORY_QUERIES
+    ]
     with ThreadPoolExecutor(WORKERS) as ex:
-        cat_rows = list(ex.map(eval_category, CATEGORY_QUERIES))
+        cat_rows = list(ex.map(eval_category, cat_jobs))
 
     total = len(rows)
     sources = Counter(r["source"] for r in rows)
@@ -304,20 +342,55 @@ def main():
     L.append("")
     L.append(f"Latency: **p50 {p50:.1f} ms**, **p90 {p90:.1f} ms**\n")
 
+    # ── sub-feature check: a hard pass/fail, reported BEFORE the averages ────
+    # A station doorway is never a valid suggestion. This is the check that the
+    # Cairo-only harness could not make, and it is why "metro" near Toronto
+    # returned six entrances. Kept above the hit-rate so it cannot be averaged
+    # away by the types that happen to work.
+    bad = [c for c in cat_rows if c["n_forbidden"]]
+    L.append("## Sub-feature check (hard fail)\n")
+    L.append("Station doorways / platforms are parts of a place, not places. None may "
+             "appear in a type-search result.\n")
+    if bad:
+        L.append(f"**FAIL — {sum(c['n_forbidden'] for c in bad)} sub-feature hit(s):**\n")
+        L.append("| city | query | offending results |")
+        L.append("|---|---|---|")
+        for c in bad:
+            offending = ", ".join(
+                f"{t['name']} *({t['category']})*"
+                for t in c["top5"]
+                if tuple(t["category"].split("/")) in FORBIDDEN_CATEGORIES
+            )
+            L.append(f"| {c['city']} | `{c['query']}` | {offending} |")
+        L.append("")
+    else:
+        L.append("**PASS — no station entrances / platforms in any category result.**\n")
+
     L.append("## Category queries\n")
-    L.append("A type query should return places *of that type*. `hit rate` = share of "
-             "top-5 whose ES category matches. Name-only matches (e.g. the \"Metro\" "
-             "supermarket) do not count.\n")
-    L.append("| query | source | hit rate | top-5 (category) |")
-    L.append("|---|---|---|---|")
+    L.append("A type query should return places *of that type*, probed from two cities — "
+             "a single origin cannot reveal locale-specific failures. `hit rate` = share "
+             "of top-5 whose ES category matches. `metro` accepts station *or* "
+             "supermarket: the word means the subway in Cairo and a grocery chain in "
+             "Canada, and the endpoint blends both.\n")
+    L.append("| city | query | source | hit rate | top-5 (category) |")
+    L.append("|---|---|---|---|---|")
     for c in cat_rows:
         top = ", ".join(
             f"{t['name']}" + (f" *({t['category']})*" if t["category"] else "")
             for t in c["top5"][:3]
         ) or "—"
-        L.append(f"| `{c['query']}` | {c['source']} | {c['hit_rate'] * 100:.0f}% | {top} |")
+        L.append(
+            f"| {c['city']} | `{c['query']}` | {c['source']} "
+            f"| {c['hit_rate'] * 100:.0f}% | {top} |"
+        )
+    L.append("")
+    for city in CATEGORY_ORIGINS:
+        rs = [c for c in cat_rows if c["city"] == city]
+        if rs:
+            m = statistics.mean([c["hit_rate"] for c in rs])
+            L.append(f"- **{city} mean category hit rate: {m * 100:.1f}%**")
     cat_mean = statistics.mean([c["hit_rate"] for c in cat_rows]) if cat_rows else 0
-    L.append(f"\n**Mean category hit rate: {cat_mean * 100:.1f}%**\n")
+    L.append(f"- **Overall: {cat_mean * 100:.1f}%**\n")
 
     report = "\n".join(L)
     with open(REPORT, "w") as f:

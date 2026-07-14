@@ -330,6 +330,24 @@ CATEGORY_TEXT_KEYS = (
 # Values that carry no meaning on their own (`building=yes`).
 _JUNK_VALUES = frozenset({"yes", "no", "true", "false", "unknown", "none"})
 
+# Features that are a *part of* a place rather than a place. A `railway=station`
+# is a destination; its `railway=subway_entrance` doorways are not — OSM models
+# every street-level entrance as its own node, named after the street it opens
+# onto. Left searchable, they swamp the real thing: a "metro" query near Toronto
+# returned "Delaware Avenue", "Cresecent Road Entrance", "5775 Yonge St Entrance"
+# — six doorways and one station. Within 50km of Vaughan the index holds 245
+# subway_entrance nodes against 68 stations; within 50km of Cairo it holds 2
+# against 88, which is exactly why this was invisible on the Egypt-only dev index.
+#
+# Excluded from `category_text` (free-text type search) ONLY. They keep their
+# category_key/category_value, so /nearby can still filter for them deliberately.
+_SUBFEATURE_TAGS: dict[str, frozenset[str]] = {
+    "railway": frozenset(
+        {"subway_entrance", "platform", "elevator", "construction", "proposed", "disused"}
+    ),
+    "public_transport": frozenset({"stop_position", "platform"}),
+}
+
 # "key=value" → extra search terms. The raw value is always emitted anyway
 # (`amenity=pharmacy` → "pharmacy"), so this map only needs to add *aliases* and
 # non-English vocabulary.
@@ -337,7 +355,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     # transit — the motivating case
     "station=subway": ["metro", "subway", "underground", "metro station", "مترو", "محطة مترو", "مترو الأنفاق"],
     "railway=station": ["train station", "railway station", "محطة", "محطة قطار", "قطار", "gare"],
-    "railway=subway_entrance": ["metro", "metro entrance", "subway entrance", "مترو", "مدخل مترو"],
     "railway=halt": ["train stop", "محطة"],
     "railway=tram_stop": ["tram", "ترام", "محطة ترام"],
     "public_transport=station": ["station", "محطة"],
@@ -438,8 +455,20 @@ def category_text(tags: dict) -> str:
     ``{"name": "Sadat", "railway": "station", "station": "subway"}``
         → ``"station train station railway station محطة … subway metro underground مترو …"``
 
+    Returns ``""`` for sub-features (see `_SUBFEATURE_TAGS`) — a station's doorway
+    is not a place anyone searches for, and there are many per station.
+
     Order is stable and duplicates are dropped so the output is deterministic.
     """
+    # Checked against the RAW tags, not the classified triple: a node carrying both
+    # `railway=subway_entrance` and `public_transport=platform` classifies on
+    # whichever key wins CATEGORY_KEYS precedence, so testing the triple alone would
+    # let one of the two spellings slip through.
+    for key, excluded in _SUBFEATURE_TAGS.items():
+        value = tags.get(key)
+        if isinstance(value, str) and value.strip() in excluded:
+            return ""
+
     terms: list[str] = []
     seen: set[str] = set()
 

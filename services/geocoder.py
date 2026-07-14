@@ -43,6 +43,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from itertools import zip_longest
 
 import asyncpg
 import nats
@@ -1320,57 +1321,38 @@ async def autocomplete(
     # ── Elasticsearch edge-ngram autocomplete (fallback) ────────────────
     q_norm = normalize_address_text(q)
 
-    # Type search ("metro", "مستشفى", "pharmacy"). The boost is conditional
-    # because the two cases genuinely want different answers:
-    #
-    #   "Metro Market"  → a name. category_text stays at ^1 so a place that merely
-    #                     *is* a supermarket never displaces one actually named
-    #                     that.
-    #   "metro"         → a kind. `is_category_query` already established this, so
-    #                     lean on category_text hard enough that the 88 stations
-    #                     can compete with the ~10 shops literally called "Metro".
-    #                     At ^1 the shops saturate the whole page.
-    #
-    # 20 is measured, not guessed (mean category hit-rate over the probe set:
-    # ^1 → 62%, ^20 → 96%, ^30 → 100%). It is deliberately NOT 30: at 30 "metro"
-    # returns only stations and the Metro supermarket chain disappears, which
-    # scores better only because the probe declines to credit name matches. At 20
-    # the page carries both readings of an genuinely ambiguous word — two Metro
-    # stores and then the stations. A name match must never be *erased* by a type
-    # match, only shared with it.
-    category_boost = 20 if is_category else 1
-
-    should: list[dict] = [
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": [
-                    "name.autocomplete^5",
-                    "name_en.autocomplete^5",
-                    "name_fr.autocomplete^5",
-                    "addr_street.autocomplete^3",
-                    "addr_city.autocomplete^2",
-                    "full_address.autocomplete^2",
-                    f"category_text.autocomplete^{category_boost}",
-                ],
-                "type": "best_fields",
-            }
-        },
-        {
-            "multi_match": {
-                "query": q_norm,
-                "fields": ["name^8", "name_en^8", "name_fr^8"],
-                "type": "phrase_prefix",
-            }
-        },
-    ]
-
-    text_query: dict = {
+    # Matches the place's NAME. Deliberately free of `category_text` — see below.
+    name_query: dict = {
         "bool": {
-            "should": should,
+            "should": [
+                {
+                    "multi_match": {
+                        "query": q_norm,
+                        "fields": [
+                            "name.autocomplete^5",
+                            "name_en.autocomplete^5",
+                            "name_fr.autocomplete^5",
+                            "addr_street.autocomplete^3",
+                            "addr_city.autocomplete^2",
+                            "full_address.autocomplete^2",
+                        ],
+                        "type": "best_fields",
+                    }
+                },
+                {
+                    "multi_match": {
+                        "query": q_norm,
+                        "fields": ["name^8", "name_en^8", "name_fr^8"],
+                        "type": "phrase_prefix",
+                    }
+                },
+            ],
             "minimum_should_match": 1,
         }
     }
+
+    # Matches the place's TYPE ("metro", "مستشفى", "pharmacy").
+    type_query: dict = {"match": {"category_text.autocomplete": q_norm}}
 
     functions: list[dict] = [
         {"weight": 1.0},
@@ -1444,38 +1426,85 @@ async def autocomplete(
             }
         )
 
-    body: dict = {
-        "size": limit,
-        "query": {
-            "function_score": {
-                "query": text_query,
-                "functions": functions,
-                "score_mode": "sum",
-                "boost_mode": "multiply",
-            }
-        },
-        "_source": [
-            "osm_id",
-            "osm_type",
-            "name",
-            "name_en",
-            "name_fr",
-            "centroid",
-            "admin_level",
-            "offline_rank",
-            "popularity",
-            "full_address",
-            "addr_street",
-            "addr_city",
-            "addr_country",
-        ],
-    }
+    _SOURCE = [
+        "osm_id",
+        "osm_type",
+        "name",
+        "name_en",
+        "name_fr",
+        "centroid",
+        "admin_level",
+        "offline_rank",
+        "popularity",
+        "full_address",
+        "addr_street",
+        "addr_city",
+        "addr_country",
+    ]
 
-    resp = await es.search(index=INDEX, **body)
+    def _body(query: dict) -> dict:
+        return {
+            "size": limit,
+            "query": {
+                "function_score": {
+                    "query": query,
+                    "functions": functions,
+                    "score_mode": "sum",
+                    "boost_mode": "multiply",
+                }
+            },
+            "_source": _SOURCE,
+        }
 
-    max_score = resp["hits"].get("max_score") or 0
+    if not is_category:
+        # A name query. One list, ranked as before.
+        resp = await es.search(index=INDEX, **_body(name_query))
+        hits = resp["hits"]["hits"]
+        max_score = resp["hits"].get("max_score") or 0
+    else:
+        # A TYPE query, and the word is usually ambiguous *by locale*: "metro" is
+        # the subway in Cairo and a grocery chain in Canada (61 shops named exactly
+        # "Metro" within 50km of Toronto; 5 near Cairo). Both readings are correct
+        # and the server cannot know which the user meant.
+        #
+        # A single ranked list cannot express "some of each". Scoring both
+        # populations together and tuning one `category_text` boost produces a
+        # CLIFF, not a gradient — measured on the production index, q=metro, top-7:
+        #
+        #     boost 1-8 :  Cairo 0 stations/7 named   Toronto 0 stations/7 named
+        #     boost 20  :  Cairo 4 stations/2 named   Toronto 7 stations/1 named
+        #
+        # Nothing in between blends them, because the two populations' score
+        # distributions don't interleave — a multiplier just shifts one wholesale
+        # past the other. So rank them SEPARATELY and merge with a quota.
+        m_resp = await es.msearch(
+            index=INDEX,
+            searches=[{}, _body(name_query), {}, _body(type_query)],
+        )
+        name_hits, type_hits = (r["hits"]["hits"] for r in m_resp["responses"])
+        max_score = max(
+            (r["hits"].get("max_score") or 0) for r in m_resp["responses"]
+        )
+
+        # Interleave, starting with the name list (the literal reading of what was
+        # typed). Dedupe by osm_id — a place can be in both lists (Vaughan
+        # Metropolitan Centre is a station *named* "Metro…"), and it keeps its
+        # better slot. If one list runs short, the other fills the page.
+        hits = []
+        seen: set[str] = set()
+        for pair in zip_longest(name_hits, type_hits):
+            for h in pair:
+                if h is None:
+                    continue
+                oid = h["_source"].get("osm_id")
+                if oid in seen:
+                    continue
+                seen.add(oid)
+                hits.append(h)
+        hits = hits[:limit]
+
     results = []
-    for h in resp["hits"]["hits"]:
+    for h in hits:
         src = h["_source"]
         name = src.get("name_en") or src.get("name", "")
         addr = src.get("full_address", "")

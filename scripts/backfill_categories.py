@@ -41,8 +41,67 @@ from shared.config import ELASTICSEARCH_URL
 INDEX = "osm_places"
 
 
-async def backfill(batch_size: int, sleep_s: float, reprocess_all: bool) -> None:
+async def backfill(
+    batch_size: int,
+    sleep_s: float,
+    reprocess_all: bool,
+    only_values: list[str] | None = None,
+) -> None:
     es = AsyncElasticsearch(ELASTICSEARCH_URL)
+    # `--only-values a,b` re-derives the category fields for docs of a given
+    # category_value, regardless of whether they already have a category_text.
+    # Needed when the *derivation* changes rather than the schema: those docs
+    # already have a value, so the missing-only predicate below skips them, and
+    # `--all` would rewrite all 20.9M (an hour, plus 9.5M fresh tombstones).
+    # This is how `railway=subway_entrance` was retired from category_text —
+    # 5,247 docs, seconds.
+    if only_values:
+        query = {"terms": {"category_value": only_values}}
+        scanned = updated = 0
+        actions: list[dict] = []
+        try:
+            async for doc in async_scan(
+                es,
+                index=INDEX,
+                query={"query": query, "_source": ["tags", "admin_level"]},
+                size=batch_size,
+            ):
+                scanned += 1
+                src = doc.get("_source", {})
+                tags = src.get("tags", {})
+                cat = classify(tags, src.get("admin_level"))
+                actions.append(
+                    {
+                        "_op_type": "update",
+                        "_index": INDEX,
+                        "_id": doc["_id"],
+                        "retry_on_conflict": 3,
+                        "doc": {
+                            "category_key": cat.key or "",
+                            "category_value": cat.value or "",
+                            "category_group": cat.group or "",
+                            "category_text": category_text(tags),
+                        },
+                    }
+                )
+                if len(actions) >= batch_size:
+                    ok, errors = await async_bulk(es, actions, raise_on_error=False)
+                    updated += ok
+                    if errors:
+                        print(f"  {len(errors)} error(s); first: {errors[0]}")
+                    actions = []
+                    if sleep_s:
+                        await asyncio.sleep(sleep_s)
+            if actions:
+                ok, errors = await async_bulk(es, actions, raise_on_error=False)
+                updated += ok
+                if errors:
+                    print(f"  {len(errors)} error(s); first: {errors[0]}")
+        finally:
+            await es.close()
+        print(f"done (only-values={only_values}): scanned={scanned} updated={updated}")
+        return
+
     # Missing-only = "has a type, but no category_text yet".
     #
     # Keyed on category_text (the newest field) rather than category_group, so
@@ -134,8 +193,19 @@ def main() -> None:
         action="store_true",
         help="reprocess every doc, not just those missing category_group",
     )
+    ap.add_argument(
+        "--only-values",
+        type=str,
+        default=None,
+        help=(
+            "comma-separated category_value list to re-derive even if they already "
+            "have a category_text (use when the derivation changed, not the schema), "
+            "e.g. --only-values subway_entrance,platform"
+        ),
+    )
     args = ap.parse_args()
-    asyncio.run(backfill(args.batch_size, args.sleep, args.all))
+    only = [v.strip() for v in args.only_values.split(",") if v.strip()] if args.only_values else None
+    asyncio.run(backfill(args.batch_size, args.sleep, args.all, only))
 
 
 if __name__ == "__main__":
