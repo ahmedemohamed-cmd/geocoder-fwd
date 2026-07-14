@@ -34,7 +34,7 @@ import os
 from shared import nats_client
 from shared.config import NATS_SUBJECT, OA_DATA_DIR, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
-from shared.processed import is_processed, load_processed, record_processed
+from shared.processed import claim, is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
 
 logger = get_logger("oa-watcher")
@@ -418,6 +418,8 @@ async def _scan_and_process(js) -> int:
     processed = 0
     for filepath in pending:
         rel_path = os.path.relpath(filepath, OA_DATA_DIR)
+        if not claim(OA_DATA_DIR, filepath, done):
+            continue  # another replica owns this file (pg-ledger mode)
         try:
             if filepath.endswith(".csv"):
                 count = await publish_csv(filepath, js)

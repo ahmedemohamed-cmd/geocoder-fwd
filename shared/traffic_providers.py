@@ -51,12 +51,26 @@ def _grid_points(bbox: str, n: int) -> list[tuple[float, float]]:
 
 
 class TrafficProvider:
-    """Base interface: return a list of {lat, lon, kph} observations."""
+    """Base interface: {lat, lon, kph} observations, whole-grid or per-cell.
+
+    ``points`` is the poll grid; the aggregator's cell scheduler enumerates it
+    and workers call ``fetch_cell`` for exactly one point each, so N replicas
+    share the polling without duplicate provider calls. ``fetch`` remains as
+    the sequential whole-grid form (kept for tests/tools)."""
 
     name = "none"
+    points: list[tuple[float, float]] = []
+
+    async def fetch_cell(self, client: httpx.AsyncClient, lat: float, lon: float) -> dict | None:
+        return None
 
     async def fetch(self, client: httpx.AsyncClient) -> list[dict]:
-        return []
+        out: list[dict] = []
+        for lat, lon in self.points:
+            obs = await self.fetch_cell(client, lat, lon)
+            if obs is not None:
+                out.append(obs)
+        return out
 
 
 class TomTomFlowProvider(TrafficProvider):
@@ -75,27 +89,24 @@ class TomTomFlowProvider(TrafficProvider):
         self.api_key = api_key
         self.url = url
 
-    async def fetch(self, client: httpx.AsyncClient) -> list[dict]:
-        out: list[dict] = []
-        for lat, lon in self.points:
-            try:
-                resp = await client.get(
-                    self.url,
-                    params={"point": f"{lat},{lon}", "unit": "KMPH", "key": self.api_key},
-                )
-                if resp.status_code != 200:
-                    continue
-                seg = resp.json().get("flowSegmentData")
-                if not seg:
-                    continue
-                kph = seg.get("currentSpeed")
-                if kph is None:
-                    continue
-                out.append({"lat": lat, "lon": lon, "kph": float(kph)})
-            except Exception:
-                # One bad sample shouldn't abort the whole poll.
-                continue
-        return out
+    async def fetch_cell(self, client: httpx.AsyncClient, lat: float, lon: float) -> dict | None:
+        """Current speed at one grid point, or None (a bad sample is dropped)."""
+        try:
+            resp = await client.get(
+                self.url,
+                params={"point": f"{lat},{lon}", "unit": "KMPH", "key": self.api_key},
+            )
+            if resp.status_code != 200:
+                return None
+            seg = resp.json().get("flowSegmentData")
+            if not seg:
+                return None
+            kph = seg.get("currentSpeed")
+            if kph is None:
+                return None
+            return {"lat": lat, "lon": lon, "kph": float(kph)}
+        except Exception:
+            return None
 
 
 def get_provider() -> TrafficProvider | None:

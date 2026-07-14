@@ -3,7 +3,9 @@
 Pipeline position: it sits between the probe firehose and the traffic-writer.
 
   NATS traffic.probes ──▶ map-match via Valhalla /trace_attributes ──▶ edge GraphIds
-  external provider   ──▶ snap via Valhalla /locate                ──▶ edge GraphIds
+  NATS traffic.cells  ──▶ provider fetch + snap via /locate        ──▶ edge GraphIds
+  (cells enqueued by a leaderless scheduler: every replica tries a Redis
+   SET NX per cell per poll window; exactly one wins — no duplicate polling)
                                           │
                                           ▼
                          EWMA per-edge speed in Redis  (tf:e:{graphid} + tf:idx zset)
@@ -28,6 +30,8 @@ import redis.asyncio as aioredis
 from shared.config import (
     REDIS_HOST,
     REDIS_PORT,
+    TRAFFIC_CELL_WORKERS,
+    TRAFFIC_CELLS_SUBJECT,
     TRAFFIC_EDGE_TTL,
     TRAFFIC_EWMA_ALPHA,
     TRAFFIC_MAX_TRACE,
@@ -39,11 +43,14 @@ from shared.config import (
 )
 from shared.logging import get_logger
 from shared.nats_client import (
+    TRAFFIC_CELLS_STREAM_CFG,
     TRAFFIC_STREAM_CFG,
+    connect_cells,
     connect_traffic,
     is_connection_error,
     is_transient_error,
     reconnect,
+    subscribe_cells,
     subscribe_traffic,
 )
 from shared.redis_client import make_redis_async
@@ -281,37 +288,122 @@ async def _probe_consumer(r: aioredis.Redis, client: httpx.AsyncClient):
             _log(f"updated {total_edges} edges from {len(msgs)} probe batch(es)")
 
 
-# ── External provider poller ───────────────────────────────────────────────────
-async def _provider_poller(r: aioredis.Redis, client: httpx.AsyncClient):
+# ── External provider polling, distributed across replicas ────────────────────
+#
+# The old sequential grid poller was a singleton (replicas would duplicate every
+# provider call). It is split into two leaderless halves:
+#
+#   scheduler (every replica) ──SET NX──▶ Redis dedupe ──▶ publish traffic.cells
+#   workers   (every replica) ◀──────── WORKQUEUE stream (each cell to ONE worker)
+#
+# Every replica runs the scheduler each poll window and attempts a Redis
+# `SET tfc:sched:{cell}:{window} NX` per cell — exactly one replica wins each
+# cell and enqueues it, so there is no leader and no duplicate polling. Workers
+# on all replicas share one durable consumer on the WORKQUEUE stream, giving
+# linear scaling of the actual provider fetch + map-snap work.
+
+_SCHED_PREFIX = "tfc:sched:"
+
+
+def _cell_msg(cell: int, lat: float, lon: float, window: int) -> bytes:
+    return json.dumps({"cell": cell, "lat": lat, "lon": lon, "window": window}).encode()
+
+
+async def _schedule_window(r: aioredis.Redis, js, points, window: int, interval: int) -> int:
+    """Enqueue this window's cells, deduped across replicas via Redis SET NX.
+
+    One winner per cell per window; the NX key's TTL covers the window so it
+    garbage-collects itself. Returns the number of cells this caller enqueued."""
+    enqueued = 0
+    for cell, (lat, lon) in enumerate(points):
+        won = await r.set(f"{_SCHED_PREFIX}{cell}:{window}", "1", nx=True, ex=interval)
+        if not won:
+            continue
+        await js.publish(TRAFFIC_CELLS_SUBJECT, _cell_msg(cell, lat, lon, window))
+        enqueued += 1
+    return enqueued
+
+
+async def _cell_scheduler(r: aioredis.Redis):
     provider = get_provider()
     if provider is None:
-        _log(f"No external provider active (TRAFFIC_PROVIDER={TRAFFIC_PROVIDER}).")
         return
-    _log(f"External provider '{provider.name}' active; polling every {TRAFFIC_PROVIDER_INTERVAL}s")
+    interval = max(1, TRAFFIC_PROVIDER_INTERVAL)
+    _log(
+        f"cell scheduler: {len(provider.points)} cells every {interval}s "
+        f"(leaderless, Redis NX dedupe)"
+    )
+    nc, js = await connect_cells()
+    state = {"nc": nc, "js": js}
+    while True:
+        window = int(time.time() // interval)
+        try:
+            enqueued = await _schedule_window(r, state["js"], provider.points, window, interval)
+            if enqueued:
+                _log(f"cell scheduler: enqueued {enqueued}/{len(provider.points)} cells")
+        except Exception as e:
+            _log(f"cell scheduler error: {e}")
+            if is_connection_error(e):
+                try:
+                    state["nc"], state["js"] = await reconnect(
+                        state["nc"], state["js"], TRAFFIC_CELLS_STREAM_CFG
+                    )
+                except Exception as re:
+                    _log(f"cell scheduler reconnect failed: {re}")
+        # Sleep to the next window boundary so all replicas agree on windows.
+        await asyncio.sleep(max(1.0, (window + 1) * interval - time.time()))
+
+
+async def _cell_worker(r: aioredis.Redis, client: httpx.AsyncClient, worker_id: int):
+    provider = get_provider()
+    if provider is None:
+        return
+    interval = max(1, TRAFFIC_PROVIDER_INTERVAL)
+    nc, js = await connect_cells()
+    sub = await subscribe_cells(js, "traffic-cell-worker")
+    state = {"nc": nc, "js": js, "sub": sub}
+    _log(f"cell worker {worker_id}: consuming {TRAFFIC_CELLS_SUBJECT}")
 
     while True:
         try:
-            obs = await provider.fetch(client)
-            if obs:
-                located = await _locate(client, [{"lat": o["lat"], "lon": o["lon"]} for o in obs])
-                now = time.time()
-                updated = 0
-                if located:
-                    for o, res in zip(obs, located, strict=False):
-                        edges = (res.get("edges") if isinstance(res, dict) else None) or []
-                        if not edges:
-                            continue
-                        gid = edges[0].get("edge_id", {}).get("value")
-                        if gid is None:
-                            continue
-                        await _update_edge(
-                            r, int(gid), o["kph"], weight=TRAFFIC_PROVIDER_WEIGHT, now=now
-                        )
-                        updated += 1
-                _log(f"provider '{provider.name}': {len(obs)} samples -> {updated} edges")
+            msgs = await state["sub"].fetch(batch=10, timeout=5)
+        except (TimeoutError, nats.errors.TimeoutError):
+            continue
         except Exception as e:
-            _log(f"provider poll error: {e}")
-        await asyncio.sleep(TRAFFIC_PROVIDER_INTERVAL)
+            _log(f"cell worker {worker_id} fetch error: {type(e).__name__}: {e}")
+            if is_connection_error(e):
+                try:
+                    state["nc"], state["js"] = await reconnect(
+                        state["nc"], state["js"], TRAFFIC_CELLS_STREAM_CFG
+                    )
+                    state["sub"] = await subscribe_cells(state["js"], "traffic-cell-worker")
+                except Exception as re:
+                    _log(f"cell worker {worker_id} reconnect failed: {re}")
+                    await asyncio.sleep(5)
+            else:
+                await asyncio.sleep(2)
+            continue
+
+        for msg in msgs:
+            try:
+                cell = json.loads(msg.data)
+                # Stale cell (worker backlog / redelivery after an outage):
+                # the speed is superseded by a newer window — drop it.
+                if time.time() - cell["window"] * interval > 2 * interval:
+                    continue
+                obs = await provider.fetch_cell(client, cell["lat"], cell["lon"])
+                if obs is not None:
+                    located = await _locate(client, [{"lat": obs["lat"], "lon": obs["lon"]}])
+                    edges = (located[0].get("edges") if located else None) or []
+                    gid = edges[0].get("edge_id", {}).get("value") if edges else None
+                    if gid is not None:
+                        await _update_edge(
+                            r, int(gid), obs["kph"], weight=TRAFFIC_PROVIDER_WEIGHT, now=time.time()
+                        )
+            except Exception as e:
+                _log(f"cell worker {worker_id} error (acking): {e}")
+            finally:
+                await msg.ack()
 
 
 async def run():
@@ -322,10 +414,15 @@ async def run():
     # One shared HTTP client; generous timeout because map-matching long traces
     # is the slow path.
     async with httpx.AsyncClient(timeout=30) as client:
-        await asyncio.gather(
-            _probe_consumer(r, client),
-            _provider_poller(r, client),
-        )
+        tasks = [_probe_consumer(r, client)]
+        if get_provider() is None:
+            _log(f"No external provider active (TRAFFIC_PROVIDER={TRAFFIC_PROVIDER}).")
+        else:
+            tasks.append(_cell_scheduler(r))
+            tasks.extend(
+                _cell_worker(r, client, i) for i in range(max(1, TRAFFIC_CELL_WORKERS))
+            )
+        await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":

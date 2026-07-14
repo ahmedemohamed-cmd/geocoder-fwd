@@ -108,6 +108,28 @@ Once running, the FastAPI docs are at `http://localhost:8000/docs`.
 
 See [requests.http](requests.http) for a full, runnable set of examples.
 
+### Horizontal scaling
+
+Every serving-path service (geocoder, apisix, billing services, zitadel) is
+stateless and replica-safe. The background workers scale as follows:
+
+- **es-inserter / postgis-inserter** — shared durable NATS consumers; run N
+  replicas to raise ingest throughput.
+- **traffic-aggregator** — probes and provider polling both distribute across
+  replicas (`--scale traffic-aggregator=N`): probe batches via a shared durable
+  consumer, provider cells via the `TRAFFIC_CELLS` work-queue stream with a
+  leaderless Redis `SET NX` scheduler (no duplicate provider calls, no leader).
+- **traffic-writer** — per-tile sharding: run N writers with
+  `TRAFFIC_WRITER_SHARDS=N` and distinct `TRAFFIC_WRITER_SHARD_INDEX` values;
+  each owns disjoint tiles/mmap ranges. On a multi-node deployment run one
+  writer next to each Valhalla replica against the node-local `traffic.tar`
+  (Redis is the shared source of truth for speeds).
+- **oa/gn/places-watchers** — set `PROCESSED_LEDGER=pg` to move the
+  processed-file ledger into Postgres with atomic claims, making multiple
+  watcher replicas safe (each file imported exactly once).
+- **watcher (pbf) / downloader** — one-shot batch jobs by design; idempotent
+  re-runs, not replicas.
+
 **Search by name:**
 ```bash
 curl "http://localhost:8000/geocode?q=Cairo&limit=5"

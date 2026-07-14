@@ -143,6 +143,11 @@ VALHALLA_URL = os.getenv("VALHALLA_URL", "http://valhalla:8002")
 TRAFFIC_STREAM = "TRAFFIC"
 TRAFFIC_SUBJECT = "traffic.probes"
 
+# Work-queue stream distributing provider poll cells across aggregator replicas
+# (WORKQUEUE retention: each cell message is consumed by exactly one worker).
+TRAFFIC_CELLS_STREAM = "TRAFFIC_CELLS"
+TRAFFIC_CELLS_SUBJECT = "traffic.cells"
+
 # Path to Valhalla's traffic extract, as seen by the traffic-writer container
 # (shares the ./data bind mounted at /custom_files; Valhalla keeps its files
 # under the valhalla/ subdir via path_extension=valhalla).
@@ -186,6 +191,9 @@ TRAFFIC_PROVIDER_BBOX = os.getenv("TRAFFIC_PROVIDER_BBOX", "29.7,31.0,30.2,31.5"
 # Provider sampling grid: N×N query points across the bbox per poll. Keep small
 # to stay within free-tier rate limits (8×8 = 64 calls/poll by default).
 TRAFFIC_PROVIDER_GRID = _safe_int("TRAFFIC_PROVIDER_GRID", 8)
+# In-process consumers of the traffic.cells work queue per aggregator replica
+# (cross-replica scaling comes from running more replicas on the same durable).
+TRAFFIC_CELL_WORKERS = _safe_int("TRAFFIC_CELL_WORKERS", 2)
 TOMTOM_API_KEY = os.getenv("TOMTOM_API_KEY", "")
 TOMTOM_FLOW_URL = os.getenv(
     "TOMTOM_FLOW_URL",

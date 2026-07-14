@@ -329,6 +329,10 @@ services:
       # "tomtom" needs TOMTOM_API_KEY (free tier). Probe data always takes priority.
       - TRAFFIC_PROVIDER=${TRAFFIC_PROVIDER:-none}
       - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      # Provider polling is distributed over a NATS work queue: replicas share
+      # the cells with no duplicate provider calls (leaderless Redis NX dedupe),
+      # so `docker compose up -d --scale traffic-aggregator=N` is safe.
+      - TRAFFIC_CELL_WORKERS=${TRAFFIC_CELL_WORKERS:-2}
       - TRAFFIC_PROVIDER_BBOX=${TRAFFIC_PROVIDER_BBOX:-29.7,31.0,30.2,31.5}
       # Poll rate for the external provider. Defaults are free-tier-safe: an
       # N×N grid every INTERVAL seconds = grid² × 86400/INTERVAL calls/day, so
@@ -380,6 +384,11 @@ services:
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - OA_DATA_DIR=/app/data/openaddresses
+      # Replica-safe processed-file ledger: "file" (default, single instance)
+      # or "pg" (Postgres claims; required to run multiple watcher replicas).
+      - PROCESSED_LEDGER=${PROCESSED_LEDGER:-file}
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
     depends_on:
       nats:
         condition: service_started
@@ -395,6 +404,11 @@ services:
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - GN_DATA_DIR=/app/data/geonames
+      # Replica-safe processed-file ledger: "file" (default, single instance)
+      # or "pg" (Postgres claims; required to run multiple watcher replicas).
+      - PROCESSED_LEDGER=${PROCESSED_LEDGER:-file}
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
     depends_on:
       nats:
         condition: service_started
@@ -413,6 +427,11 @@ services:
       - NATS_STREAM=OSM
       - NATS_SUBJECT=osm.elements
       - PLACES_DATA_DIR=/app/data/places
+      # Replica-safe processed-file ledger: "file" (default, single instance)
+      # or "pg" (Postgres claims; required to run multiple watcher replicas).
+      - PROCESSED_LEDGER=${PROCESSED_LEDGER:-file}
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
     depends_on:
       nats:
         condition: service_started

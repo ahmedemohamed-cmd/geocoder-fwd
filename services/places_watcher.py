@@ -24,7 +24,7 @@ from shared import nats_client
 from shared.config import NATS_SUBJECT, PLACES_DATA_DIR, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
 from shared.places_mapping import place_to_element
-from shared.processed import is_processed, load_processed, record_processed
+from shared.processed import claim, is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
 
 logger = get_logger("places-watcher")
@@ -133,6 +133,8 @@ async def _scan_and_process(js) -> int:
     logger.info(f"[places-watcher] Found {len(pending)} new place file(s) to process")
     processed = 0
     for filepath in pending:
+        if not claim(PLACES_DATA_DIR, filepath, done):
+            continue  # another replica owns this file (pg-ledger mode)
         try:
             count = await publish_file(filepath, js)
             if count >= 0:

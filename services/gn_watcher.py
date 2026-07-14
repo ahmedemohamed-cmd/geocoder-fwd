@@ -41,7 +41,7 @@ import zipfile
 from shared import nats_client
 from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
-from shared.processed import is_processed, load_processed, record_processed
+from shared.processed import claim, is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
 
 logger = get_logger("gn-watcher")
@@ -386,6 +386,8 @@ async def _scan_and_process(js) -> int:
     logger.info(f"[gn-watcher] Found {len(pending)} new data file(s) to process")
     processed = 0
     for filepath in pending:
+        if not claim(GN_DATA_DIR, filepath, done):
+            continue  # another replica owns this file (pg-ledger mode)
         try:
             count = await publish_tsv(filepath, js)
             # Only mark as processed if we didn't abort early

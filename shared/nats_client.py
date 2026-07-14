@@ -9,6 +9,8 @@ from shared.config import (
     NATS_STREAM_REPLICAS,
     NATS_SUBJECT,
     NATS_URL,
+    TRAFFIC_CELLS_STREAM,
+    TRAFFIC_CELLS_SUBJECT,
     TRAFFIC_STREAM,
     TRAFFIC_SUBJECT,
 )
@@ -39,6 +41,23 @@ TRAFFIC_STREAM_CFG = StreamConfig(
     retention=RetentionPolicy.LIMITS,
     max_age=3600,  # 1 h
     max_bytes=536870912,  # 512 MB
+    storage="file",
+    max_msg_size=-1,
+    discard="old",
+    num_replicas=NATS_STREAM_REPLICAS,
+)
+
+# Provider poll cells: a true work queue — each cell message is delivered to
+# exactly one worker and deleted on ack, so N aggregator replicas share the
+# external-provider polling without duplicating calls. Cells are worthless once
+# their poll window has passed, hence the short max_age. WORKQUEUE retention
+# allows only one consumer per subject: everyone attaches to the same durable.
+TRAFFIC_CELLS_STREAM_CFG = StreamConfig(
+    name=TRAFFIC_CELLS_STREAM,
+    subjects=[TRAFFIC_CELLS_SUBJECT],
+    retention=RetentionPolicy.WORK_QUEUE,
+    max_age=600,  # stale cells self-expire
+    max_bytes=67108864,  # 64 MB — cells are tiny
     storage="file",
     max_msg_size=-1,
     discard="old",
@@ -141,6 +160,11 @@ async def connect(stream_cfg=_STREAM_CFG):
 async def connect_traffic():
     """Connect to NATS and ensure the TRAFFIC probe stream. Returns (nc, js)."""
     return await connect(TRAFFIC_STREAM_CFG)
+
+
+async def connect_cells():
+    """Connect to NATS and ensure the TRAFFIC_CELLS work-queue stream."""
+    return await connect(TRAFFIC_CELLS_STREAM_CFG)
 
 
 async def reconnect(nc, js, stream_cfg=_STREAM_CFG):
@@ -249,3 +273,8 @@ async def subscribe(js, consumer_name):
 async def subscribe_traffic(js, consumer_name):
     """Durable pull subscription on the TRAFFIC probe stream."""
     return await subscribe_to(js, TRAFFIC_STREAM, TRAFFIC_SUBJECT, consumer_name)
+
+
+async def subscribe_cells(js, consumer_name):
+    """Durable pull subscription on the TRAFFIC_CELLS work-queue stream."""
+    return await subscribe_to(js, TRAFFIC_CELLS_STREAM, TRAFFIC_CELLS_SUBJECT, consumer_name)
