@@ -1395,6 +1395,41 @@ async def autocomplete(
     ]
 
     if lat is not None and lon is not None:
+        # TWO decays, doing two different jobs. The index is global (43.8M docs),
+        # and a single decay cannot serve both:
+        #
+        #   Regional (300km, weight 25) — kills continental distance. Without it,
+        #   `offline_rank` (weight 2, ranging to ~14) let a far prominent place beat
+        #   a near relevant one: "metro" biased to Cairo returned Metrotown and
+        #   Metro Vancouver Regional District, 9,200 km away; "bank" returned
+        #   Bankview and Bankfield. At a 300km scale this term is essentially FLAT
+        #   across a single city, so it discriminates between continents without
+        #   disturbing ranking within one.
+        #
+        #   Local (15km, weight 3) — the fine-grained "near me" bias.
+        #
+        # Why not just raise the local decay's weight? Measured on the production
+        # index: 15km@25 fixes category (68%→92%) but craters named recall
+        # (strict@1 48%→37%), because it ranks by "closest to the bias point"
+        # rather than "best name match" — and a searched-for place is rarely at the
+        # exact point you biased from. The split keeps both: strict@1 45%,
+        # category 98%.
+        #
+        # Only added when lat/lon are supplied; coordinate-free global search is
+        # unaffected.
+        functions.append(
+            {
+                "gauss": {
+                    "centroid": {
+                        "origin": {"lat": lat, "lon": lon},
+                        "scale": "300km",
+                        "offset": "50km",
+                        "decay": 0.5,
+                    }
+                },
+                "weight": 25,
+            }
+        )
         functions.append(
             {
                 "gauss": {
@@ -1405,18 +1440,7 @@ async def autocomplete(
                         "decay": 0.5,
                     }
                 },
-                # The index is GLOBAL (43.8M docs), so proximity has to be able to
-                # outweigh prominence. At the old weight of 1.5 it could not:
-                # `offline_rank` carries weight 2 and ranges to ~14, so a far-away
-                # prominent place beat a near relevant one, and "metro" biased to
-                # Cairo returned Metrotown and Metro Vancouver Regional District —
-                # 9,200 km away. "bank" returned Bankview and Bankfield.
-                #
-                # 25 is measured on the production index: within-100km-of-origin
-                # goes 75% → 100% and the category hit-rate 68% → 92% (10 also
-                # reaches 100%/90%; 50 starts to regress). Only added when lat/lon
-                # are supplied, so coordinate-free global search is unaffected.
-                "weight": 25,
+                "weight": 3,
             }
         )
 
