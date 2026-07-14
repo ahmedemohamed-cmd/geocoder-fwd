@@ -1346,6 +1346,27 @@ async def autocomplete(
                         "type": "phrase_prefix",
                     }
                 },
+                # WHOLE-WORD match. The two clauses above are prefix-based, so they
+                # score "Metro" and "Metrosport" alike and let `offline_rank` break
+                # the tie — which is how a query for "metro" near Toronto returned
+                # Metrosport, MetroCentre and Metrogate while the 61 shops named
+                # exactly "Metro" sat below them. A `phrase` match hits the *token*
+                # "metro" (present in "Metro" and "Metro Market", absent from
+                # "Metrosport", which analyses to the single token "metrosport"), so
+                # it separates "your query IS this name" from "your query is a
+                # prefix of this name". Measured: exact-"Metro" in top-4 near
+                # Vaughan goes 0/4 → 4/4, Cairo stays 4/4.
+                #
+                # Contributes nothing to a mid-typing prefix like "metr" (no such
+                # token), so it never hurts keystroke recall — it only breaks ties
+                # once a whole word has been typed.
+                {
+                    "multi_match": {
+                        "query": q_norm,
+                        "fields": ["name^10", "name_en^10", "name_fr^10"],
+                        "type": "phrase",
+                    }
+                },
             ],
             "minimum_should_match": 1,
         }
