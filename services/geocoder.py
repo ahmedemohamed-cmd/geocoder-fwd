@@ -1405,7 +1405,18 @@ async def autocomplete(
                         "decay": 0.5,
                     }
                 },
-                "weight": 1.5,
+                # The index is GLOBAL (43.8M docs), so proximity has to be able to
+                # outweigh prominence. At the old weight of 1.5 it could not:
+                # `offline_rank` carries weight 2 and ranges to ~14, so a far-away
+                # prominent place beat a near relevant one, and "metro" biased to
+                # Cairo returned Metrotown and Metro Vancouver Regional District —
+                # 9,200 km away. "bank" returned Bankview and Bankfield.
+                #
+                # 25 is measured on the production index: within-100km-of-origin
+                # goes 75% → 100% and the category hit-rate 68% → 92% (10 also
+                # reaches 100%/90%; 50 starts to regress). Only added when lat/lon
+                # are supplied, so coordinate-free global search is unaffected.
+                "weight": 25,
             }
         )
 
