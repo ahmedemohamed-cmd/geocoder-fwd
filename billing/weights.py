@@ -37,6 +37,9 @@ DEFAULT_WEIGHTS: dict[str, int] = {
     "sources_to_targets": 5000,
     "isochrone": 5000,
     "locate": 5000,
+    # LLM inference (Ollama) on cache miss — heaviest single op in the stack,
+    # amortized by the permanent per-place ES cache.
+    "describe": 5000,
 }
 
 _TTL = 15.0  # seconds

@@ -15,6 +15,7 @@ async def test_default_weights_seeded(cp_client):
     assert by_ep["autocomplete"] == 250
     assert by_ep["deep"] == 3000
     assert by_ep["route"] == 5000
+    assert by_ep["describe"] == 5000  # LLM inference tier
 
 
 async def test_seed_never_clobbers_admin_edit(cp_client, pool):
@@ -104,8 +105,9 @@ async def test_unknown_endpoint_costs_one_credit(cp_client, pool, redis):
     _, ttok = await make_tenant(cp_client, admin_email="wdef@u.io", plan_id="starter")
     key = await create_key(cp_client, ttok)
     consumer = apisix_admin.consumer_name(key["id"])
+    # /address is billable but has no weight row → default 1 credit
     await cp_client.post(
-        "/internal/usage", json=[{"consumer": consumer, "uri": "/describe?id=1", "status": 200}]
+        "/internal/usage", json=[{"consumer": consumer, "uri": "/address?q=x", "status": 200}]
     )
     cur = (await cp_client.get("/usage/current", headers=bearer(ttok))).json()
     assert cur["credits_used"] == 1.0
