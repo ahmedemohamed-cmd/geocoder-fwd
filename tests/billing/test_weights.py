@@ -53,6 +53,16 @@ async def test_weight_crud(cp_client):
     ).status_code == 422
 
 
+async def test_tenant_can_view_weights(cp_client):
+    _, ttok = await make_tenant(cp_client, admin_email="viewweights@acme.io")
+    r = await cp_client.get("/weights", headers=bearer(ttok))
+    assert r.status_code == 200
+    by_ep = {w["endpoint"]: w["milli_credits"] for w in r.json()}
+    assert by_ep == weights.DEFAULT_WEIGHTS
+    # read-only view requires auth
+    assert (await cp_client.get("/weights")).status_code in (401, 403)
+
+
 async def test_tenant_cannot_manage_weights(cp_client):
     _, ttok = await make_tenant(cp_client, admin_email="noweights@acme.io")
     h = bearer(ttok)

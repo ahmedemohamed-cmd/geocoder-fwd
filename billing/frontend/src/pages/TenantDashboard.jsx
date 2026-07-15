@@ -4,6 +4,7 @@ import Tabs from "./Tabs.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "pricing", label: "Pricing" },
   { id: "account", label: "Account" },
 ];
 
@@ -17,6 +18,7 @@ export default function TenantDashboard({ api }) {
   const [err, setErr] = useState(null);
   const [revealed, setRevealed] = useState({}); // key id -> show full secret
   const [copiedId, setCopiedId] = useState(null);
+  const [weights, setWeights] = useState([]); // endpoint -> credits per request
 
   const copy = async (id, text) => {
     if (!text) return;
@@ -31,9 +33,10 @@ export default function TenantDashboard({ api }) {
   const loadKeys = () => api.get("/keys").then(setKeys).catch((e) => setErr(e.message));
   const loadInvoices = () => api.get("/invoices").then(setInvoices).catch(() => {});
   const loadUsage = () => api.get("/usage/current").then(setUsage).catch(() => {});
+  const loadWeights = () => api.get("/weights").then(setWeights).catch(() => {});
 
   // Usage is loaded on open and on the manual Refresh button (no live polling).
-  useEffect(() => { loadUsage(); loadKeys(); loadInvoices(); }, []);
+  useEffect(() => { loadUsage(); loadKeys(); loadInvoices(); loadWeights(); }, []);
 
   const createKey = async (e) => {
     e.preventDefault();
@@ -67,6 +70,31 @@ export default function TenantDashboard({ api }) {
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       {tab === "account" && (
         <div className="grid single"><AccountCard api={api} /></div>
+      )}
+      {tab === "pricing" && (
+        <div className="grid single">
+          <section className="card">
+            <h2>Credit pricing</h2>
+            <p className="muted">
+              Each API request is billed in credits by endpoint (first path
+              segment — e.g. <code>/deep/forward</code> bills as <code>/deep</code>).
+              Endpoints not listed here cost 1 credit per request; free endpoints
+              (health, feedback, probe uploads) are never billed.
+            </p>
+            <table>
+              <thead><tr><th>Endpoint</th><th>Credits / request</th></tr></thead>
+              <tbody>
+                {weights.map((w) => (
+                  <tr key={w.endpoint}>
+                    <td><code>/{w.endpoint}</code></td>
+                    <td>{w.milli_credits / 1000}</td>
+                  </tr>
+                ))}
+                {weights.length === 0 && <tr><td colSpan="2" className="muted">Loading…</td></tr>}
+              </tbody>
+            </table>
+          </section>
+        </div>
       )}
       {tab === "overview" && (
     <div className="grid">

@@ -740,6 +740,14 @@ def build_app(pool=None, redis=None) -> FastAPI:
         return Response(status_code=204)
 
     # ── tenant: usage & reports ──────────────────────────────────────────────
+    @app.get("/weights", response_model=list[WeightOut], tags=[router_tag_tenant])
+    async def public_weights(
+        _: Identity = Depends(current_identity), pool=Depends(get_pool)
+    ):
+        """Read-only credit pricing per endpoint, so tenants can see how their
+        requests map to billed credits (admin edits via /admin/weights)."""
+        return await repo.list_weights(pool)
+
     @app.get("/usage/current", response_model=CurrentUsage, tags=[router_tag_tenant])
     async def current_usage(
         ident: Identity = Depends(require_tenant), pool=Depends(get_pool), redis=Depends(get_redis)
