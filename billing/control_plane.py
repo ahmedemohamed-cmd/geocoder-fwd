@@ -70,7 +70,6 @@ from .models import (
     AdminCreate,
     AdminOut,
     AdminUpdate,
-    ChangePasswordRequest,
     CurrentUsage,
     Identity,
     InvoiceOut,
@@ -141,55 +140,6 @@ def build_app(pool=None, redis=None) -> FastAPI:
     @app.get("/auth/me", response_model=Identity, tags=["auth"])
     async def me(ident: Identity = Depends(current_identity)):
         return ident
-
-    # ── self-service: any authenticated user manages their own credentials ────
-    @app.post("/me/password", status_code=204, tags=["auth"])
-    async def change_my_password(
-        body: ChangePasswordRequest,
-        ident: Identity = Depends(current_identity),
-        pool=Depends(get_pool),
-    ):
-        if zitadel_admin.enabled():
-            # In Zitadel mode the token `sub` is the Zitadel user id.
-            try:
-                await zitadel_admin.change_own_password(
-                    user_id=ident.sub,
-                    old_password=body.current_password,
-                    new_password=body.new_password,
-                )
-            except zitadel_admin.InvalidCurrentPassword as e:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
-            except zitadel_admin.ZitadelError as e:
-                raise HTTPException(
-                    status.HTTP_502_BAD_GATEWAY, f"password change in IdP failed: {e}"
-                ) from e
-            return Response(status_code=204)
-        # Dev mode: local users table (the token `sub` is the email).
-        user = await repo.get_user_by_email(pool, ident.sub)
-        if not user or not security.verify_password(
-            body.current_password, user["password_hash"]
-        ):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "current password is incorrect")
-        new_hash = security.hash_password(body.new_password)
-        if ident.role == config.ROLE_ADMIN:
-            await repo.set_admin_password(pool, email=ident.sub, password_hash=new_hash)
-        else:
-            await repo.set_user_password(
-                pool, email=ident.sub, tenant_id=ident.tenant_id, password_hash=new_hash
-            )
-        return Response(status_code=204)
-
-    @app.post("/me/mfa/reset", status_code=204, tags=["auth"])
-    async def reset_my_mfa(ident: Identity = Depends(current_identity)):
-        # Removes the caller's own TOTP; their current session stays valid but the
-        # next login forces re-enrollment (the policy mandates MFA). No-op in dev.
-        try:
-            await zitadel_admin.reset_user_mfa(user_id=ident.sub)
-        except zitadel_admin.ZitadelError as e:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, f"MFA reset in IdP failed: {e}"
-            ) from e
-        return Response(status_code=204)
 
     # ── admin: platform admins CRUD ──────────────────────────────────────────
     @app.get("/admin/admins", response_model=list[AdminOut], tags=[router_tag_admin])

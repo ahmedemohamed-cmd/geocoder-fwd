@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
-import AccountCard from "./AccountCard.jsx";
 import Tabs from "./Tabs.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "pricing", label: "Pricing" },
-  { id: "account", label: "Account" },
 ];
 
 export default function TenantDashboard({ api }) {
@@ -68,9 +66,6 @@ export default function TenantDashboard({ api }) {
   return (
     <>
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      {tab === "account" && (
-        <div className="grid single"><AccountCard api={api} /></div>
-      )}
       {tab === "pricing" && (
         <div className="grid single">
           <section className="card">

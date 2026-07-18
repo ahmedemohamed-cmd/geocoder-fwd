@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import PlansCard from "./PlansCard.jsx";
 import WeightsCard from "./WeightsCard.jsx";
 import AdminsCard from "./AdminsCard.jsx";
-import AccountCard from "./AccountCard.jsx";
 import Tabs from "./Tabs.jsx";
 
 const TABS = [
@@ -10,7 +9,6 @@ const TABS = [
   { id: "plans", label: "Plans" },
   { id: "weights", label: "Weights" },
   { id: "admins", label: "Admins" },
-  { id: "account", label: "Account" },
 ];
 
 export default function AdminDashboard({ api }) {
@@ -271,9 +269,6 @@ export default function AdminDashboard({ api }) {
       )}
       {tab === "admins" && (
         <div className="grid single"><AdminsCard api={api} /></div>
-      )}
-      {tab === "account" && (
-        <div className="grid single"><AccountCard api={api} /></div>
       )}
     </>
   );
