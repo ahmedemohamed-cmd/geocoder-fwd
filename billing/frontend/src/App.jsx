@@ -37,6 +37,14 @@ export default function App({ config }) {
         <span className="muted">
           {profile.email || profile.preferred_username} · <b>{role || "no role"}</b>
         </span>
+        {role === "admin" && (
+          <button onClick={() => window.open("/ui/console/users", "_blank")}>
+            Manage users
+          </button>
+        )}
+        <button onClick={() => window.open("/ui/console/users/me?id=security", "_blank")}>
+          Profile
+        </button>
         <button onClick={() => auth.signoutRedirect()}>Sign out</button>
       </header>
       <main>
