@@ -179,14 +179,17 @@ async def ensure_consumer_group(
     if rps > 0:
         # Per-node leaky bucket (no shared state needed for a burst cap): with
         # several APISIX nodes the effective cap is rps × nodes, which is fine —
-        # this prices peak capacity, it isn't the billing quota. Free paths are
-        # exempt like the quota counter.
+        # this prices peak capacity, it isn't the billing quota. limit-req has no
+        # "constant" key_type (that's limit-count), so the bucket is keyed on
+        # consumer_name: per API key at the edge, while the gateway's Redis
+        # window caps the tenant as a whole. Free paths are exempt like the
+        # quota counter.
         plugins["limit-req"] = {
             "rate": rps,
             "burst": rps,
             "rejected_code": 429,
-            "key_type": "constant",
-            "key": gid,
+            "key_type": "var",
+            "key": "consumer_name",
             **_free_filter(),
         }
     async with _client() as c:
