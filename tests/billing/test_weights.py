@@ -15,7 +15,8 @@ async def test_default_weights_seeded(cp_client):
     assert by_ep["autocomplete"] == 250
     assert by_ep["deep"] == 3000
     assert by_ep["route"] == 5000
-    assert by_ep["describe"] == 5000  # LLM inference tier
+    assert by_ep["describe"] == 25000  # LLM inference tier — priced above GPU cost
+    assert by_ep[weights.MATRIX_ELEMENT_KEY] == 100  # 0.1 credit per matrix element
 
 
 async def test_seed_never_clobbers_admin_edit(cp_client, pool):
@@ -126,8 +127,51 @@ async def test_unknown_endpoint_costs_one_credit(cp_client, pool, redis):
 # ── projected raw-request backstop ────────────────────────────────────────────
 def test_projected_request_cap():
     w = dict(weights.DEFAULT_WEIGHTS)
-    assert weights.projected_request_cap(w, 10_000) == 40_000  # min weight 0.25
+    # min weight is autocomplete 0.25 — the matrix element rate (0.1) is a
+    # multiplier, not an endpoint cost, and must not deflate the backstop
+    assert weights.projected_request_cap(w, 10_000) == 40_000
     assert weights.projected_request_cap({}, 10_000) == 10_000  # default weight 1
+
+
+# ── per-element matrix billing ────────────────────────────────────────────────
+def test_matrix_size_parsing():
+    body = b'{"sources": [{}, {}, {}], "targets": [{}, {}]}'
+    assert weights.matrix_size(None, body) == (3, 2)
+    assert weights.matrix_size("json=%7B%22sources%22%3A%5B%7B%7D%5D%2C%22targets%22%3A%5B%7B%7D%2C%7B%7D%5D%7D", None) == (1, 2)
+    # body wins over the query param when both are present
+    assert weights.matrix_size("json=%7B%7D", body) == (3, 2)
+    # unparseable / missing → (0, 0) → flat floor
+    assert weights.matrix_size(None, b"not json") == (0, 0)
+    assert weights.matrix_size("q=x", None) == (0, 0)
+    assert weights.matrix_size(None, None) == (0, 0)
+
+
+def test_matrix_milli():
+    w = dict(weights.DEFAULT_WEIGHTS)
+    assert weights.matrix_milli(w, 0, 0) == 5000  # unknown size → flat floor
+    assert weights.matrix_milli(w, 3, 4) == 5000  # 12 el × 100 = 1200 < floor
+    assert weights.matrix_milli(w, 10, 10) == 10_000  # 100 el × 100
+    assert weights.matrix_milli(w, 100, 100) == 1_000_000  # 10k el = 1000 credits
+
+
+async def test_sink_bills_matrix_per_element(cp_client, pool, redis):
+    _, ttok = await make_tenant(cp_client, admin_email="wmatrix@u.io", plan_id="starter")
+    key = await create_key(cp_client, ttok)
+    consumer = apisix_admin.consumer_name(key["id"])
+    import json as _json
+    from urllib.parse import quote
+
+    big = quote(_json.dumps({"sources": [{}] * 10, "targets": [{}] * 10}))
+    entries = [
+        # 10×10 via GET json= → 100 el × 0.1 = 10 credits
+        {"consumer": consumer, "uri": f"/sources_to_targets?json={big}", "status": 200},
+        # size not derivable from the access log (POST body) → flat 5 credits
+        {"consumer": consumer, "uri": "/sources_to_targets", "status": 200},
+    ]
+    r = await cp_client.post("/internal/usage", json=entries)
+    assert r.json()["recorded"] == 2
+    cur = (await cp_client.get("/usage/current", headers=bearer(ttok))).json()
+    assert cur["credits_used"] == 15.0
 
 
 # ── one-time migration idempotency ────────────────────────────────────────────

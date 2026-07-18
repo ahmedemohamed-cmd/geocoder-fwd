@@ -97,6 +97,7 @@ class PlanCreate(BaseModel):
     base_price_cents: int = Field(ge=0)
     overage_cents_per_unit: float = Field(ge=0)
     hard_cap: bool = False
+    rps: int = Field(default=0, ge=0)  # requests/second cap (0 = uncapped)
 
 
 class PlanUpdate(BaseModel):
@@ -105,6 +106,7 @@ class PlanUpdate(BaseModel):
     base_price_cents: int | None = Field(default=None, ge=0)
     overage_cents_per_unit: float | None = Field(default=None, ge=0)
     hard_cap: bool | None = None
+    rps: int | None = Field(default=None, ge=0)
 
 
 class PlanOut(BaseModel):
@@ -114,6 +116,7 @@ class PlanOut(BaseModel):
     base_price_cents: int
     overage_cents_per_unit: float
     hard_cap: bool
+    rps: int = 0
 
 
 # ── api keys (tenant) ────────────────────────────────────────────────────────

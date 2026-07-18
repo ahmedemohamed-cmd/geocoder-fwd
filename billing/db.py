@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS plans (
     base_price_cents       BIGINT NOT NULL DEFAULT 0,   -- flat monthly fee
     overage_cents_per_unit NUMERIC NOT NULL DEFAULT 0,  -- cents per credit over quota
     hard_cap               BOOLEAN NOT NULL DEFAULT FALSE,
+    rps                    INTEGER NOT NULL DEFAULT 0,  -- requests/second cap (0 = uncapped)
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -101,11 +102,11 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 """
 
 DEFAULT_PLANS = [
-    # id,       name,     quota (credits), base_cents, overage ¢/credit, hard_cap
-    ("free", "Free", 10_000, 0, 0.0, True),
-    ("starter", "Starter", 100_000, 2900, 0.04, False),  # $0.40 / 1k credits
-    ("pro", "Pro", 1_500_000, 29900, 0.025, False),  # $0.25 / 1k credits
-    ("scale", "Scale", 6_000_000, 99900, 0.015, False),  # $0.15 / 1k credits
+    # id,       name,     quota (credits), base_cents, overage ¢/credit, hard_cap, rps
+    ("free", "Free", 25_000, 0, 0.0, True, 2),
+    ("starter", "Starter", 250_000, 2900, 0.03, False, 10),  # $0.30 / 1k credits
+    ("pro", "Pro", 3_000_000, 29900, 0.015, False, 25),  # $0.15 / 1k credits
+    ("scale", "Scale", 12_000_000, 99900, 0.010, False, 50),  # $0.10 / 1k credits
 ]
 
 
@@ -157,7 +158,11 @@ async def init_schema(pool: asyncpg.Pool) -> None:
                 "deduplicate existing api_keys names to enable it: %s",
                 e,
             )
+        await conn.execute(
+            "ALTER TABLE plans ADD COLUMN IF NOT EXISTS rps INTEGER NOT NULL DEFAULT 0"
+        )
         await _run_once(conn, "2026-07-credit-units", _migrate_credit_units)
+        await _run_once(conn, "2026-07-leak-fixes", _migrate_leak_fixes)
 
 
 async def _run_once(conn, mig_id: str, fn) -> None:
@@ -184,7 +189,7 @@ async def _migrate_credit_units(conn) -> None:
     (= 1000 milli). Per-endpoint retro-weighting from the endpoint column would
     be possible but isn't worth it for one partial month. Pre-existing invoices
     keep their request-based semantics (total_milli_credits stays 0)."""
-    for pid, name, quota, base, overage, hard in DEFAULT_PLANS:
+    for pid, name, quota, base, overage, hard, _rps in DEFAULT_PLANS:
         if pid == "scale":
             continue  # new tier — seed_plans inserts it
         await conn.execute(
@@ -202,13 +207,45 @@ async def _migrate_credit_units(conn) -> None:
     )
 
 
+async def _migrate_leak_fixes(conn) -> None:
+    """2026-07 repricing to the OSM-provider band + pricing-leak fixes: bigger
+    quotas at the same base prices, cheaper overage, per-plan rps caps, LLM
+    `describe` repriced above its GPU cost, and the per-element matrix rate.
+    Overwrites the live rows deliberately — this ships a pricing decision, not
+    a seed."""
+    for pid, name, quota, base, overage, hard, rps in DEFAULT_PLANS:
+        await conn.execute(
+            """UPDATE plans SET name=$2, monthly_quota=$3, base_price_cents=$4,
+                                overage_cents_per_unit=$5, hard_cap=$6, rps=$7 WHERE id=$1""",
+            pid,
+            name,
+            quota,
+            base,
+            Decimal(str(overage)),
+            hard,
+            rps,
+        )
+    await conn.execute(
+        """INSERT INTO endpoint_weights (endpoint, milli_credits) VALUES ('describe', 25000)
+           ON CONFLICT (endpoint)
+           DO UPDATE SET milli_credits = EXCLUDED.milli_credits, updated_at = now()"""
+    )
+    await conn.execute(
+        """INSERT INTO endpoint_weights (endpoint, milli_credits) VALUES ($1, $2)
+           ON CONFLICT (endpoint) DO NOTHING""",
+        weights.MATRIX_ELEMENT_KEY,
+        weights.DEFAULT_MATRIX_ELEMENT_MILLI,
+    )
+
+
 async def seed_plans(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
-        for pid, name, quota, base, overage, hard in DEFAULT_PLANS:
+        for pid, name, quota, base, overage, hard, rps in DEFAULT_PLANS:
             await conn.execute(
                 """INSERT INTO plans
-                       (id, name, monthly_quota, base_price_cents, overage_cents_per_unit, hard_cap)
-                   VALUES ($1,$2,$3,$4,$5,$6)
+                       (id, name, monthly_quota, base_price_cents, overage_cents_per_unit,
+                        hard_cap, rps)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)
                    ON CONFLICT (id) DO NOTHING""",
                 pid,
                 name,
@@ -216,6 +253,7 @@ async def seed_plans(pool: asyncpg.Pool) -> None:
                 base,
                 Decimal(str(overage)),  # exact decimal, not the float's binary expansion
                 hard,
+                rps,
             )
 
 

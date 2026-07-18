@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 
 const BLANK = {
   id: "", name: "", monthly_quota: 1000,
-  base_dollars: 0, overage_cents_per_unit: 0, hard_cap: false,
+  base_dollars: 0, overage_cents_per_unit: 0, hard_cap: false, rps: 0,
 };
 
 export default function PlansCard({ api, onChange }) {
@@ -22,6 +22,7 @@ export default function PlansCard({ api, onChange }) {
       id: p.id, name: p.name, monthly_quota: p.monthly_quota,
       base_dollars: (p.base_price_cents / 100),
       overage_cents_per_unit: p.overage_cents_per_unit, hard_cap: p.hard_cap,
+      rps: p.rps ?? 0,
     });
   };
   const reset = () => { setEditing(false); setForm(BLANK); setErr(null); };
@@ -35,6 +36,7 @@ export default function PlansCard({ api, onChange }) {
       base_price_cents: Math.round(Number(form.base_dollars) * 100),
       overage_cents_per_unit: Number(form.overage_cents_per_unit),
       hard_cap: !!form.hard_cap,
+      rps: Number(form.rps),
     };
     try {
       if (editing) {
@@ -59,7 +61,7 @@ export default function PlansCard({ api, onChange }) {
       {err && <p className="error">{err}</p>}
       <table>
         <thead><tr>
-          <th>ID</th><th>Name</th><th>Quota</th><th>Base</th><th>Overage</th><th>Cap</th><th></th>
+          <th>ID</th><th>Name</th><th>Quota</th><th>Base</th><th>Overage</th><th>Cap</th><th>RPS</th><th></th>
         </tr></thead>
         <tbody>
           {plans.map((p) => (
@@ -70,6 +72,7 @@ export default function PlansCard({ api, onChange }) {
               <td>${(p.base_price_cents / 100).toFixed(2)}</td>
               <td>{p.overage_cents_per_unit}¢/credit</td>
               <td>{p.hard_cap ? "hard" : "soft"}</td>
+              <td>{p.rps > 0 ? p.rps : "—"}</td>
               <td>
                 <button onClick={() => edit(p)}>Edit</button>
                 <button className="danger" onClick={() => del(p)}>Delete</button>
@@ -99,6 +102,10 @@ export default function PlansCard({ api, onChange }) {
         <label className="field">Overage (¢ per credit over quota — 0.04 = $0.40/1k credits)
           <input type="number" min="0" step="0.001" value={form.overage_cents_per_unit}
             onChange={(e) => setForm({ ...form, overage_cents_per_unit: e.target.value })} required />
+        </label>
+        <label className="field">Rate limit (requests/second, 0 = uncapped)
+          <input type="number" min="0" value={form.rps}
+            onChange={(e) => setForm({ ...form, rps: e.target.value })} required />
         </label>
         <label className="check">
           <input type="checkbox" checked={form.hard_cap}

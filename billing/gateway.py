@@ -80,12 +80,23 @@ def build_app(pool=None, redis=None, *, http_client: httpx.AsyncClient | None = 
         if usage.is_free_path(path):
             return await _forward(app.state.http_client, request, path)
 
-        # 3) enforce quota (cluster-wide via shared Redis) --------------------
+        # 3) enforce the plan's rps cap, then the monthly quota ---------------
+        rps = int(info.get("rps") or 0)
+        if rps and not await usage.allow_rps(redis, info["tenant_id"], rps):
+            return _err(429, "rate limit exceeded")
+
         # Atomic check-and-increment of the request's credit weight: a rejected
         # request never bumps the counter (no transient over-count, no leaked
         # slot if we crash mid-decision). Quota is in credits; counters in milli.
         period, day = usage.now_parts()
-        milli = weights.weight_for(await weights.get_weights(pool), endpoint)
+        w = await weights.get_weights(pool)
+        if endpoint == weights.MATRIX_ENDPOINT:
+            # Matrix calls bill per source×target element; Starlette caches the
+            # body so _forward still sees it.
+            size = weights.matrix_size(request.url.query, await request.body())
+            milli = weights.matrix_milli(w, *size)
+        else:
+            milli = weights.weight_for(w, endpoint)
         quota = int(info.get("quota") or 0)  # credits
         cap_milli = quota * 1000 if info.get("hard_cap") else 0  # 0 ⇒ soft, unlimited
         count = await usage.incr_tenant_if_allowed(
@@ -138,6 +149,7 @@ async def _resolve_key(pool, redis, key_hash: str) -> dict | None:
         "scopes": info["scopes"],
         "quota": int(plan.get("monthly_quota") or 0),
         "hard_cap": bool(plan.get("hard_cap")),
+        "rps": int(plan.get("rps") or 0),
         "plan_id": plan.get("plan_id"),
     }
     await usage.cache_key(redis, key_hash, payload)

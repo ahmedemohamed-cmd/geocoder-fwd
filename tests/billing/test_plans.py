@@ -8,12 +8,15 @@ async def test_list_seeded_plans(cp_client):
     plans = (await cp_client.get("/admin/plans", headers=bearer(atok))).json()
     by_id = {p["id"]: p for p in plans}
     assert {"free", "starter", "pro", "scale"} <= set(by_id)
-    # 2026-07 repricing: quotas are credits, overage is ¢/credit
-    assert by_id["free"]["monthly_quota"] == 10_000 and by_id["free"]["hard_cap"]
-    assert by_id["starter"]["monthly_quota"] == 100_000
-    assert by_id["starter"]["overage_cents_per_unit"] == 0.04
-    assert by_id["pro"]["monthly_quota"] == 1_500_000
+    # 2026-07 OSM-band repricing: quotas are credits, overage is ¢/credit
+    assert by_id["free"]["monthly_quota"] == 25_000 and by_id["free"]["hard_cap"]
+    assert by_id["starter"]["monthly_quota"] == 250_000
+    assert by_id["starter"]["overage_cents_per_unit"] == 0.03
+    assert by_id["pro"]["monthly_quota"] == 3_000_000
+    assert by_id["scale"]["monthly_quota"] == 12_000_000
     assert by_id["scale"]["base_price_cents"] == 99900
+    # every seeded plan carries an rps burst cap
+    assert by_id["free"]["rps"] == 2 and by_id["scale"]["rps"] == 50
 
 
 async def test_create_get_update_delete_plan(cp_client):

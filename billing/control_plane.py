@@ -43,6 +43,7 @@ async def _sync_tenant(pool, tenant_id: str) -> None:
             tenant_id,
             quota=await _projected_request_cap(pool, int(plan.get("monthly_quota") or 0)),
             hard_cap=bool(plan.get("hard_cap")),
+            rps=int(plan.get("rps") or 0),
         )
         for k in keys:
             if k["status"] == "active" and k.get("key_enc"):
@@ -612,6 +613,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
                         pool, int(plan.get("monthly_quota") or 0)
                     ),
                     hard_cap=bool(plan.get("hard_cap")),
+                    rps=int(plan.get("rps") or 0),
                 )
                 await apisix_admin.upsert_consumer(
                     rec["id"], api_key=full, in_group=in_group, tenant_id=ident.tenant_id
@@ -661,6 +663,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
                             pool, int(plan.get("monthly_quota") or 0)
                         ),
                         hard_cap=bool(plan.get("hard_cap")),
+                        rps=int(plan.get("rps") or 0),
                     )
                     await apisix_admin.upsert_consumer(
                         rec["id"],
@@ -810,12 +813,20 @@ def build_app(pool=None, redis=None) -> FastAPI:
             tenant_id = await _tenant_for_key(pool, key_id)
             if not tenant_id:
                 continue
+            if endpoint == weights.MATRIX_ENDPOINT:
+                # Matrix calls bill per source×target element. The access log
+                # carries only the URI, so the size is known for GET ?json=…
+                # requests; POST bodies fall back to the flat floor weight.
+                query = uri.split("?", 1)[1] if "?" in uri else ""
+                milli = weights.matrix_milli(w, *weights.matrix_size(query, None))
+            else:
+                milli = weights.weight_for(w, endpoint)
             await usage.record(
                 redis,
                 tenant_id=tenant_id,
                 key_id=key_id,
                 endpoint=endpoint,
-                milli=weights.weight_for(w, endpoint),
+                milli=milli,
             )
             recorded += 1
         return {"recorded": recorded}
@@ -873,6 +884,7 @@ async def _refresh_cache(pool, redis, key_hash: str, tenant_id: str) -> None:
             "scopes": info["scopes"],
             "quota": int(plan.get("monthly_quota") or 0),
             "hard_cap": bool(plan.get("hard_cap")),
+            "rps": int(plan.get("rps") or 0),
             "plan_id": plan.get("plan_id"),
         },
     )

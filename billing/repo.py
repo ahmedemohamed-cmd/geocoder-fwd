@@ -503,7 +503,8 @@ def _invoice_row(rec: asyncpg.Record) -> dict:
 async def tenant_with_plan(pool, tenant_id: str) -> dict:
     rec = await pool.fetchrow(
         """SELECT t.id AS tenant_id, t.plan_id,
-                  p.base_price_cents, p.overage_cents_per_unit, p.monthly_quota, p.hard_cap
+                  p.base_price_cents, p.overage_cents_per_unit, p.monthly_quota, p.hard_cap,
+                  p.rps
              FROM tenants t LEFT JOIN plans p ON p.id = t.plan_id
             WHERE t.id=$1 AND t.status <> 'deleted'""",
         tenant_id,
@@ -529,7 +530,7 @@ async def list_active_tenant_quota_specs(pool) -> list[dict]:
     """(tenant_id, monthly_quota, hard_cap) for every active tenant — used to
     re-project per-tenant APISIX limit-count groups at month rollover."""
     rows = await pool.fetch(
-        """SELECT t.id AS tenant_id, p.monthly_quota, p.hard_cap
+        """SELECT t.id AS tenant_id, p.monthly_quota, p.hard_cap, p.rps
              FROM tenants t JOIN plans p ON p.id = t.plan_id
             WHERE t.status = 'active'"""
     )
@@ -563,18 +564,20 @@ async def create_plan(
     base_price_cents: int,
     overage_cents_per_unit: float,
     hard_cap: bool,
+    rps: int = 0,
 ) -> dict:
     try:
         rec = await pool.fetchrow(
             """INSERT INTO plans (id, name, monthly_quota, base_price_cents,
-                                  overage_cents_per_unit, hard_cap)
-               VALUES ($1,$2,$3,$4,$5,$6) RETURNING *""",
+                                  overage_cents_per_unit, hard_cap, rps)
+               VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
             id,
             name,
             monthly_quota,
             base_price_cents,
             overage_cents_per_unit,
             hard_cap,
+            rps,
         )
     except asyncpg.UniqueViolationError:
         raise Conflict(f"plan {id!r} already exists") from None

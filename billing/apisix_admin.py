@@ -124,9 +124,11 @@ async def ensure_valhalla_route() -> None:
 
 
 async def ensure_consumer_group(
-    tenant_id: str, *, quota: int, hard_cap: bool, period: str | None = None
+    tenant_id: str, *, quota: int, hard_cap: bool, rps: int = 0, period: str | None = None
 ) -> bool:
-    """Create/update (hard-cap) or delete (soft) a tenant's limit-count group.
+    """Create/update or delete a tenant's consumer group. The group carries the
+    plan's rps cap (limit-req, all plans) and — for hard-cap plans — the monthly
+    limit-count. Deleted when the plan needs neither (soft plan, no rps cap).
     Returns True if the group exists (so consumers should join it).
 
     The limit-count Redis key is scoped to the calendar billing period
@@ -171,9 +173,25 @@ async def ensure_consumer_group(
                 "redis_database": config.REDIS_DB,
             }
         )
+    plugins: dict = {}
+    if hard_cap and quota > 0:
+        plugins["limit-count"] = limit_count
+    if rps > 0:
+        # Per-node leaky bucket (no shared state needed for a burst cap): with
+        # several APISIX nodes the effective cap is rps × nodes, which is fine —
+        # this prices peak capacity, it isn't the billing quota. Free paths are
+        # exempt like the quota counter.
+        plugins["limit-req"] = {
+            "rate": rps,
+            "burst": rps,
+            "rejected_code": 429,
+            "key_type": "constant",
+            "key": gid,
+            **_free_filter(),
+        }
     async with _client() as c:
-        if hard_cap and quota > 0:
-            await c.put(f"/consumer_groups/{gid}", json={"plugins": {"limit-count": limit_count}})
+        if plugins:
+            await c.put(f"/consumer_groups/{gid}", json={"plugins": plugins})
             return True
         await c.delete(f"/consumer_groups/{gid}")
         return False

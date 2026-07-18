@@ -26,6 +26,15 @@ _log = logging.getLogger("billing.weights")
 MILLI_PER_CREDIT = 1000
 DEFAULT_WEIGHT_MILLI = 1000  # unlisted endpoints cost 1 credit
 
+# Matrix calls are billed per source×target element (market prices matrices per
+# element; a flat per-call weight lets a 100×100 request buy 10k routings for 5
+# credits). The element rate lives in the weights table under this pseudo-key so
+# it stays admin-tunable; the flat sources_to_targets weight acts as the floor
+# for requests whose size can't be determined.
+MATRIX_ENDPOINT = "sources_to_targets"
+MATRIX_ELEMENT_KEY = "sources_to_targets_element"
+DEFAULT_MATRIX_ELEMENT_MILLI = 100  # 0.1 credit per element
+
 DEFAULT_WEIGHTS: dict[str, int] = {
     "autocomplete": 250,
     "geocode": 1000,
@@ -38,8 +47,10 @@ DEFAULT_WEIGHTS: dict[str, int] = {
     "isochrone": 5000,
     "locate": 5000,
     # LLM inference (Ollama) on cache miss — heaviest single op in the stack,
-    # amortized by the permanent per-place ES cache.
-    "describe": 5000,
+    # amortized by the permanent per-place ES cache. Priced above worst-case
+    # GPU cost per generation so cache misses are never underwater.
+    "describe": 25000,
+    MATRIX_ELEMENT_KEY: DEFAULT_MATRIX_ELEMENT_MILLI,
 }
 
 _TTL = 15.0  # seconds
@@ -74,7 +85,40 @@ def weight_for(weights: dict[str, int], endpoint: str) -> int:
 
 
 def min_weight(weights: dict[str, int]) -> int:
-    return min(weights.values(), default=DEFAULT_WEIGHT_MILLI)
+    # The matrix element rate is a multiplier, not an endpoint cost — including
+    # it would inflate the raw-request backstop projected into APISIX.
+    vals = [v for k, v in weights.items() if k != MATRIX_ELEMENT_KEY]
+    return min(vals, default=DEFAULT_WEIGHT_MILLI)
+
+
+def matrix_milli(weights: dict[str, int], n_sources: int, n_targets: int) -> int:
+    """Billable milli-credits for one matrix call: per-element rate × size,
+    floored at the flat sources_to_targets weight (which also covers requests
+    whose size is unknown)."""
+    floor = weight_for(weights, MATRIX_ENDPOINT)
+    if n_sources <= 0 or n_targets <= 0:
+        return floor
+    per_element = weights.get(MATRIX_ELEMENT_KEY, DEFAULT_MATRIX_ELEMENT_MILLI)
+    return max(floor, n_sources * n_targets * per_element)
+
+
+def matrix_size(query_string: str | None, body: bytes | None) -> tuple[int, int]:
+    """(n_sources, n_targets) of a Valhalla matrix request — the JSON body when
+    present (POST), else the ``json`` query parameter (GET). (0, 0) when the
+    request can't be parsed, which bills the flat floor."""
+    import json
+    from urllib.parse import parse_qs
+
+    raw: bytes | str | None = body or None
+    if raw is None and query_string:
+        raw = (parse_qs(query_string).get("json") or [None])[0]
+    if not raw:
+        return (0, 0)
+    try:
+        req = json.loads(raw)
+        return (len(req["sources"]), len(req["targets"]))
+    except (ValueError, KeyError, TypeError):
+        return (0, 0)
 
 
 def projected_request_cap(weights: dict[str, int], quota_credits: int) -> int:

@@ -106,3 +106,38 @@ async def test_scope_enforcement(cp_client, gw_client):
     h = {"X-API-Key": key["api_key"]}
     assert (await gw_client.get("/geocode", headers=h)).status_code == 200
     assert (await gw_client.get("/reverse", headers=h)).status_code == 403
+
+
+async def test_rps_cap_returns_429_and_never_meters(cp_client, gw_client, pool, redis):
+    await insert_plan(pool, plan_id="slow", quota=1000, rps=1)
+    _, ttok = await make_tenant(cp_client, admin_email="g8@acme.test", plan_id="slow")
+    key = await create_key(cp_client, ttok)
+    h = {"X-API-Key": key["api_key"]}
+    codes = [(await gw_client.get("/geocode", headers=h)).status_code for _ in range(10)]
+    # 10 back-to-back calls at rps=1 span at most a couple of 1s windows
+    assert codes[0] == 200 and 429 in codes
+    served = codes.count(200)
+    cur = (await cp_client.get("/usage/current", headers=bearer(ttok))).json()
+    assert cur["requests"] == served  # rate-limited calls never burn quota
+
+
+async def test_gateway_bills_matrix_per_element(cp_client, gw_client, pool, redis):
+    _, ttok = await make_tenant(cp_client, admin_email="g9@acme.test", plan_id="starter")
+    key = await create_key(cp_client, ttok)
+    h = {"X-API-Key": key["api_key"]}
+
+    # 10×10 POST body → 100 elements × 0.1 credit = 10 credits
+    r = await gw_client.post(
+        "/sources_to_targets", headers=h, json={"sources": [{}] * 10, "targets": [{}] * 10}
+    )
+    assert r.status_code == 200
+    cur = (await cp_client.get("/usage/current", headers=bearer(ttok))).json()
+    assert cur["credits_used"] == 10.0
+
+    # a small matrix still pays the flat 5-credit floor
+    r = await gw_client.post(
+        "/sources_to_targets", headers=h, json={"sources": [{}], "targets": [{}]}
+    )
+    assert r.status_code == 200
+    cur = (await cp_client.get("/usage/current", headers=bearer(ttok))).json()
+    assert cur["credits_used"] == 15.0

@@ -15,6 +15,7 @@ Two planes of usage state:
 from __future__ import annotations
 
 import json
+import time
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from typing import Any
@@ -69,6 +70,18 @@ def _kkey(key_id: str, period: str) -> str:
 
 async def incr_tenant(redis, tenant_id: str, period: str, milli: int = 1000) -> int:
     return int(await redis.incrby(_tkey(tenant_id, period), milli))
+
+
+async def allow_rps(redis, tenant_id: str, rps: int) -> bool:
+    """Plan rps cap as a fixed one-second window (INCR + short TTL), shared
+    across gateway replicas. A burst cap, not a billing counter — the credit
+    quota stays authoritative; rejected calls never reach the quota increment.
+    Mirrors the APISIX limit-req plugin on the tenant's consumer group."""
+    key = f"{config.REDIS_PREFIX}rps:{tenant_id}:{int(time.time())}"
+    n = int(await redis.incr(key))
+    if n == 1:
+        await redis.expire(key, 2)
+    return n <= rps
 
 
 async def incr_tenant_if_allowed(

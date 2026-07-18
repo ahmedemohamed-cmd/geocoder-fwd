@@ -36,6 +36,7 @@ async def reproject_quotas_for_new_period(pool) -> bool:
                         w, int(spec.get("monthly_quota") or 0)
                     ),
                     hard_cap=bool(spec.get("hard_cap")),
+                    rps=int(spec.get("rps") or 0),
                     period=period,
                 )
             except Exception as e:  # noqa: BLE001 - reconciler heals drift later

@@ -121,21 +121,23 @@ async def make_tenant(
     return tenant, ttok
 
 
-async def insert_plan(pool, *, plan_id, quota, base_cents=0, overage=0.0, hard_cap=False):
+async def insert_plan(pool, *, plan_id, quota, base_cents=0, overage=0.0, hard_cap=False, rps=0):
     await pool.execute(
         """INSERT INTO plans (id, name, monthly_quota, base_price_cents,
-                              overage_cents_per_unit, hard_cap)
-           VALUES ($1,$2,$3,$4,$5,$6)
+                              overage_cents_per_unit, hard_cap, rps)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
            ON CONFLICT (id) DO UPDATE SET monthly_quota=EXCLUDED.monthly_quota,
                base_price_cents=EXCLUDED.base_price_cents,
                overage_cents_per_unit=EXCLUDED.overage_cents_per_unit,
-               hard_cap=EXCLUDED.hard_cap""",
+               hard_cap=EXCLUDED.hard_cap,
+               rps=EXCLUDED.rps""",
         plan_id,
         plan_id.title(),
         quota,
         base_cents,
         overage,
         hard_cap,
+        rps,
     )
 
 
