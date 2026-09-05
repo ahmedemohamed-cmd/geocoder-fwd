@@ -43,6 +43,9 @@ from shared.config import GN_DATA_DIR, NATS_SUBJECT, WATCH_POLL_INTERVAL
 from shared.logging import get_logger
 from shared.processed import claim, is_processed, load_processed, record_processed
 from shared.progress import ProgressTracker
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("geonames.json")
 
 logger = get_logger("gn-watcher")
 
@@ -76,66 +79,13 @@ NUM_COLUMNS = 19
 # Feature class/code → OSM tag mapping
 # ---------------------------------------------------------------------------
 # GeoNames feature_class → OSM place type (for ranking)
-_FEATURE_CODE_TO_PLACE: dict[str, str] = {
-    # P — populated places
-    "PPLC": "city",  # capital of a political entity
-    "PPLA": "city",  # seat of first-order admin div
-    "PPLA2": "city",  # seat of second-order admin div
-    "PPLA3": "town",  # seat of third-order admin div
-    "PPLA4": "town",  # seat of fourth-order admin div
-    "PPLA5": "town",
-    "PPL": "village",  # populated place
-    "PPLS": "village",  # populated places
-    "PPLX": "neighbourhood",  # section of populated place
-    "PPLF": "hamlet",  # farm village
-    "PPLL": "hamlet",  # populated locality
-    "PPLQ": "hamlet",  # abandoned populated place
-    "PPLR": "hamlet",  # religious populated place
-    "PPLW": "hamlet",  # destroyed populated place
-    # A — administrative (place tag for ranking)
-    "PCLI": "country",  # independent political entity
-    "PCLD": "country",  # dependent political entity
-    "PCLF": "country",  # freely associated state
-    "PCLS": "country",  # semi-independent political entity
-    "ADM1": "state",  # first-order admin division
-    "ADM1H": "state",
-    "ADM2": "region",  # second-order admin division
-    "ADM2H": "region",
-}
+_FEATURE_CODE_TO_PLACE = _SPEC["feature_code_to_place"]
 
 # Feature_class → broad OSM-compatible tag key
-_FEATURE_CLASS_TAGS: dict[str, dict[str, str]] = {
-    "A": {"boundary": "administrative"},  # admin boundary
-    "H": {"natural": "water"},  # hydrographic
-    "L": {"landuse": "area"},  # area / park
-    "P": {},  # populated place (handled via place tag)
-    "R": {"highway": "road"},  # road / railroad
-    "S": {"building": "yes"},  # spot / building / farm
-    "T": {"natural": "peak"},  # hypsographic (mountain, hill)
-    "U": {"natural": "water"},  # undersea
-    "V": {"natural": "wood"},  # vegetation
-}
+_FEATURE_CLASS_TAGS = _SPEC["feature_class_tags"]
 
 # Feature_code → admin_level mapping for administrative boundaries
-_FEATURE_CODE_ADMIN_LEVEL: dict[str, int] = {
-    "PCLI": 2,  # independent political entity (country)
-    "PCLD": 2,  # dependent political entity
-    "PCLF": 2,  # freely associated state
-    "PCLS": 2,  # semi-independent political entity
-    "PCLH": 2,  # historical political entity
-    "ADM1": 4,  # first-order admin division (state/province)
-    "ADM1H": 4,
-    "ADM2": 6,  # second-order (county/district)
-    "ADM2H": 6,
-    "ADM3": 7,  # third-order (municipality)
-    "ADM3H": 7,
-    "ADM4": 8,  # fourth-order
-    "ADM4H": 8,
-    "ADM5": 9,  # fifth-order
-    "ADM5H": 9,
-    "ADMD": 6,  # administrative division
-    "ADMDH": 6,
-}
+_FEATURE_CODE_ADMIN_LEVEL = _SPEC["feature_code_admin_level"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,72 @@
+{
+  "feature_code_to_place": {
+    "PPLC": "city",
+    "PPLA": "city",
+    "PPLA2": "city",
+    "PPLA3": "town",
+    "PPLA4": "town",
+    "PPLA5": "town",
+    "PPL": "village",
+    "PPLS": "village",
+    "PPLX": "neighbourhood",
+    "PPLF": "hamlet",
+    "PPLL": "hamlet",
+    "PPLQ": "hamlet",
+    "PPLR": "hamlet",
+    "PPLW": "hamlet",
+    "PCLI": "country",
+    "PCLD": "country",
+    "PCLF": "country",
+    "PCLS": "country",
+    "ADM1": "state",
+    "ADM1H": "state",
+    "ADM2": "region",
+    "ADM2H": "region"
+  },
+  "feature_class_tags": {
+    "A": {
+      "boundary": "administrative"
+    },
+    "H": {
+      "natural": "water"
+    },
+    "L": {
+      "landuse": "area"
+    },
+    "P": {},
+    "R": {
+      "highway": "road"
+    },
+    "S": {
+      "building": "yes"
+    },
+    "T": {
+      "natural": "peak"
+    },
+    "U": {
+      "natural": "water"
+    },
+    "V": {
+      "natural": "wood"
+    }
+  },
+  "feature_code_admin_level": {
+    "PCLI": 2,
+    "PCLD": 2,
+    "PCLF": 2,
+    "PCLS": 2,
+    "PCLH": 2,
+    "ADM1": 4,
+    "ADM1H": 4,
+    "ADM2": 6,
+    "ADM2H": 6,
+    "ADM3": 7,
+    "ADM3H": 7,
+    "ADM4": 8,
+    "ADM4H": 8,
+    "ADM5": 9,
+    "ADM5H": 9,
+    "ADMD": 6,
+    "ADMDH": 6
+  }
+}

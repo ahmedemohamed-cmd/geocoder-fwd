@@ -116,7 +116,7 @@ def test_search_spec_has_expected_shape():
     from shared.spec import load
 
     spec = load("search.toml")
-    assert set(spec) == {"geocode", "autocomplete", "address"}
+    assert set(spec) == {"geocode", "autocomplete", "address", "text_full", "text_lean"}
     # the two-tier decay is load-bearing; a single decay regressed recall
     assert spec["autocomplete"]["regional"]["scale"] == "300km"
     assert spec["autocomplete"]["local"]["scale"] == "15km"

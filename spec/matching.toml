@@ -1,0 +1,46 @@
+# Matching specification — confidence scoring and street-name comparison
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# The confidence ladder is the number a caller sees on every result, and the
+# generic tokens decide when two street names are "the same street".
+
+# Distance -> confidence, following the Pelias convention. Evaluated top-down:
+# the first row whose threshold (metres) exceeds the distance wins; anything
+# beyond the last row takes `distance_confidence_floor`.
+distance_confidence = [
+  [1, 1.0],
+  [10, 0.9],
+  [100, 0.8],
+  [250, 0.7],
+  [1000, 0.6],
+  [5000, 0.4],
+]
+distance_confidence_floor = 0.2
+
+# Tokens carrying no identifying information when comparing street names, so
+# "Tahrir Street" and "Tahrir" are the same street.
+street_generic_tokens = [
+  "alley",
+  "ave",
+  "avenue",
+  "blvd",
+  "boulevard",
+  "dr",
+  "drive",
+  "lane",
+  "rd",
+  "road",
+  "sq",
+  "square",
+  "st",
+  "street",
+  "حارة",
+  "حاره",
+  "زقاق",
+  "ش",
+  "شارع",
+  "طريق",
+  "كوبري",
+  "ميدان",
+]

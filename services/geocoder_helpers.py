@@ -18,6 +18,10 @@ from shared.categories import classify
 from shared.embeddings import build_text
 from shared.interpolation import InterpolatedAddress
 from shared.ranking import compute_offline_rank
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("matching.toml")
+_SEARCH = _load_spec("search.toml")
 
 
 def _normalize_confidence(score: float, max_score: float) -> float:
@@ -43,47 +47,15 @@ def _distance_confidence(distance_m: float) -> float:
       1k-5k  → 0.4
       5k+    → 0.2
     """
-    if distance_m < 1:
-        return 1.0
-    if distance_m < 10:
-        return 0.9
-    if distance_m < 100:
-        return 0.8
-    if distance_m < 250:
-        return 0.7
-    if distance_m < 1000:
-        return 0.6
-    if distance_m < 5000:
-        return 0.4
-    return 0.2
+    for threshold, confidence in _SPEC["distance_confidence"]:
+        if distance_m < threshold:
+            return confidence
+    return _SPEC["distance_confidence_floor"]
 
 
 # Generic street-type tokens stripped before comparing street names, so that
 # "Tahrir Street" vs "Tahrir St" still matches on the meaningful token "tahrir".
-_STREET_GENERIC_TOKENS = {
-    "street",
-    "st",
-    "road",
-    "rd",
-    "ave",
-    "avenue",
-    "alley",
-    "lane",
-    "drive",
-    "dr",
-    "square",
-    "sq",
-    "blvd",
-    "boulevard",
-    "شارع",
-    "ش",
-    "طريق",
-    "حارة",
-    "حاره",
-    "زقاق",
-    "ميدان",
-    "كوبري",
-}
+_STREET_GENERIC_TOKENS = set(_SPEC["street_generic_tokens"])
 
 
 def _street_token_match(parsed_street: str, addr_street: str) -> bool:
@@ -174,7 +146,7 @@ def _text_should_full(q: str) -> list[dict]:
                 "type": "best_fields",
                 "fuzziness": 1,
                 "prefix_length": 1,
-                "boost": 10,
+                "boost": _SEARCH["text_full"]["fuzzy_name_boost"],
             }
         },
         # phrase boost: contiguous phrase
@@ -183,7 +155,7 @@ def _text_should_full(q: str) -> list[dict]:
                 "query": q,
                 "fields": ["name", "name_en", "name_fr"],
                 "type": "phrase",
-                "boost": 10,
+                "boost": _SEARCH["text_full"]["phrase_name_boost"],
             }
         },
         # exact all-tokens boost: every query word appears verbatim
@@ -193,7 +165,7 @@ def _text_should_full(q: str) -> list[dict]:
                 "fields": ["name", "name_en", "name_fr"],
                 "type": "best_fields",
                 "operator": "and",
-                "boost": 15,
+                "boost": _SEARCH["text_full"]["exact_all_terms_boost"],
             }
         },
         # fuzzy all-tokens boost: keeps a precision boost for misspelled multiword
@@ -205,7 +177,7 @@ def _text_should_full(q: str) -> list[dict]:
                 "operator": "and",
                 "fuzziness": "AUTO",
                 "prefix_length": 1,
-                "boost": 8,
+                "boost": _SEARCH["text_full"]["tags_fuzzy_boost"],
             }
         },
     ]
@@ -242,9 +214,9 @@ def _text_should_lean(q: str) -> list[dict]:
                 "fields": ["name^5", "name_en^5", "name_fr^5"],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
-                "prefix_length": 2,
-                "max_expansions": 30,
-                "boost": 4,
+                "prefix_length": _SEARCH["text_lean"]["fuzzy_prefix_length"],
+                "max_expansions": _SEARCH["text_lean"]["fuzzy_max_expansions"],
+                "boost": _SEARCH["text_lean"]["fuzzy_name_boost"],
             }
         },
         {
@@ -252,7 +224,7 @@ def _text_should_lean(q: str) -> list[dict]:
                 "query": q,
                 "fields": ["name", "name_en", "name_fr"],
                 "type": "phrase",
-                "boost": 10,
+                "boost": _SEARCH["text_lean"]["phrase_name_boost"],
             }
         },
         {
@@ -261,7 +233,7 @@ def _text_should_lean(q: str) -> list[dict]:
                 "fields": ["name", "name_en", "name_fr"],
                 "type": "best_fields",
                 "operator": "and",
-                "boost": 15,
+                "boost": _SEARCH["text_lean"]["exact_all_terms_boost"],
             }
         },
     ]

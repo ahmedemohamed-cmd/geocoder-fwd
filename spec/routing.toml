@@ -1,0 +1,39 @@
+# Routing specification — Arabic narration and traffic colouring
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# The narration vocabulary is what a user hears; the traffic bands are what a
+# user sees on a route. Both are product decisions, not derivable ones.
+
+# Traffic colouring: live/freeflow speed ratio -> level. Evaluated top-down;
+# anything below the last threshold is "red".
+traffic_bands = [
+  [0.75, "green"],
+  [0.5, "yellow"],
+  [0.25, "orange"],
+]
+
+[directions]
+# English Valhalla maneuver wording -> Arabic. Matched as substrings, so the
+# source order is preserved here.
+"north" = "شمالاً"
+"south" = "جنوباً"
+"east" = "شرقاً"
+"west" = "غرباً"
+"northeast" = "شمال شرقاً"
+"northwest" = "شمال غرباً"
+"southeast" = "جنوب شرقاً"
+"southwest" = "جنوب غرباً"
+
+[ordinals]
+# Exit/roundabout ordinals, e.g. "take the third exit".
+"1" = "الأول"
+"2" = "الثاني"
+"3" = "الثالث"
+"4" = "الرابع"
+"5" = "الخامس"
+"6" = "السادس"
+"7" = "السابع"
+"8" = "الثامن"
+"9" = "التاسع"
+"10" = "العاشر"

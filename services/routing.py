@@ -33,35 +33,18 @@ from shared.config import (
 )
 from shared.logging import get_logger
 from shared.redis_client import make_redis_async
+from shared.spec import load as _load_spec
 from shared.traffic_providers import tomtom_point_speed
+
+_SPEC = _load_spec("routing.toml")
 
 logger = get_logger("routing")
 
 # ── Arabic direction words ────────────────────────────────────────────────────
-_DIRECTIONS: dict[str, str] = {
-    "north": "شمالاً",
-    "south": "جنوباً",
-    "east": "شرقاً",
-    "west": "غرباً",
-    "northeast": "شمال شرقاً",
-    "northwest": "شمال غرباً",
-    "southeast": "جنوب شرقاً",
-    "southwest": "جنوب غرباً",
-}
+_DIRECTIONS = _SPEC["directions"]
 
 # Arabic ordinals for roundabout exit counts 1-10
-_ORDINALS: dict[int, str] = {
-    1: "الأول",
-    2: "الثاني",
-    3: "الثالث",
-    4: "الرابع",
-    5: "الخامس",
-    6: "السادس",
-    7: "السابع",
-    8: "الثامن",
-    9: "التاسع",
-    10: "العاشر",
-}
+_ORDINALS = {int(k): v for k, v in _SPEC["ordinals"].items()}
 
 _ONTO_RE = re.compile(r"\bonto (.+?)\.$", re.IGNORECASE)
 _TOWARD_RE = re.compile(r"\btoward (.+?)\.$", re.IGNORECASE)
@@ -367,7 +350,7 @@ def _decode_polyline6(encoded: str) -> list[list[float]]:
 
 
 # Congestion colouring by live speed as a fraction of free-flow speed.
-_TRAFFIC_BANDS = ((0.75, "green"), (0.5, "yellow"), (0.25, "orange"))
+_TRAFFIC_BANDS = tuple((lo, lvl) for lo, lvl in _SPEC["traffic_bands"])
 
 
 def _classify(live_kph: float | None, freeflow_kph: float | None) -> tuple[str, float | None]:

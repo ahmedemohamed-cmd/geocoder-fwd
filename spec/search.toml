@@ -98,3 +98,21 @@ scale = "1km"
 offset = "100m"
 decay = 0.5
 weight = 5
+
+# ── shared text-recall clauses (services/geocoder_helpers.py) ─────────────
+# Two recall shapes behind the `effort` parameter: `full` casts a wide fuzzy
+# net over all fields, `lean` uses a bounded fuzzy match rescored later. These
+# boosts decide which field agreeing with the query matters most.
+
+[text_full]
+fuzzy_name_boost = 10
+phrase_name_boost = 10
+exact_all_terms_boost = 15
+tags_fuzzy_boost = 8
+
+[text_lean]
+fuzzy_prefix_length = 2
+fuzzy_max_expansions = 30
+fuzzy_name_boost = 4
+phrase_name_boost = 10
+exact_all_terms_boost = 15
