@@ -43,22 +43,37 @@ Values that exist only because someone measured, tuned, and kept them. No
 architecture implies them, and a regeneration cannot invent them correctly.
 These live in `spec/` as declarative data that the implementation *reads*.
 
-**Status: partial. 208 values externalized, ~932 numeric literals remain in
-code.**
+**Status: substantially complete for `shared/`. ~1,272 values externalized
+across seven spec files; `services/geocoder.py` remains.**
 
-| Area | Literals | Externalized |
+| Area | Literals before → after | Spec file |
 | --- | --- | --- |
-| `shared/ranking.py` | 315 → 107 | ✅ `spec/ranking.toml` (208 values) |
-| `services/geocoder.py` | 401 | ❌ largest remaining block |
-| `shared/interpolation.py` | 165 | ❌ |
-| `shared/autocomplete.py` | 136 | ❌ |
-| `shared/address.py` | 68 | ❌ |
-| `shared/places_mapping.py` | 37 | ❌ |
-| `shared/categories.py` | 10 + taxonomy | ❌ taxonomy is the real payload |
-| `shared/es_mapping.py` | 8 + analyzers | ❌ mapping is already declarative |
+| `shared/ranking.py` | 315 → 107 | `spec/ranking.toml` |
+| `shared/categories.py` | taxonomy → 10 | `spec/categories.json` |
+| `shared/places_mapping.py` | 37 → 19 | `spec/places-mapping.json` |
+| `shared/address.py` | 68 → 68* | `spec/address.json` |
+| `shared/autocomplete.py` | 136 → 119 | `spec/autocomplete.toml` |
+| `shared/es_mapping.py` | mapping → 2 | `spec/es-mapping.json` |
+| `shared/interpolation.py` | 165 → 157 | `spec/interpolation.json` |
+| `services/geocoder.py` | 401 | ❌ not extracted |
 
-The residual 107 in `ranking.py` are structural (`0.0`/`1.0` clamps, the 0..10
-scale) and comment examples, not tuning.
+\* `address.py`'s count is unchanged because its literals are regex offsets and
+slice bounds, not tuning; the eight *vocabularies* (abbreviations, street types,
+city keywords, ordinals) are what moved.
+
+Residual literals in the extracted modules are structural — clamps, scale
+factors, regex indices — not tuning knowledge. The remaining tuning debt is
+concentrated in `services/geocoder.py`, whose 401 literals are inline in query
+construction rather than in liftable tables; extracting them means restructuring
+query building, which is the same work as the G-8 file split and should be done
+as one effort.
+
+Two values in `spec/es-mapping.json` are deliberately **not** frozen:
+`number_of_replicas` and the vector `dims` are `${ES_INDEX_REPLICAS}` and
+`${EMBEDDING_DIM}` placeholders resolved at load. They follow cluster topology
+and the embedding model, not tuning. Externalising the mapping without them
+would have silently decoupled the index from its configuration — a regression
+the behavioural snapshot could not catch, because the defaults matched.
 
 ### 3. Behavioral — what it must do
 
@@ -66,9 +81,14 @@ The test suite. 201 tests, of which `tests/test_ranking_spec.py` is the model to
 follow: it enumerates the full key space of a specification and pins every
 result, so a single moved value fails loudly and specifically.
 
-**Status: partial.** Ranking has a complete contract test. Most other behavior
-is covered by unit tests written against the current implementation rather than
-against a specification, which is weaker — they can encode accidents.
+**Status: good for spec-backed behaviour.** `tests/test_spec_contract.py` and
+`tests/test_ranking_spec.py` pin every spec-driven surface: the full key space
+of every scoring table, category classification across all groups, address
+parsing and ordinal expansion, place-record mapping, autocomplete scoring and
+geohashing, and the Elasticsearch mapping itself. A single changed value in any
+spec file fails them. Behaviour *not* driven by `spec/` — chiefly query
+construction in `services/geocoder.py` — remains covered only by conventional
+unit tests.
 
 ### 4. Quality — how well it must do it
 
@@ -93,13 +113,21 @@ regeneration, not an optimization.
 
 ## Honest status
 
-**Today a regeneration would fail**, and the contract is what tells you so. The
-structural tier is complete; the tuning tier covers roughly a fifth of what it
-needs to; the behavioral tier is strong in one place and conventional elsewhere;
-the quality tier has a geographic blind spot.
+**A regeneration of `shared/` is now plausible; one of `services/geocoder.py` is
+not.** The structural tier is complete. The tuning tier holds ~1,272 values
+covering every domain module, with query construction the one remaining gap. The
+behavioural tier pins every spec-backed surface. The quality tier still has the
+Cairo-only blind spot, and that is now the weakest link: it is the instrument
+every extraction was verified against.
 
-Nothing here is blocked on writing more prose. The remaining work is mechanical
-extraction — the `ranking.toml` pattern applied to seven more areas — plus
-broadening the test set. Each extraction is independently verifiable by the same
-method used for ranking: pin the behavior first, extract, prove the output did
-not move.
+The method that got here is the part worth keeping. For each module: capture a
+behavioural snapshot first, extract the tables, re-run, and require the output to
+be byte-identical. Six modules were extracted this way with zero behavioural
+drift, and the one regression that did occur — freezing two env-driven values
+into the ES mapping — was caught by reading the diff, not by the snapshot, which
+is worth remembering: a snapshot proves what you exercised, not what you
+changed.
+
+Next, in order: broaden the quality baseline beyond Cairo (it gates everything
+else), then restructure `services/geocoder.py` so its query constants become
+spec rather than literals.

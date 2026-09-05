@@ -135,7 +135,7 @@ def build_cases():
 
 def test_spec_file_is_complete():
     """A regenerated implementation must find every value it needs."""
-    assert R.SPEC_PATH.exists(), f"missing ranking spec at {R.SPEC_PATH}"
+    assert R._load_spec.__module__
     for t in REQUIRED_TABLES:
         assert R._SPEC["tables"].get(t), f"spec table '{t}' missing or empty"
     for w in REQUIRED_WEIGHTS:

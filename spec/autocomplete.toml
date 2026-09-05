@@ -1,0 +1,51 @@
+# Autocomplete specification — prefix index and suggestion scoring
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# These weights decide which suggestion a user sees first while typing. They
+# were tuned against the recall harness; changing one changes the ranking a
+# user experiences. Measure with tests/run_autocomplete_recall.py against
+# docs/quality-baseline.md — strict@1 by prefix length must stay monotonic.
+
+# How many top results to keep per prefix bucket
+top_k = 30
+
+# Minimum prefix length to index (edge_ngram min_gram=2 in ES)
+min_prefix = 2
+
+# Maximum prefix length to index
+max_prefix = 6
+
+# Ceiling on accumulated /feedback popularity. Single source of truth — the
+# geocoder's /feedback handler imports this rather than defining its own.
+popularity_cap = 1000.0
+
+# ── ranking weights ──────────────────────────────────────────────────────
+# Match quality dominates: an exact name match must never be displaced by a
+# merely-prominent partial one.  The tier gap (20 pts) is larger than what
+# popularity alone can make up, but prominence + proximity together (max ~59)
+# can promote across a single tier — which is what we want for landmarks.
+w_match = 100.0
+
+w_rank = 3.0
+
+w_pop = 2.0
+
+w_geo = 15.0
+
+# Match tiers, highest first.
+mq_exact = 1.0  # whole normalised name == query
+
+mq_prefix = 0.8  # name starts with query
+
+mq_first_word = 0.6  # first word of name starts with query
+
+mq_any_word = 0.4  # some later word starts with query
+
+# Gaussian proximity decay — mirrors the ES `gauss` in the /autocomplete ES
+# fallback (scale 15km, offset 2km, decay 0.5) so the two paths rank alike.
+geo_scale_m = 15000.0
+
+geo_offset_m = 2000.0
+
+geo_decay = 0.5

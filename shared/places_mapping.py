@@ -40,134 +40,18 @@ from __future__ import annotations
 import re
 
 from shared.google_maps import place_osm_id
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("places-mapping.json")
 
 GOOGLE_SOURCE = "google"
 PG_SOURCE = "places_pg"
 
 # ── layer → OSM feature tag (key, value) — union of both datasets' layers ───
-LAYER_FEATURE = {
-    # food / drink
-    "restaurant": ("amenity", "restaurant"),
-    "food": ("amenity", "restaurant"),
-    "meal_takeaway": ("amenity", "fast_food"),
-    "meal_delivery": ("amenity", "fast_food"),
-    "cafe": ("amenity", "cafe"),
-    "bar": ("amenity", "bar"),
-    "night_club": ("amenity", "nightclub"),
-    "bakery": ("shop", "bakery"),
-    # finance
-    "bank": ("amenity", "bank"),
-    "atm": ("amenity", "atm"),
-    "finance": ("amenity", "bank"),
-    "accounting": ("office", "accountant"),
-    "insurance_agency": ("office", "insurance"),
-    # health
-    "hospital": ("amenity", "hospital"),
-    "health": ("amenity", "clinic"),
-    "doctor": ("amenity", "doctors"),
-    "doctors": ("amenity", "doctors"),
-    "physiotherapist": ("amenity", "doctors"),
-    "pharmacy": ("amenity", "pharmacy"),
-    "drugstore": ("amenity", "pharmacy"),
-    "dentist": ("amenity", "dentist"),
-    "veterinary_care": ("amenity", "veterinary"),
-    # education
-    "school": ("amenity", "school"),
-    "primary_school": ("amenity", "school"),
-    "secondary_school": ("amenity", "school"),
-    "university": ("amenity", "university"),
-    "library": ("amenity", "library"),
-    # worship
-    "mosque": ("amenity", "place_of_worship"),
-    "church": ("amenity", "place_of_worship"),
-    "synagogue": ("amenity", "place_of_worship"),
-    "hindu_temple": ("amenity", "place_of_worship"),
-    "place_of_worship": ("amenity", "place_of_worship"),
-    # public / government
-    "police": ("amenity", "police"),
-    "fire_station": ("amenity", "fire_station"),
-    "post_office": ("amenity", "post_office"),
-    "local_government_office": ("office", "government"),
-    "government": ("office", "government"),
-    "city_hall": ("amenity", "townhall"),
-    "courthouse": ("amenity", "courthouse"),
-    "embassy": ("amenity", "embassy"),
-    "office": ("office", "yes"),
-    # automotive / fuel
-    "gas_station": ("amenity", "fuel"),
-    "fuel": ("amenity", "fuel"),
-    "parking": ("amenity", "parking"),
-    "car_repair": ("shop", "car_repair"),
-    "car_dealer": ("shop", "car"),
-    "car": ("shop", "car"),
-    "car_wash": ("amenity", "car_wash"),
-    "car_rental": ("amenity", "car_rental"),
-    # lodging / tourism / leisure
-    "lodging": ("tourism", "hotel"),
-    "museum": ("tourism", "museum"),
-    "tourist_attraction": ("tourism", "attraction"),
-    "zoo": ("tourism", "zoo"),
-    "art_gallery": ("tourism", "gallery"),
-    "campground": ("tourism", "camp_site"),
-    "park": ("leisure", "park"),
-    "stadium": ("leisure", "stadium"),
-    "gym": ("leisure", "fitness_centre"),
-    "spa": ("leisure", "spa"),
-    "amusement_park": ("leisure", "amusement_arcade"),
-    "movie_theater": ("amenity", "cinema"),
-    # shops
-    "shopping_mall": ("shop", "mall"),
-    "supermarket": ("shop", "supermarket"),
-    "grocery_or_supermarket": ("shop", "supermarket"),
-    "convenience_store": ("shop", "convenience"),
-    "department_store": ("shop", "department_store"),
-    "home_goods_store": ("shop", "houseware"),
-    "furniture_store": ("shop", "furniture"),
-    "hardware_store": ("shop", "hardware"),
-    "electronics_store": ("shop", "electronics"),
-    "clothing_store": ("shop", "clothes"),
-    "clothes": ("shop", "clothes"),
-    "shoe_store": ("shop", "shoes"),
-    "jewelry_store": ("shop", "jewelry"),
-    "book_store": ("shop", "books"),
-    "florist": ("shop", "florist"),
-    "bicycle_store": ("shop", "bicycle"),
-    "pet_store": ("shop", "pet"),
-    "liquor_store": ("shop", "alcohol"),
-    "beauty_salon": ("shop", "beauty"),
-    "beauty": ("shop", "beauty"),
-    "hair_care": ("shop", "hairdresser"),
-    "hairdresser": ("shop", "hairdresser"),
-    "store": ("shop", "yes"),
-    "travel_agency": ("shop", "travel_agency"),
-    "real_estate_agency": ("office", "estate_agent"),
-    "lawyer": ("office", "lawyer"),
-    # transport
-    "airport": ("aeroway", "aerodrome"),
-    "subway_station": ("railway", "station"),
-    "train_station": ("railway", "station"),
-    "transit_station": ("public_transport", "station"),
-    "bus_station": ("amenity", "bus_station"),
-}
+LAYER_FEATURE = _SPEC["LAYER_FEATURE"]
 
 # coarse fallback from the categories[] array when the layer isn't mapped
-CATEGORY_FEATURE = {
-    "shop": ("shop", "yes"),
-    "food": ("amenity", "restaurant"),
-    "health": ("amenity", "clinic"),
-    "education": ("amenity", "school"),
-    "religion": ("amenity", "place_of_worship"),
-    "finance": ("amenity", "bank"),
-    "accommodation": ("tourism", "hotel"),
-    "entertainment": ("leisure", "yes"),
-    "nightlife": ("amenity", "bar"),
-    "government": ("office", "government"),
-    "professional": ("office", "yes"),
-    "transport": ("public_transport", "station"),
-    "transportation": ("aeroway", "aerodrome"),
-    "nature": ("leisure", "park"),
-    "historic": ("historic", "yes"),
-}
+CATEGORY_FEATURE = _SPEC["CATEGORY_FEATURE"]
 
 # admin layers → (OSM admin_level, place= value); POIs stay at level 0
 # The curated Pelias-google export mixes Pelias layer names (locality, region,
@@ -175,28 +59,7 @@ CATEGORY_FEATURE = {
 # administrative_area_level_*, neighborhood). Both naming schemes must be mapped
 # or districts like "التجمع الخامس" (layer=sublocality_level_1) fall through to a
 # 0-rank generic node.
-ADMIN_LAYER = {
-    # Pelias / WOF layer names
-    "locality": (8, "city"),
-    "localadmin": (8, "town"),
-    "borough": (10, "suburb"),
-    "neighbourhood": (10, "neighbourhood"),
-    "region": (4, "state"),
-    "macroregion": (4, "state"),
-    "county": (6, "county"),
-    "macrocounty": (6, "county"),
-    "country": (2, "country"),
-    # Google admin types (as they appear in the export's `layer`)
-    "neighborhood": (10, "neighbourhood"),  # American spelling
-    "sublocality": (10, "suburb"),
-    "sublocality_level_1": (10, "suburb"),
-    "sublocality_level_2": (10, "neighbourhood"),
-    "sublocality_level_3": (10, "neighbourhood"),
-    "administrative_area_level_1": (4, "state"),
-    "administrative_area_level_2": (6, "county"),
-    "administrative_area_level_3": (7, "region"),
-    "administrative_area_level_4": (8, "city"),
-}
+ADMIN_LAYER = _SPEC["ADMIN_LAYER"]
 
 # Generic source layers that carry NO type information. A record with one of
 # these (or an empty layer) and no usable category is unclassified — if its name
@@ -244,32 +107,9 @@ def _place_from_name(name: str) -> str | None:
 
 
 # Pelias parent keys promoted into address.* (the rest are kept under extra.wof)
-_PELIAS_PROMOTED_PARENT = {
-    "neighbourhood",
-    "borough",
-    "county",
-    "locality",
-    "localadmin",
-    "region",
-    "macroregion",
-    "postalcode",
-    "country",
-    "country_a",
-    "region_a",
-}
+_PELIAS_PROMOTED_PARENT = set(_SPEC["_PELIAS_PROMOTED_PARENT"])
 
-_ADDRESS_KEYS = (
-    "full",
-    "street",
-    "suburb",
-    "district",
-    "city",
-    "state",
-    "postcode",
-    "country",
-    "country_code",
-    "state_code",
-)
+_ADDRESS_KEYS = tuple(_SPEC["_ADDRESS_KEYS"])
 
 _POSTCODE_RE = re.compile(r"\b\d{5}\b")
 
@@ -454,18 +294,7 @@ def to_unified(rec: dict) -> dict | None:
 
 
 # ── unified → OSM-element NATS message ─────────────────────────────────────
-_ADDRESS_TAG = {
-    "full": "addr:full",
-    "street": "addr:street",
-    "suburb": "addr:suburb",
-    "district": "addr:district",
-    "city": "addr:city",
-    "state": "addr:state",
-    "postcode": "addr:postcode",
-    "country": "addr:country",
-    "country_code": "addr:country_code",
-    "state_code": "addr:state_code",
-}
+_ADDRESS_TAG = _SPEC["_ADDRESS_TAG"]
 
 
 def place_to_element(p: dict) -> dict | None:

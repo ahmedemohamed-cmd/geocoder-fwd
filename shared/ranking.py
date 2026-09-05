@@ -25,18 +25,12 @@ denominator so that points and venues are not systematically penalised.
 
 import math
 import re
-import tomllib
-from pathlib import Path
 
-# ── ranking specification ─────────────────────────────────────────────────
-# Every weight and table below is loaded from spec/ranking.toml. That file is
-# specification, not configuration: the numbers are tuning decisions that
-# cannot be re-derived from the architecture, so they live in one declarative
-# place a regenerated implementation can read instead of reinventing.
-SPEC_PATH = Path(__file__).resolve().parent.parent / "spec" / "ranking.toml"
+from shared.spec import load as _load_spec
 
-with SPEC_PATH.open("rb") as _fh:
-    _SPEC = tomllib.load(_fh)
+# Every weight and table below comes from spec/ranking.toml — see shared/spec.py
+# for why these live outside the code.
+_SPEC = _load_spec("ranking.toml")
 
 _W = _SPEC["weights"]
 _S = _SPEC["scalars"]

@@ -1,0 +1,338 @@
+{
+  "MAPPING": {
+    "settings": {
+      "index": {
+        "number_of_replicas": "${ES_INDEX_REPLICAS}",
+        "number_of_shards": 1
+      },
+      "analysis": {
+        "char_filter": {
+          "arabic_normalize_char": {
+            "type": "pattern_replace",
+            "pattern": "[ـ]",
+            "replacement": ""
+          },
+          "strip_apostrophes": {
+            "type": "pattern_replace",
+            "pattern": "['’ʼ]",
+            "replacement": ""
+          },
+          "strip_tashkeel": {
+            "type": "pattern_replace",
+            "pattern": "[ً-ْٰ]",
+            "replacement": ""
+          }
+        },
+        "filter": {
+          "street_synonyms_en": {
+            "type": "synonym",
+            "synonyms": [
+              "st, street",
+              "rd, road",
+              "ave, av, avenue",
+              "blvd, bvd, boulevard",
+              "ln, lane",
+              "dr, drive",
+              "pl, place",
+              "ct, court",
+              "sq, square",
+              "hwy, highway",
+              "cres, crescent",
+              "terr, terrace",
+              "pkwy, parkway"
+            ]
+          },
+          "street_synonyms_ar": {
+            "type": "synonym",
+            "synonyms": [
+              "ش, شارع",
+              "ط, طريق",
+              "م, ميدان"
+            ]
+          },
+          "street_synonyms_fr": {
+            "type": "synonym",
+            "synonyms": [
+              "r, rue",
+              "av, ave, avenue",
+              "bd, blvd, boulevard",
+              "pl, place",
+              "ch, chemin",
+              "imp, impasse",
+              "all, allée",
+              "crs, cours",
+              "rte, route",
+              "pass, passage"
+            ]
+          },
+          "edge_ngram_filter": {
+            "type": "edge_ngram",
+            "min_gram": 2,
+            "max_gram": 15
+          },
+          "arabic_normalization": {
+            "type": "arabic_normalization"
+          }
+        },
+        "normalizer": {
+          "lowercase": {
+            "type": "custom",
+            "filter": [
+              "lowercase"
+            ]
+          }
+        },
+        "analyzer": {
+          "address_standard": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "char_filter": [
+              "arabic_normalize_char",
+              "strip_apostrophes",
+              "strip_tashkeel"
+            ],
+            "filter": [
+              "lowercase",
+              "arabic_normalization",
+              "street_synonyms_en",
+              "street_synonyms_ar",
+              "street_synonyms_fr",
+              "asciifolding"
+            ]
+          },
+          "address_autocomplete": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "char_filter": [
+              "arabic_normalize_char",
+              "strip_apostrophes",
+              "strip_tashkeel"
+            ],
+            "filter": [
+              "lowercase",
+              "arabic_normalization",
+              "street_synonyms_en",
+              "street_synonyms_ar",
+              "street_synonyms_fr",
+              "asciifolding",
+              "edge_ngram_filter"
+            ]
+          },
+          "address_search": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "char_filter": [
+              "arabic_normalize_char",
+              "strip_apostrophes",
+              "strip_tashkeel"
+            ],
+            "filter": [
+              "lowercase",
+              "arabic_normalization",
+              "street_synonyms_en",
+              "street_synonyms_ar",
+              "street_synonyms_fr",
+              "asciifolding"
+            ]
+          },
+          "arabic_name": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "char_filter": [
+              "arabic_normalize_char",
+              "strip_apostrophes",
+              "strip_tashkeel"
+            ],
+            "filter": [
+              "lowercase",
+              "arabic_normalization",
+              "asciifolding"
+            ]
+          }
+        }
+      }
+    },
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "osm_id": {
+          "type": "keyword"
+        },
+        "osm_type": {
+          "type": "keyword"
+        },
+        "name": {
+          "type": "text",
+          "analyzer": "arabic_name",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "name_en": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "name_fr": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "tags_text": {
+          "type": "text",
+          "analyzer": "arabic_name"
+        },
+        "tags": {
+          "type": "object",
+          "enabled": false
+        },
+        "geom": {
+          "type": "geo_shape",
+          "ignore_malformed": true
+        },
+        "centroid": {
+          "type": "geo_point",
+          "ignore_malformed": true
+        },
+        "admin_level": {
+          "type": "integer"
+        },
+        "area_km2": {
+          "type": "float"
+        },
+        "offline_rank": {
+          "type": "float"
+        },
+        "popularity": {
+          "type": "float"
+        },
+        "category_key": {
+          "type": "keyword"
+        },
+        "category_value": {
+          "type": "keyword"
+        },
+        "category_group": {
+          "type": "keyword"
+        },
+        "category_text": {
+          "type": "text",
+          "analyzer": "arabic_name",
+          "fields": {
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "name_vector": {
+          "type": "dense_vector",
+          "dims": "${EMBEDDING_DIM}",
+          "index": true,
+          "similarity": "cosine"
+        },
+        "addr_housenumber": {
+          "type": "keyword",
+          "normalizer": "lowercase"
+        },
+        "addr_street": {
+          "type": "text",
+          "analyzer": "address_standard",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "addr_city": {
+          "type": "text",
+          "analyzer": "address_standard",
+          "fields": {
+            "keyword": {
+              "type": "keyword"
+            },
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "addr_postcode": {
+          "type": "keyword"
+        },
+        "addr_country": {
+          "type": "keyword"
+        },
+        "addr_suburb": {
+          "type": "text",
+          "analyzer": "address_standard",
+          "fields": {
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "addr_state": {
+          "type": "text",
+          "analyzer": "address_standard"
+        },
+        "full_address": {
+          "type": "text",
+          "analyzer": "address_standard",
+          "fields": {
+            "autocomplete": {
+              "type": "text",
+              "analyzer": "address_autocomplete",
+              "search_analyzer": "address_search"
+            }
+          }
+        },
+        "has_address": {
+          "type": "boolean"
+        },
+        "ai_description": {
+          "type": "object",
+          "enabled": false
+        },
+        "address": {
+          "type": "object",
+          "enabled": false
+        }
+      }
+    }
+  }
+}

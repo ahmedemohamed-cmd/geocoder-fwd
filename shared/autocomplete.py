@@ -32,6 +32,9 @@ import redis.asyncio as aioredis
 
 from shared.address import normalize_address_text
 from shared.categories import CATEGORY_QUERY_TERMS
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("autocomplete.toml")
 
 # Fold punctuation to whitespace so `.split()` matches the ES `standard`
 # tokenizer (which breaks "Al-Tahrir" into [al, tahrir]). \w is unicode-aware, so
@@ -42,33 +45,33 @@ _WS_RE = re.compile(r"\s+")
 logger = logging.getLogger(__name__)
 
 # How many top results to keep per prefix bucket
-TOP_K = 30
+TOP_K = _SPEC["top_k"]
 
 # Minimum prefix length to index (edge_ngram min_gram=2 in ES)
-MIN_PREFIX = 2
+MIN_PREFIX = _SPEC["min_prefix"]
 
 # Maximum prefix length to index
-MAX_PREFIX = 6
+MAX_PREFIX = _SPEC["max_prefix"]
 
 # Ceiling on accumulated /feedback popularity. Single source of truth — the
 # geocoder's /feedback handler imports this rather than defining its own.
-POPULARITY_CAP = 1000.0
+POPULARITY_CAP = _SPEC["popularity_cap"]
 
 # ── ranking weights ──────────────────────────────────────────────────────
 # Match quality dominates: an exact name match must never be displaced by a
 # merely-prominent partial one.  The tier gap (20 pts) is larger than what
 # popularity alone can make up, but prominence + proximity together (max ~59)
 # can promote across a single tier — which is what we want for landmarks.
-W_MATCH = 100.0
-W_RANK = 3.0
-W_POP = 2.0
-W_GEO = 15.0
+W_MATCH = _SPEC["w_match"]
+W_RANK = _SPEC["w_rank"]
+W_POP = _SPEC["w_pop"]
+W_GEO = _SPEC["w_geo"]
 
 # Match tiers, highest first.
-MQ_EXACT = 1.0  # whole normalised name == query
-MQ_PREFIX = 0.8  # name starts with query
-MQ_FIRST_WORD = 0.6  # first word of name starts with query
-MQ_ANY_WORD = 0.4  # some later word starts with query
+MQ_EXACT = _SPEC["mq_exact"]
+MQ_PREFIX = _SPEC["mq_prefix"]
+MQ_FIRST_WORD = _SPEC["mq_first_word"]
+MQ_ANY_WORD = _SPEC["mq_any_word"]
 
 # A Redis answer is only trusted when it is saturated *and* strongly matched;
 # anything less defers to Elasticsearch, which has full corpus coverage.
@@ -80,9 +83,9 @@ _ARTICLES = {"al", "el", "the", "la", "le", "los", "las", "ال"}
 
 # Gaussian proximity decay — mirrors the ES `gauss` in the /autocomplete ES
 # fallback (scale 15km, offset 2km, decay 0.5) so the two paths rank alike.
-_GEO_SCALE_M = 15_000.0
-_GEO_OFFSET_M = 2_000.0
-_GEO_DECAY = 0.5
+_GEO_SCALE_M = _SPEC["geo_scale_m"]
+_GEO_OFFSET_M = _SPEC["geo_offset_m"]
+_GEO_DECAY = _SPEC["geo_decay"]
 _GEO_SIGMA_SQ = -(_GEO_SCALE_M**2) / (2.0 * math.log(_GEO_DECAY))
 
 

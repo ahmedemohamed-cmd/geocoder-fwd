@@ -1,0 +1,5710 @@
+{
+ "address": [
+  {
+   "is_addr": true,
+   "normalized": "15 Tahrir Street, Cairo",
+   "ordinals": [],
+   "parsed": {
+    "city": "Cairo",
+    "housenumber": "15",
+    "raw": "15 Tahrir Street, Cairo",
+    "street": "Tahrir Street"
+   },
+   "q": "15 Tahrir Street, Cairo"
+  },
+  {
+   "is_addr": true,
+   "normalized": "شارع التحرير 15",
+   "ordinals": [],
+   "parsed": {
+    "raw": "شارع التحرير 15",
+    "street": "شارع التحرير 15"
+   },
+   "q": "شارع التحرير 15"
+  },
+  {
+   "is_addr": true,
+   "normalized": "5th Avenue",
+   "ordinals": [
+    "fifth Avenue"
+   ],
+   "parsed": {
+    "raw": "5th Avenue",
+    "street": "5th Avenue"
+   },
+   "q": "5th Avenue"
+  },
+  {
+   "is_addr": true,
+   "normalized": "fifth avenue",
+   "ordinals": [
+    "5th avenue"
+   ],
+   "parsed": {
+    "raw": "fifth avenue",
+    "street": "fifth avenue"
+   },
+   "q": "fifth avenue"
+  },
+  {
+   "is_addr": true,
+   "normalized": "12 rue de la Paix, Paris",
+   "ordinals": [],
+   "parsed": {
+    "city": "Paris",
+    "housenumber": "12",
+    "raw": "12 rue de la Paix, Paris",
+    "street": "rue de la Paix"
+   },
+   "q": "12 rue de la Paix, Paris"
+  },
+  {
+   "is_addr": true,
+   "normalized": "1600 Pennsylvania avenue NW",
+   "ordinals": [],
+   "parsed": {
+    "housenumber": "1600",
+    "raw": "1600 Pennsylvania avenue NW",
+    "street": "Pennsylvania avenue NW"
+   },
+   "q": "1600 Pennsylvania Ave NW"
+  },
+  {
+   "is_addr": true,
+   "normalized": "Main street",
+   "ordinals": [],
+   "parsed": {
+    "raw": "Main street",
+    "street": "Main street"
+   },
+   "q": "Main St"
+  },
+  {
+   "is_addr": true,
+   "normalized": "42 boulevard Saint-Germain",
+   "ordinals": [],
+   "parsed": {
+    "housenumber": "42",
+    "raw": "42 boulevard Saint-Germain",
+    "street": "boulevard Saint-Germain"
+   },
+   "q": "42 Blvd Saint-Germain"
+  },
+  {
+   "is_addr": true,
+   "normalized": "شارع 9 المعادي",
+   "ordinals": [],
+   "parsed": {
+    "city": "المعادي",
+    "raw": "شارع 9 المعادي",
+    "street": "شارع 9"
+   },
+   "q": "شارع 9 المعادي"
+  },
+  {
+   "is_addr": true,
+   "normalized": "21st street",
+   "ordinals": [],
+   "parsed": {
+    "raw": "21st street",
+    "street": "21st street"
+   },
+   "q": "21st street"
+  },
+  {
+   "is_addr": true,
+   "normalized": "3rd avenue apt 4",
+   "ordinals": [
+    "third ave apt 4"
+   ],
+   "parsed": {
+    "raw": "3rd avenue apt 4",
+    "street": "3rd avenue apt 4"
+   },
+   "q": "3rd ave apt 4"
+  },
+  {
+   "is_addr": false,
+   "normalized": "no number here",
+   "ordinals": [],
+   "parsed": {
+    "raw": "no number here",
+    "street": "no number here"
+   },
+   "q": "no number here"
+  },
+  {
+   "is_addr": true,
+   "normalized": "Cairo",
+   "ordinals": [],
+   "parsed": {
+    "city": "Cairo",
+    "raw": "Cairo"
+   },
+   "q": "Cairo"
+  },
+  {
+   "is_addr": false,
+   "normalized": "",
+   "ordinals": [],
+   "parsed": {
+    "raw": "",
+    "street": ""
+   },
+   "q": ""
+  },
+  {
+   "is_addr": false,
+   "normalized": "",
+   "ordinals": [],
+   "parsed": {
+    "raw": "",
+    "street": ""
+   },
+   "q": "  "
+  },
+  {
+   "is_addr": false,
+   "normalized": "123",
+   "ordinals": [],
+   "parsed": {
+    "raw": "123",
+    "street": "123"
+   },
+   "q": "123"
+  },
+  {
+   "is_addr": true,
+   "normalized": "street. Johns Road",
+   "ordinals": [],
+   "parsed": {
+    "raw": "street. Johns Road",
+    "street": "street. Johns Road"
+   },
+   "q": "St. John's Road"
+  },
+  {
+   "is_addr": false,
+   "normalized": "avenue. des Champs-Elysees",
+   "ordinals": [],
+   "parsed": {
+    "raw": "avenue. des Champs-Elysees",
+    "street": "avenue. des Champs-Elysees"
+   },
+   "q": "Av. des Champs-Élysées"
+  }
+ ],
+ "address_tags": [
+  {
+   "components": {
+    "city": "Cairo",
+    "housenumber": "15",
+    "street": "Tahrir"
+   },
+   "full": "15 Tahrir, Cairo",
+   "has": true,
+   "tags": {
+    "addr:city": "Cairo",
+    "addr:housenumber": "15",
+    "addr:street": "Tahrir"
+   }
+  },
+  {
+   "components": {
+    "street": "Tahrir"
+   },
+   "full": "Tahrir",
+   "has": true,
+   "tags": {
+    "addr:street": "Tahrir"
+   }
+  },
+  {
+   "components": {
+    "postcode": "11511"
+   },
+   "full": "11511",
+   "has": true,
+   "tags": {
+    "addr:postcode": "11511"
+   }
+  },
+  {
+   "components": {},
+   "full": "",
+   "has": false,
+   "tags": {}
+  },
+  {
+   "components": {
+    "city": "القاهرة",
+    "housenumber": "1",
+    "street": "شارع التحرير"
+   },
+   "full": "1 شارع التحرير, القاهرة",
+   "has": true,
+   "tags": {
+    "addr:city": "القاهرة",
+    "addr:housenumber": "1",
+    "addr:street": "شارع التحرير"
+   }
+  }
+ ],
+ "admin_layer": {
+  "administrative_area_level_1": [
+   4,
+   "state"
+  ],
+  "administrative_area_level_2": [
+   6,
+   "county"
+  ],
+  "administrative_area_level_3": [
+   7,
+   "region"
+  ],
+  "administrative_area_level_4": [
+   8,
+   "city"
+  ],
+  "borough": [
+   10,
+   "suburb"
+  ],
+  "country": [
+   2,
+   "country"
+  ],
+  "county": [
+   6,
+   "county"
+  ],
+  "localadmin": [
+   8,
+   "town"
+  ],
+  "locality": [
+   8,
+   "city"
+  ],
+  "macrocounty": [
+   6,
+   "county"
+  ],
+  "macroregion": [
+   4,
+   "state"
+  ],
+  "neighborhood": [
+   10,
+   "neighbourhood"
+  ],
+  "neighbourhood": [
+   10,
+   "neighbourhood"
+  ],
+  "region": [
+   4,
+   "state"
+  ],
+  "sublocality": [
+   10,
+   "suburb"
+  ],
+  "sublocality_level_1": [
+   10,
+   "suburb"
+  ],
+  "sublocality_level_2": [
+   10,
+   "neighbourhood"
+  ],
+  "sublocality_level_3": [
+   10,
+   "neighbourhood"
+  ]
+ },
+ "autocomplete_scalars": {
+  "MAX_PREFIX": 6,
+  "MIN_PREFIX": 2,
+  "MQ_ANY_WORD": 0.4,
+  "MQ_EXACT": 1.0,
+  "MQ_FIRST_WORD": 0.6,
+  "MQ_PREFIX": 0.8,
+  "POPULARITY_CAP": 1000.0,
+  "TOP_K": 30,
+  "W_GEO": 15.0,
+  "W_MATCH": 100.0,
+  "W_POP": 2.0,
+  "W_RANK": 3.0
+ },
+ "autocomplete_score": [
+  {
+   "pop": 0.0,
+   "rank": 0.0,
+   "score": 0.0
+  },
+  {
+   "pop": 1.0,
+   "rank": 0.0,
+   "score": 3.4657359027997265
+  },
+  {
+   "pop": 100.0,
+   "rank": 0.0,
+   "score": 23.075602584206298
+  },
+  {
+   "pop": 1000.0,
+   "rank": 0.0,
+   "score": 34.5437738965761
+  },
+  {
+   "pop": 5000.0,
+   "rank": 0.0,
+   "score": 42.58696585709452
+  },
+  {
+   "pop": 0.0,
+   "rank": 0.5,
+   "score": 5.0
+  },
+  {
+   "pop": 1.0,
+   "rank": 0.5,
+   "score": 8.465735902799727
+  },
+  {
+   "pop": 100.0,
+   "rank": 0.5,
+   "score": 28.075602584206298
+  },
+  {
+   "pop": 1000.0,
+   "rank": 0.5,
+   "score": 39.5437738965761
+  },
+  {
+   "pop": 5000.0,
+   "rank": 0.5,
+   "score": 47.58696585709452
+  },
+  {
+   "pop": 0.0,
+   "rank": 1.0,
+   "score": 10.0
+  },
+  {
+   "pop": 1.0,
+   "rank": 1.0,
+   "score": 13.465735902799727
+  },
+  {
+   "pop": 100.0,
+   "rank": 1.0,
+   "score": 33.075602584206294
+  },
+  {
+   "pop": 1000.0,
+   "rank": 1.0,
+   "score": 44.5437738965761
+  },
+  {
+   "pop": 5000.0,
+   "rank": 1.0,
+   "score": 52.58696585709452
+  },
+  {
+   "pop": 0.0,
+   "rank": 5.0,
+   "score": 50.0
+  },
+  {
+   "pop": 1.0,
+   "rank": 5.0,
+   "score": 53.46573590279973
+  },
+  {
+   "pop": 100.0,
+   "rank": 5.0,
+   "score": 73.0756025842063
+  },
+  {
+   "pop": 1000.0,
+   "rank": 5.0,
+   "score": 84.5437738965761
+  },
+  {
+   "pop": 5000.0,
+   "rank": 5.0,
+   "score": 92.58696585709453
+  },
+  {
+   "pop": 0.0,
+   "rank": 10.0,
+   "score": 100.0
+  },
+  {
+   "pop": 1.0,
+   "rank": 10.0,
+   "score": 103.46573590279972
+  },
+  {
+   "pop": 100.0,
+   "rank": 10.0,
+   "score": 123.0756025842063
+  },
+  {
+   "pop": 1000.0,
+   "rank": 10.0,
+   "score": 134.5437738965761
+  },
+  {
+   "pop": 5000.0,
+   "rank": 10.0,
+   "score": 142.58696585709453
+  }
+ ],
+ "categories": [
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='restaurant', group='food', is_poi=True)",
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "text": "restaurant مطعم أكل"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "text": "restaurant مطعم أكل"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "restaurant"
+   },
+   "text": "restaurant مطعم أكل"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='fast_food', group='food', is_poi=True)",
+   "tags": {
+    "amenity": "fast_food"
+   },
+   "text": "fast food takeaway وجبات سريعة مطعم"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fast_food"
+   },
+   "text": "fast food takeaway وجبات سريعة مطعم"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fast_food"
+   },
+   "text": "fast food takeaway وجبات سريعة مطعم"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='cafe', group='food', is_poi=True)",
+   "tags": {
+    "amenity": "cafe"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cafe"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cafe"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='bar', group='food', is_poi=True)",
+   "tags": {
+    "amenity": "bar"
+   },
+   "text": "bar بار"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bar"
+   },
+   "text": "bar بار"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bar"
+   },
+   "text": "bar بار"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='bakery', group='food', is_poi=True)",
+   "tags": {
+    "shop": "bakery"
+   },
+   "text": "bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "bakery"
+   },
+   "text": "bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "bakery"
+   },
+   "text": "bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='pastry', group='food', is_poi=True)",
+   "tags": {
+    "shop": "pastry"
+   },
+   "text": "pastry حلواني حلويات"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "pastry"
+   },
+   "text": "pastry حلواني حلويات"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "pastry"
+   },
+   "text": "pastry حلواني حلويات"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='confectionery', group='food', is_poi=True)",
+   "tags": {
+    "shop": "confectionery"
+   },
+   "text": "confectionery"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "confectionery"
+   },
+   "text": "confectionery"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "confectionery"
+   },
+   "text": "confectionery"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='deli', group='food', is_poi=True)",
+   "tags": {
+    "shop": "deli"
+   },
+   "text": "deli"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "deli"
+   },
+   "text": "deli"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "deli"
+   },
+   "text": "deli"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='bank', group='finance', is_poi=True)",
+   "tags": {
+    "amenity": "bank"
+   },
+   "text": "bank بنك مصرف banque"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bank"
+   },
+   "text": "bank بنك مصرف banque"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bank"
+   },
+   "text": "bank بنك مصرف banque"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='atm', group='finance', is_poi=True)",
+   "tags": {
+    "amenity": "atm"
+   },
+   "text": "atm cash machine صراف آلي ماكينة صراف"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "atm"
+   },
+   "text": "atm cash machine صراف آلي ماكينة صراف"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "atm"
+   },
+   "text": "atm cash machine صراف آلي ماكينة صراف"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='bureau_de_change', group='finance', is_poi=True)",
+   "tags": {
+    "amenity": "bureau_de_change"
+   },
+   "text": "bureau de change exchange money exchange صرافة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bureau_de_change"
+   },
+   "text": "bureau de change exchange money exchange صرافة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bureau_de_change"
+   },
+   "text": "bureau de change exchange money exchange صرافة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='accountant', group='finance', is_poi=True)",
+   "tags": {
+    "office": "accountant"
+   },
+   "text": "accountant"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "accountant"
+   },
+   "text": "accountant"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "accountant"
+   },
+   "text": "accountant"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='insurance', group='finance', is_poi=True)",
+   "tags": {
+    "office": "insurance"
+   },
+   "text": "insurance"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "insurance"
+   },
+   "text": "insurance"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "insurance"
+   },
+   "text": "insurance"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='financial', group='finance', is_poi=True)",
+   "tags": {
+    "office": "financial"
+   },
+   "text": "financial"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "financial"
+   },
+   "text": "financial"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "financial"
+   },
+   "text": "financial"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='financial_advisor', group='finance', is_poi=True)",
+   "tags": {
+    "office": "financial_advisor"
+   },
+   "text": "financial advisor"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "financial_advisor"
+   },
+   "text": "financial advisor"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "financial_advisor"
+   },
+   "text": "financial advisor"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='hospital', group='health', is_poi=True)",
+   "tags": {
+    "amenity": "hospital"
+   },
+   "text": "hospital مستشفى مستشفي hôpital"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "hospital"
+   },
+   "text": "hospital مستشفى مستشفي hôpital"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "hospital"
+   },
+   "text": "hospital مستشفى مستشفي hôpital"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='clinic', group='health', is_poi=True)",
+   "tags": {
+    "amenity": "clinic"
+   },
+   "text": "clinic عيادة clinique"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "clinic"
+   },
+   "text": "clinic عيادة clinique"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "clinic"
+   },
+   "text": "clinic عيادة clinique"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='doctors', group='health', is_poi=True)",
+   "tags": {
+    "amenity": "doctors"
+   },
+   "text": "doctors doctor طبيب عيادة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "doctors"
+   },
+   "text": "doctors doctor طبيب عيادة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "doctors"
+   },
+   "text": "doctors doctor طبيب عيادة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='pharmacy', group='health', is_poi=True)",
+   "tags": {
+    "amenity": "pharmacy"
+   },
+   "text": "pharmacy chemist صيدلية pharmacie"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "pharmacy"
+   },
+   "text": "pharmacy chemist صيدلية pharmacie"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "pharmacy"
+   },
+   "text": "pharmacy chemist صيدلية pharmacie"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='optician', group='health', is_poi=True)",
+   "tags": {
+    "shop": "optician"
+   },
+   "text": "optician"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "optician"
+   },
+   "text": "optician"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "optician"
+   },
+   "text": "optician"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='medical_supply', group='health', is_poi=True)",
+   "tags": {
+    "shop": "medical_supply"
+   },
+   "text": "medical supply"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "medical_supply"
+   },
+   "text": "medical supply"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "medical_supply"
+   },
+   "text": "medical supply"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='chemist', group='health', is_poi=True)",
+   "tags": {
+    "shop": "chemist"
+   },
+   "text": "chemist"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "chemist"
+   },
+   "text": "chemist"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "chemist"
+   },
+   "text": "chemist"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='hearing_aids', group='health', is_poi=True)",
+   "tags": {
+    "shop": "hearing_aids"
+   },
+   "text": "hearing aids"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "hearing_aids"
+   },
+   "text": "hearing aids"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "hearing_aids"
+   },
+   "text": "hearing aids"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='school', group='education', is_poi=True)",
+   "tags": {
+    "amenity": "school"
+   },
+   "text": "school مدرسة école"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "school"
+   },
+   "text": "school مدرسة école"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "school"
+   },
+   "text": "school مدرسة école"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='university', group='education', is_poi=True)",
+   "tags": {
+    "amenity": "university"
+   },
+   "text": "university جامعة université"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "university"
+   },
+   "text": "university جامعة université"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "university"
+   },
+   "text": "university جامعة université"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='college', group='education', is_poi=True)",
+   "tags": {
+    "amenity": "college"
+   },
+   "text": "college institute معهد كلية"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "college"
+   },
+   "text": "college institute معهد كلية"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "college"
+   },
+   "text": "college institute معهد كلية"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='kindergarten', group='education', is_poi=True)",
+   "tags": {
+    "amenity": "kindergarten"
+   },
+   "text": "kindergarten nursery حضانة روضة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "kindergarten"
+   },
+   "text": "kindergarten nursery حضانة روضة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "kindergarten"
+   },
+   "text": "kindergarten nursery حضانة روضة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='place_of_worship', group='worship', is_poi=True)",
+   "tags": {
+    "amenity": "place_of_worship"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "place_of_worship"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "place_of_worship"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='police', group='government', is_poi=True)",
+   "tags": {
+    "amenity": "police"
+   },
+   "text": "police police station شرطة قسم شرطة بوليس"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "police"
+   },
+   "text": "police police station شرطة قسم شرطة بوليس"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "police"
+   },
+   "text": "police police station شرطة قسم شرطة بوليس"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='fire_station', group='government', is_poi=True)",
+   "tags": {
+    "amenity": "fire_station"
+   },
+   "text": "fire station مطافي الحماية المدنية"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fire_station"
+   },
+   "text": "fire station مطافي الحماية المدنية"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fire_station"
+   },
+   "text": "fire station مطافي الحماية المدنية"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='post_office', group='government', is_poi=True)",
+   "tags": {
+    "amenity": "post_office"
+   },
+   "text": "post office بريد مكتب بريد"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "post_office"
+   },
+   "text": "post office بريد مكتب بريد"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "post_office"
+   },
+   "text": "post office بريد مكتب بريد"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='townhall', group='government', is_poi=True)",
+   "tags": {
+    "amenity": "townhall"
+   },
+   "text": "townhall town hall مجلس المدينة حي"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "townhall"
+   },
+   "text": "townhall town hall مجلس المدينة حي"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "townhall"
+   },
+   "text": "townhall town hall مجلس المدينة حي"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='government', group='government', is_poi=True)",
+   "tags": {
+    "office": "government"
+   },
+   "text": "government government office مصلحة حكومية إدارة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "government"
+   },
+   "text": "government government office مصلحة حكومية إدارة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "government"
+   },
+   "text": "government government office مصلحة حكومية إدارة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='diplomatic', group='government', is_poi=True)",
+   "tags": {
+    "office": "diplomatic"
+   },
+   "text": "diplomatic"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "diplomatic"
+   },
+   "text": "diplomatic"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "diplomatic"
+   },
+   "text": "diplomatic"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='fuel', group='automotive', is_poi=True)",
+   "tags": {
+    "amenity": "fuel"
+   },
+   "text": "fuel petrol gas station بنزين محطة بنزين وقود"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fuel"
+   },
+   "text": "fuel petrol gas station بنزين محطة بنزين وقود"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "fuel"
+   },
+   "text": "fuel petrol gas station بنزين محطة بنزين وقود"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='parking', group='automotive', is_poi=True)",
+   "tags": {
+    "amenity": "parking"
+   },
+   "text": "parking car park موقف جراج"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "parking"
+   },
+   "text": "parking car park موقف جراج"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "parking"
+   },
+   "text": "parking car park موقف جراج"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='car_wash', group='automotive', is_poi=True)",
+   "tags": {
+    "amenity": "car_wash"
+   },
+   "text": "car wash غسيل سيارات"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "car_wash"
+   },
+   "text": "car wash غسيل سيارات"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "car_wash"
+   },
+   "text": "car wash غسيل سيارات"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='car_rental', group='automotive', is_poi=True)",
+   "tags": {
+    "amenity": "car_rental"
+   },
+   "text": "car rental"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "car_rental"
+   },
+   "text": "car rental"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "car_rental"
+   },
+   "text": "car rental"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='car_repair', group='automotive', is_poi=True)",
+   "tags": {
+    "shop": "car_repair"
+   },
+   "text": "car repair mechanic ورشة ميكانيكي"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car_repair"
+   },
+   "text": "car repair mechanic ورشة ميكانيكي"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car_repair"
+   },
+   "text": "car repair mechanic ورشة ميكانيكي"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='car', group='automotive', is_poi=True)",
+   "tags": {
+    "shop": "car"
+   },
+   "text": "car"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car"
+   },
+   "text": "car"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car"
+   },
+   "text": "car"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='car_parts', group='automotive', is_poi=True)",
+   "tags": {
+    "shop": "car_parts"
+   },
+   "text": "car parts"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car_parts"
+   },
+   "text": "car parts"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "car_parts"
+   },
+   "text": "car parts"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='tyres', group='automotive', is_poi=True)",
+   "tags": {
+    "shop": "tyres"
+   },
+   "text": "tyres"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "tyres"
+   },
+   "text": "tyres"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "tyres"
+   },
+   "text": "tyres"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='tourism', value='hotel', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='tourism', value='motel', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "tourism": "motel"
+   },
+   "text": "motel"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "motel"
+   },
+   "text": "motel"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "motel"
+   },
+   "text": "motel"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='tourism', value='guest_house', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "tourism": "guest_house"
+   },
+   "text": "guest house"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "guest_house"
+   },
+   "text": "guest house"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "guest_house"
+   },
+   "text": "guest house"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='tourism', value='hostel', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "tourism": "hostel"
+   },
+   "text": "hostel نزل"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hostel"
+   },
+   "text": "hostel نزل"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hostel"
+   },
+   "text": "hostel نزل"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='historic', value='monument', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "historic": "monument"
+   },
+   "text": "monument نصب تذكاري أثر"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "monument"
+   },
+   "text": "monument نصب تذكاري أثر"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "monument"
+   },
+   "text": "monument نصب تذكاري أثر"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='historic', value='memorial', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "historic": "memorial"
+   },
+   "text": "memorial"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "memorial"
+   },
+   "text": "memorial"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "memorial"
+   },
+   "text": "memorial"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='historic', value='castle', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "historic": "castle"
+   },
+   "text": "castle"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "castle"
+   },
+   "text": "castle"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "castle"
+   },
+   "text": "castle"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='historic', value='ruins', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "historic": "ruins"
+   },
+   "text": "ruins"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "ruins"
+   },
+   "text": "ruins"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "historic": "ruins"
+   },
+   "text": "ruins"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='leisure', value='park', group='leisure', is_poi=True)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='leisure', value='stadium', group='leisure', is_poi=True)",
+   "tags": {
+    "leisure": "stadium"
+   },
+   "text": "stadium استاد ملعب"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "stadium"
+   },
+   "text": "stadium استاد ملعب"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "stadium"
+   },
+   "text": "stadium استاد ملعب"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='leisure', value='fitness_centre', group='leisure', is_poi=True)",
+   "tags": {
+    "leisure": "fitness_centre"
+   },
+   "text": "fitness centre gym fitness جيم صالة رياضية"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "fitness_centre"
+   },
+   "text": "fitness centre gym fitness جيم صالة رياضية"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "fitness_centre"
+   },
+   "text": "fitness centre gym fitness جيم صالة رياضية"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='leisure', value='spa', group='leisure', is_poi=True)",
+   "tags": {
+    "leisure": "spa"
+   },
+   "text": "spa"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "spa"
+   },
+   "text": "spa"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "spa"
+   },
+   "text": "spa"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='cinema', group='leisure', is_poi=True)",
+   "tags": {
+    "amenity": "cinema"
+   },
+   "text": "cinema movie theatre سينما"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cinema"
+   },
+   "text": "cinema movie theatre سينما"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cinema"
+   },
+   "text": "cinema movie theatre سينما"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='theatre', group='leisure', is_poi=True)",
+   "tags": {
+    "amenity": "theatre"
+   },
+   "text": "theatre مسرح"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "theatre"
+   },
+   "text": "theatre مسرح"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "theatre"
+   },
+   "text": "theatre مسرح"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='arts_centre', group='leisure', is_poi=True)",
+   "tags": {
+    "amenity": "arts_centre"
+   },
+   "text": "arts centre"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "arts_centre"
+   },
+   "text": "arts centre"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "arts_centre"
+   },
+   "text": "arts centre"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='community_centre', group='leisure', is_poi=True)",
+   "tags": {
+    "amenity": "community_centre"
+   },
+   "text": "community centre"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "community_centre"
+   },
+   "text": "community centre"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "community_centre"
+   },
+   "text": "community centre"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='mall', group='shopping', is_poi=True)",
+   "tags": {
+    "shop": "mall"
+   },
+   "text": "mall shopping mall مول مركز تجاري"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "mall"
+   },
+   "text": "mall shopping mall مول مركز تجاري"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "mall"
+   },
+   "text": "mall shopping mall مول مركز تجاري"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='supermarket', group='shopping', is_poi=True)",
+   "tags": {
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='convenience', group='shopping', is_poi=True)",
+   "tags": {
+    "shop": "convenience"
+   },
+   "text": "convenience convenience store grocery بقالة ميني ماركت"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "convenience"
+   },
+   "text": "convenience convenience store grocery بقالة ميني ماركت"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "convenience"
+   },
+   "text": "convenience convenience store grocery بقالة ميني ماركت"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='department_store', group='shopping', is_poi=True)",
+   "tags": {
+    "shop": "department_store"
+   },
+   "text": "department store"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "department_store"
+   },
+   "text": "department store"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "shop": "department_store"
+   },
+   "text": "department store"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='estate_agent', group='shopping', is_poi=True)",
+   "tags": {
+    "office": "estate_agent"
+   },
+   "text": "estate agent"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "estate_agent"
+   },
+   "text": "estate agent"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "estate_agent"
+   },
+   "text": "estate agent"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='lawyer', group='shopping', is_poi=True)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='aeroway', value='aerodrome', group='transport', is_poi=True)",
+   "tags": {
+    "aeroway": "aerodrome"
+   },
+   "text": "aerodrome airport مطار aéroport"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "aeroway": "aerodrome"
+   },
+   "text": "aerodrome airport مطار aéroport"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "aeroway": "aerodrome"
+   },
+   "text": "aerodrome airport مطار aéroport"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='aeroway', value='terminal', group='transport', is_poi=True)",
+   "tags": {
+    "aeroway": "terminal"
+   },
+   "text": "terminal airport terminal صالة مطار مطار"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "aeroway": "terminal"
+   },
+   "text": "terminal airport terminal صالة مطار مطار"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "aeroway": "terminal"
+   },
+   "text": "terminal airport terminal صالة مطار مطار"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='railway', value='station', group='transport', is_poi=True)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='railway', value='halt', group='transport', is_poi=True)",
+   "tags": {
+    "railway": "halt"
+   },
+   "text": "halt train stop محطة"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "halt"
+   },
+   "text": "halt train stop محطة"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "halt"
+   },
+   "text": "halt train stop محطة"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='railway', value='subway_entrance', group='transport', is_poi=True)",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "subway_entrance"
+   },
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key='railway', value='tram_stop', group='transport', is_poi=True)",
+   "tags": {
+    "railway": "tram_stop"
+   },
+   "text": "tram stop tram ترام محطة ترام"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "tram_stop"
+   },
+   "text": "tram stop tram ترام محطة ترام"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "tram_stop"
+   },
+   "text": "tram stop tram ترام محطة ترام"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='bus_station', group='transport', is_poi=True)",
+   "tags": {
+    "amenity": "bus_station"
+   },
+   "text": "bus station bus أتوبيس موقف أتوبيس محطة أتوبيس"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bus_station"
+   },
+   "text": "bus station bus أتوبيس موقف أتوبيس محطة أتوبيس"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bus_station"
+   },
+   "text": "bus station bus أتوبيس موقف أتوبيس محطة أتوبيس"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='taxi', group='transport', is_poi=True)",
+   "tags": {
+    "amenity": "taxi"
+   },
+   "text": "taxi"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "taxi"
+   },
+   "text": "taxi"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "taxi"
+   },
+   "text": "taxi"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='ferry_terminal', group='transport', is_poi=True)",
+   "tags": {
+    "amenity": "ferry_terminal"
+   },
+   "text": "ferry terminal"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "ferry_terminal"
+   },
+   "text": "ferry terminal"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "ferry_terminal"
+   },
+   "text": "ferry terminal"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='bicycle_rental', group='transport', is_poi=True)",
+   "tags": {
+    "amenity": "bicycle_rental"
+   },
+   "text": "bicycle rental"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bicycle_rental"
+   },
+   "text": "bicycle rental"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "bicycle_rental"
+   },
+   "text": "bicycle rental"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='highway', value='bus_stop', group='transport', is_poi=True)",
+   "tags": {
+    "highway": "bus_stop"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "highway": "bus_stop"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "highway": "bus_stop"
+   },
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key=None, value=None, group=None, is_poi=False)",
+   "tags": {},
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {},
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {},
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key=None, value=None, group=None, is_poi=False)",
+   "tags": {
+    "name": "X"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "name": "X"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "name": "X"
+   },
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='cafe', group='food', is_poi=True)",
+   "tags": {
+    "amenity": "cafe",
+    "shop": "bakery"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cafe",
+    "shop": "bakery"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "cafe",
+    "shop": "bakery"
+   },
+   "text": "cafe coffee coffee shop مقهى كافيه قهوة bakery مخبز فرن boulangerie"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='place', value='city', group='place', is_poi=False)",
+   "tags": {
+    "place": "city"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "place": "city"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "place": "city"
+   },
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key='boundary', value='administrative', group='boundary', is_poi=False)",
+   "tags": {
+    "boundary": "administrative"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key='boundary', value='administrative', group='boundary', is_poi=False)",
+   "tags": {
+    "boundary": "administrative"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key='boundary', value='administrative', group='boundary', is_poi=False)",
+   "tags": {
+    "boundary": "administrative"
+   },
+   "text": ""
+  },
+  {
+   "admin": null,
+   "result": "Category(key='railway', value='station', group='transport', is_poi=True)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "railway": "station"
+   },
+   "text": "station train station railway station محطة محطة قطار قطار gare"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='amenity', value='place_of_worship', group='worship', is_poi=True)",
+   "tags": {
+    "amenity": "place_of_worship",
+    "religion": "muslim"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "place_of_worship",
+    "religion": "muslim"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "amenity": "place_of_worship",
+    "religion": "muslim"
+   },
+   "text": "place of worship mosque masjid church مسجد جامع كنيسة زاوية"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='shop', value='supermarket', group='shopping', is_poi=True)",
+   "tags": {
+    "brand": "Metro",
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "brand": "Metro",
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "brand": "Metro",
+    "shop": "supermarket"
+   },
+   "text": "supermarket grocery سوبر ماركت بقالة supermarché"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='office', value='lawyer', group='shopping', is_poi=True)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "office": "lawyer"
+   },
+   "text": "lawyer"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='tourism', value='hotel', group='lodging_tourism', is_poi=True)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "tourism": "hotel"
+   },
+   "text": "hotel فندق hôtel"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='leisure', value='park', group='leisure', is_poi=True)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "leisure": "park"
+   },
+   "text": "park حديقة منتزه parc"
+  },
+  {
+   "admin": null,
+   "result": "Category(key='highway', value='primary', group=None, is_poi=True)",
+   "tags": {
+    "highway": "primary"
+   },
+   "text": ""
+  },
+  {
+   "admin": 4,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "highway": "primary"
+   },
+   "text": ""
+  },
+  {
+   "admin": 8,
+   "result": "Category(key=None, value=None, group='boundary', is_poi=False)",
+   "tags": {
+    "highway": "primary"
+   },
+   "text": ""
+  }
+ ],
+ "category_feature": {
+  "accommodation": [
+   "tourism",
+   "hotel"
+  ],
+  "education": [
+   "amenity",
+   "school"
+  ],
+  "entertainment": [
+   "leisure",
+   "yes"
+  ],
+  "finance": [
+   "amenity",
+   "bank"
+  ],
+  "food": [
+   "amenity",
+   "restaurant"
+  ],
+  "government": [
+   "office",
+   "government"
+  ],
+  "health": [
+   "amenity",
+   "clinic"
+  ],
+  "historic": [
+   "historic",
+   "yes"
+  ],
+  "nature": [
+   "leisure",
+   "park"
+  ],
+  "nightlife": [
+   "amenity",
+   "bar"
+  ],
+  "professional": [
+   "office",
+   "yes"
+  ],
+  "religion": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "shop": [
+   "shop",
+   "yes"
+  ],
+  "transport": [
+   "public_transport",
+   "station"
+  ],
+  "transportation": [
+   "aeroway",
+   "aerodrome"
+  ]
+ },
+ "category_keys": [
+  "amenity",
+  "shop",
+  "tourism",
+  "leisure",
+  "office",
+  "historic",
+  "building",
+  "place",
+  "natural",
+  "highway",
+  "railway",
+  "aeroway",
+  "waterway",
+  "landuse"
+ ],
+ "category_synonyms": {
+  "aeroway=aerodrome": [
+   "airport",
+   "aéroport",
+   "مطار"
+  ],
+  "aeroway=terminal": [
+   "airport terminal",
+   "صالة مطار",
+   "مطار"
+  ],
+  "amenity=atm": [
+   "atm",
+   "cash machine",
+   "صراف آلي",
+   "ماكينة صراف"
+  ],
+  "amenity=bank": [
+   "bank",
+   "banque",
+   "بنك",
+   "مصرف"
+  ],
+  "amenity=bar": [
+   "bar",
+   "بار"
+  ],
+  "amenity=bureau_de_change": [
+   "exchange",
+   "money exchange",
+   "صرافة"
+  ],
+  "amenity=bus_station": [
+   "bus",
+   "bus station",
+   "أتوبيس",
+   "محطة أتوبيس",
+   "موقف أتوبيس"
+  ],
+  "amenity=cafe": [
+   "cafe",
+   "coffee",
+   "coffee shop",
+   "قهوة",
+   "كافيه",
+   "مقهى"
+  ],
+  "amenity=car_wash": [
+   "car wash",
+   "غسيل سيارات"
+  ],
+  "amenity=cinema": [
+   "cinema",
+   "movie theatre",
+   "سينما"
+  ],
+  "amenity=clinic": [
+   "clinic",
+   "clinique",
+   "عيادة"
+  ],
+  "amenity=college": [
+   "college",
+   "institute",
+   "كلية",
+   "معهد"
+  ],
+  "amenity=courthouse": [
+   "court",
+   "محكمة"
+  ],
+  "amenity=dentist": [
+   "dentist",
+   "أسنان",
+   "طبيب أسنان"
+  ],
+  "amenity=doctors": [
+   "doctor",
+   "طبيب",
+   "عيادة"
+  ],
+  "amenity=embassy": [
+   "ambassade",
+   "embassy",
+   "سفارة"
+  ],
+  "amenity=fast_food": [
+   "fast food",
+   "takeaway",
+   "مطعم",
+   "وجبات سريعة"
+  ],
+  "amenity=fire_station": [
+   "fire station",
+   "الحماية المدنية",
+   "مطافي"
+  ],
+  "amenity=food_court": [
+   "food court",
+   "مطاعم"
+  ],
+  "amenity=fuel": [
+   "fuel",
+   "gas station",
+   "petrol",
+   "بنزين",
+   "محطة بنزين",
+   "وقود"
+  ],
+  "amenity=hospital": [
+   "hospital",
+   "hôpital",
+   "مستشفى",
+   "مستشفي"
+  ],
+  "amenity=kindergarten": [
+   "kindergarten",
+   "nursery",
+   "حضانة",
+   "روضة"
+  ],
+  "amenity=library": [
+   "library",
+   "مكتبة"
+  ],
+  "amenity=parking": [
+   "car park",
+   "parking",
+   "parking",
+   "جراج",
+   "موقف"
+  ],
+  "amenity=pharmacy": [
+   "chemist",
+   "pharmacie",
+   "pharmacy",
+   "صيدلية"
+  ],
+  "amenity=place_of_worship": [
+   "church",
+   "masjid",
+   "mosque",
+   "جامع",
+   "زاوية",
+   "كنيسة",
+   "مسجد"
+  ],
+  "amenity=police": [
+   "police",
+   "police station",
+   "بوليس",
+   "شرطة",
+   "قسم شرطة"
+  ],
+  "amenity=post_office": [
+   "post office",
+   "بريد",
+   "مكتب بريد"
+  ],
+  "amenity=restaurant": [
+   "restaurant",
+   "أكل",
+   "مطعم"
+  ],
+  "amenity=school": [
+   "school",
+   "école",
+   "مدرسة"
+  ],
+  "amenity=theatre": [
+   "theatre",
+   "مسرح"
+  ],
+  "amenity=toilets": [
+   "toilet",
+   "wc",
+   "حمام",
+   "دورة مياه"
+  ],
+  "amenity=townhall": [
+   "town hall",
+   "حي",
+   "مجلس المدينة"
+  ],
+  "amenity=university": [
+   "university",
+   "université",
+   "جامعة"
+  ],
+  "healthcare=laboratory": [
+   "lab",
+   "laboratory",
+   "تحاليل",
+   "مختبر",
+   "معمل"
+  ],
+  "highway=bus_stop": [
+   "bus stop",
+   "موقف أتوبيس"
+  ],
+  "historic=archaeological_site": [
+   "archaeological site",
+   "ruins",
+   "آثار",
+   "موقع أثري"
+  ],
+  "historic=monument": [
+   "monument",
+   "أثر",
+   "نصب تذكاري"
+  ],
+  "leisure=fitness_centre": [
+   "fitness",
+   "gym",
+   "جيم",
+   "صالة رياضية"
+  ],
+  "leisure=garden": [
+   "garden",
+   "حديقة"
+  ],
+  "leisure=park": [
+   "parc",
+   "park",
+   "حديقة",
+   "منتزه"
+  ],
+  "leisure=pitch": [
+   "pitch",
+   "playground",
+   "ملعب"
+  ],
+  "leisure=sports_centre": [
+   "sports centre",
+   "مركز رياضي",
+   "نادي"
+  ],
+  "leisure=stadium": [
+   "stadium",
+   "استاد",
+   "ملعب"
+  ],
+  "office=government": [
+   "government office",
+   "إدارة",
+   "مصلحة حكومية"
+  ],
+  "public_transport=station": [
+   "station",
+   "محطة"
+  ],
+  "public_transport=stop_position": [
+   "stop",
+   "موقف"
+  ],
+  "railway=halt": [
+   "train stop",
+   "محطة"
+  ],
+  "railway=station": [
+   "gare",
+   "railway station",
+   "train station",
+   "قطار",
+   "محطة",
+   "محطة قطار"
+  ],
+  "railway=tram_stop": [
+   "tram",
+   "ترام",
+   "محطة ترام"
+  ],
+  "shop=bakery": [
+   "bakery",
+   "boulangerie",
+   "فرن",
+   "مخبز"
+  ],
+  "shop=butcher": [
+   "butcher",
+   "جزارة",
+   "لحوم"
+  ],
+  "shop=car_repair": [
+   "car repair",
+   "mechanic",
+   "ميكانيكي",
+   "ورشة"
+  ],
+  "shop=clothes": [
+   "clothes",
+   "clothing",
+   "ملابس"
+  ],
+  "shop=convenience": [
+   "convenience store",
+   "grocery",
+   "بقالة",
+   "ميني ماركت"
+  ],
+  "shop=greengrocer": [
+   "greengrocer",
+   "خضار",
+   "فاكهة"
+  ],
+  "shop=mall": [
+   "mall",
+   "shopping mall",
+   "مركز تجاري",
+   "مول"
+  ],
+  "shop=mobile_phone": [
+   "mobile",
+   "phone shop",
+   "محمول",
+   "موبايل"
+  ],
+  "shop=pastry": [
+   "pastry",
+   "حلواني",
+   "حلويات"
+  ],
+  "shop=supermarket": [
+   "grocery",
+   "supermarché",
+   "supermarket",
+   "بقالة",
+   "سوبر ماركت"
+  ],
+  "station=subway": [
+   "metro",
+   "metro station",
+   "subway",
+   "underground",
+   "مترو",
+   "مترو الأنفاق",
+   "محطة مترو"
+  ],
+  "tourism=attraction": [
+   "attraction",
+   "معلم سياحي"
+  ],
+  "tourism=hostel": [
+   "hostel",
+   "نزل"
+  ],
+  "tourism=hotel": [
+   "hotel",
+   "hôtel",
+   "فندق"
+  ],
+  "tourism=museum": [
+   "museum",
+   "musée",
+   "متحف"
+  ],
+  "tourism=viewpoint": [
+   "viewpoint",
+   "مطل"
+  ]
+ },
+ "es_mapping": {
+  "mappings": {
+   "dynamic": false,
+   "properties": {
+    "addr_city": {
+     "analyzer": "address_standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      },
+      "keyword": {
+       "type": "keyword"
+      }
+     },
+     "type": "text"
+    },
+    "addr_country": {
+     "type": "keyword"
+    },
+    "addr_housenumber": {
+     "normalizer": "lowercase",
+     "type": "keyword"
+    },
+    "addr_postcode": {
+     "type": "keyword"
+    },
+    "addr_state": {
+     "analyzer": "address_standard",
+     "type": "text"
+    },
+    "addr_street": {
+     "analyzer": "address_standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      },
+      "keyword": {
+       "type": "keyword"
+      }
+     },
+     "type": "text"
+    },
+    "addr_suburb": {
+     "analyzer": "address_standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      }
+     },
+     "type": "text"
+    },
+    "address": {
+     "enabled": false,
+     "type": "object"
+    },
+    "admin_level": {
+     "type": "integer"
+    },
+    "ai_description": {
+     "enabled": false,
+     "type": "object"
+    },
+    "area_km2": {
+     "type": "float"
+    },
+    "category_group": {
+     "type": "keyword"
+    },
+    "category_key": {
+     "type": "keyword"
+    },
+    "category_text": {
+     "analyzer": "arabic_name",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      }
+     },
+     "type": "text"
+    },
+    "category_value": {
+     "type": "keyword"
+    },
+    "centroid": {
+     "ignore_malformed": true,
+     "type": "geo_point"
+    },
+    "full_address": {
+     "analyzer": "address_standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      }
+     },
+     "type": "text"
+    },
+    "geom": {
+     "ignore_malformed": true,
+     "type": "geo_shape"
+    },
+    "has_address": {
+     "type": "boolean"
+    },
+    "name": {
+     "analyzer": "arabic_name",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      },
+      "keyword": {
+       "type": "keyword"
+      }
+     },
+     "type": "text"
+    },
+    "name_en": {
+     "analyzer": "standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      },
+      "keyword": {
+       "type": "keyword"
+      }
+     },
+     "type": "text"
+    },
+    "name_fr": {
+     "analyzer": "standard",
+     "fields": {
+      "autocomplete": {
+       "analyzer": "address_autocomplete",
+       "search_analyzer": "address_search",
+       "type": "text"
+      },
+      "keyword": {
+       "type": "keyword"
+      }
+     },
+     "type": "text"
+    },
+    "name_vector": {
+     "dims": 384,
+     "index": true,
+     "similarity": "cosine",
+     "type": "dense_vector"
+    },
+    "offline_rank": {
+     "type": "float"
+    },
+    "osm_id": {
+     "type": "keyword"
+    },
+    "osm_type": {
+     "type": "keyword"
+    },
+    "popularity": {
+     "type": "float"
+    },
+    "tags": {
+     "enabled": false,
+     "type": "object"
+    },
+    "tags_text": {
+     "analyzer": "arabic_name",
+     "type": "text"
+    }
+   }
+  },
+  "settings": {
+   "analysis": {
+    "analyzer": {
+     "address_autocomplete": {
+      "char_filter": [
+       "arabic_normalize_char",
+       "strip_apostrophes",
+       "strip_tashkeel"
+      ],
+      "filter": [
+       "lowercase",
+       "arabic_normalization",
+       "street_synonyms_en",
+       "street_synonyms_ar",
+       "street_synonyms_fr",
+       "asciifolding",
+       "edge_ngram_filter"
+      ],
+      "tokenizer": "standard",
+      "type": "custom"
+     },
+     "address_search": {
+      "char_filter": [
+       "arabic_normalize_char",
+       "strip_apostrophes",
+       "strip_tashkeel"
+      ],
+      "filter": [
+       "lowercase",
+       "arabic_normalization",
+       "street_synonyms_en",
+       "street_synonyms_ar",
+       "street_synonyms_fr",
+       "asciifolding"
+      ],
+      "tokenizer": "standard",
+      "type": "custom"
+     },
+     "address_standard": {
+      "char_filter": [
+       "arabic_normalize_char",
+       "strip_apostrophes",
+       "strip_tashkeel"
+      ],
+      "filter": [
+       "lowercase",
+       "arabic_normalization",
+       "street_synonyms_en",
+       "street_synonyms_ar",
+       "street_synonyms_fr",
+       "asciifolding"
+      ],
+      "tokenizer": "standard",
+      "type": "custom"
+     },
+     "arabic_name": {
+      "char_filter": [
+       "arabic_normalize_char",
+       "strip_apostrophes",
+       "strip_tashkeel"
+      ],
+      "filter": [
+       "lowercase",
+       "arabic_normalization",
+       "asciifolding"
+      ],
+      "tokenizer": "standard",
+      "type": "custom"
+     }
+    },
+    "char_filter": {
+     "arabic_normalize_char": {
+      "pattern": "[ـ]",
+      "replacement": "",
+      "type": "pattern_replace"
+     },
+     "strip_apostrophes": {
+      "pattern": "['’ʼ]",
+      "replacement": "",
+      "type": "pattern_replace"
+     },
+     "strip_tashkeel": {
+      "pattern": "[ً-ْٰ]",
+      "replacement": "",
+      "type": "pattern_replace"
+     }
+    },
+    "filter": {
+     "arabic_normalization": {
+      "type": "arabic_normalization"
+     },
+     "edge_ngram_filter": {
+      "max_gram": 15,
+      "min_gram": 2,
+      "type": "edge_ngram"
+     },
+     "street_synonyms_ar": {
+      "synonyms": [
+       "ش, شارع",
+       "ط, طريق",
+       "م, ميدان"
+      ],
+      "type": "synonym"
+     },
+     "street_synonyms_en": {
+      "synonyms": [
+       "st, street",
+       "rd, road",
+       "ave, av, avenue",
+       "blvd, bvd, boulevard",
+       "ln, lane",
+       "dr, drive",
+       "pl, place",
+       "ct, court",
+       "sq, square",
+       "hwy, highway",
+       "cres, crescent",
+       "terr, terrace",
+       "pkwy, parkway"
+      ],
+      "type": "synonym"
+     },
+     "street_synonyms_fr": {
+      "synonyms": [
+       "r, rue",
+       "av, ave, avenue",
+       "bd, blvd, boulevard",
+       "pl, place",
+       "ch, chemin",
+       "imp, impasse",
+       "all, allée",
+       "crs, cours",
+       "rte, route",
+       "pass, passage"
+      ],
+      "type": "synonym"
+     }
+    },
+    "normalizer": {
+     "lowercase": {
+      "filter": [
+       "lowercase"
+      ],
+      "type": "custom"
+     }
+    }
+   },
+   "index": {
+    "number_of_replicas": 0,
+    "number_of_shards": 1
+   }
+  }
+ },
+ "es_replicas": 0,
+ "geohash": [
+  {
+   "gh": "stq",
+   "lat": 30.0444,
+   "lon": 31.2357,
+   "p": 3
+  },
+  {
+   "gh": "stq4",
+   "lat": 30.0444,
+   "lon": 31.2357,
+   "p": 4
+  },
+  {
+   "gh": "stq4y",
+   "lat": 30.0444,
+   "lon": 31.2357,
+   "p": 5
+  },
+  {
+   "gh": "s00",
+   "lat": 0,
+   "lon": 0,
+   "p": 3
+  },
+  {
+   "gh": "s000",
+   "lat": 0,
+   "lon": 0,
+   "p": 4
+  },
+  {
+   "gh": "s0000",
+   "lat": 0,
+   "lon": 0,
+   "p": 5
+  },
+  {
+   "gh": "k3v",
+   "lat": -33.9,
+   "lon": 18.4,
+   "p": 3
+  },
+  {
+   "gh": "k3vp",
+   "lat": -33.9,
+   "lon": 18.4,
+   "p": 4
+  },
+  {
+   "gh": "k3vp4",
+   "lat": -33.9,
+   "lon": 18.4,
+   "p": 5
+  },
+  {
+   "gh": "ud9",
+   "lat": 60.1,
+   "lon": 24.9,
+   "p": 3
+  },
+  {
+   "gh": "ud9t",
+   "lat": 60.1,
+   "lon": 24.9,
+   "p": 4
+  },
+  {
+   "gh": "ud9ty",
+   "lat": 60.1,
+   "lon": 24.9,
+   "p": 5
+  }
+ ],
+ "interp_ar_delete": [
+  1600,
+  1611,
+  1612,
+  1613,
+  1614,
+  1615,
+  1616,
+  1617,
+  1618,
+  1648
+ ],
+ "interp_street_prefixes": [
+  "ave",
+  "avenue",
+  "rd",
+  "road",
+  "st",
+  "street",
+  "حارة",
+  "حاره",
+  "زقاق",
+  "ش",
+  "شارع",
+  "طريق",
+  "ميدان"
+ ],
+ "is_category_query": [
+  {
+   "q": "metro",
+   "r": true
+  },
+  {
+   "q": "hospital",
+   "r": true
+  },
+  {
+   "q": "مستشفى",
+   "r": true
+  },
+  {
+   "q": "cafe",
+   "r": true
+  },
+  {
+   "q": "Starbucks",
+   "r": false
+  },
+  {
+   "q": "15 Tahrir",
+   "r": false
+  },
+  {
+   "q": "",
+   "r": false
+  }
+ ],
+ "layer_feature": {
+  "accounting": [
+   "office",
+   "accountant"
+  ],
+  "airport": [
+   "aeroway",
+   "aerodrome"
+  ],
+  "amusement_park": [
+   "leisure",
+   "amusement_arcade"
+  ],
+  "art_gallery": [
+   "tourism",
+   "gallery"
+  ],
+  "atm": [
+   "amenity",
+   "atm"
+  ],
+  "bakery": [
+   "shop",
+   "bakery"
+  ],
+  "bank": [
+   "amenity",
+   "bank"
+  ],
+  "bar": [
+   "amenity",
+   "bar"
+  ],
+  "beauty": [
+   "shop",
+   "beauty"
+  ],
+  "beauty_salon": [
+   "shop",
+   "beauty"
+  ],
+  "bicycle_store": [
+   "shop",
+   "bicycle"
+  ],
+  "book_store": [
+   "shop",
+   "books"
+  ],
+  "bus_station": [
+   "amenity",
+   "bus_station"
+  ],
+  "cafe": [
+   "amenity",
+   "cafe"
+  ],
+  "campground": [
+   "tourism",
+   "camp_site"
+  ],
+  "car": [
+   "shop",
+   "car"
+  ],
+  "car_dealer": [
+   "shop",
+   "car"
+  ],
+  "car_rental": [
+   "amenity",
+   "car_rental"
+  ],
+  "car_repair": [
+   "shop",
+   "car_repair"
+  ],
+  "car_wash": [
+   "amenity",
+   "car_wash"
+  ],
+  "church": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "city_hall": [
+   "amenity",
+   "townhall"
+  ],
+  "clothes": [
+   "shop",
+   "clothes"
+  ],
+  "clothing_store": [
+   "shop",
+   "clothes"
+  ],
+  "convenience_store": [
+   "shop",
+   "convenience"
+  ],
+  "courthouse": [
+   "amenity",
+   "courthouse"
+  ],
+  "dentist": [
+   "amenity",
+   "dentist"
+  ],
+  "department_store": [
+   "shop",
+   "department_store"
+  ],
+  "doctor": [
+   "amenity",
+   "doctors"
+  ],
+  "doctors": [
+   "amenity",
+   "doctors"
+  ],
+  "drugstore": [
+   "amenity",
+   "pharmacy"
+  ],
+  "electronics_store": [
+   "shop",
+   "electronics"
+  ],
+  "embassy": [
+   "amenity",
+   "embassy"
+  ],
+  "finance": [
+   "amenity",
+   "bank"
+  ],
+  "fire_station": [
+   "amenity",
+   "fire_station"
+  ],
+  "florist": [
+   "shop",
+   "florist"
+  ],
+  "food": [
+   "amenity",
+   "restaurant"
+  ],
+  "fuel": [
+   "amenity",
+   "fuel"
+  ],
+  "furniture_store": [
+   "shop",
+   "furniture"
+  ],
+  "gas_station": [
+   "amenity",
+   "fuel"
+  ],
+  "government": [
+   "office",
+   "government"
+  ],
+  "grocery_or_supermarket": [
+   "shop",
+   "supermarket"
+  ],
+  "gym": [
+   "leisure",
+   "fitness_centre"
+  ],
+  "hair_care": [
+   "shop",
+   "hairdresser"
+  ],
+  "hairdresser": [
+   "shop",
+   "hairdresser"
+  ],
+  "hardware_store": [
+   "shop",
+   "hardware"
+  ],
+  "health": [
+   "amenity",
+   "clinic"
+  ],
+  "hindu_temple": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "home_goods_store": [
+   "shop",
+   "houseware"
+  ],
+  "hospital": [
+   "amenity",
+   "hospital"
+  ],
+  "insurance_agency": [
+   "office",
+   "insurance"
+  ],
+  "jewelry_store": [
+   "shop",
+   "jewelry"
+  ],
+  "lawyer": [
+   "office",
+   "lawyer"
+  ],
+  "library": [
+   "amenity",
+   "library"
+  ],
+  "liquor_store": [
+   "shop",
+   "alcohol"
+  ],
+  "local_government_office": [
+   "office",
+   "government"
+  ],
+  "lodging": [
+   "tourism",
+   "hotel"
+  ],
+  "meal_delivery": [
+   "amenity",
+   "fast_food"
+  ],
+  "meal_takeaway": [
+   "amenity",
+   "fast_food"
+  ],
+  "mosque": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "movie_theater": [
+   "amenity",
+   "cinema"
+  ],
+  "museum": [
+   "tourism",
+   "museum"
+  ],
+  "night_club": [
+   "amenity",
+   "nightclub"
+  ],
+  "office": [
+   "office",
+   "yes"
+  ],
+  "park": [
+   "leisure",
+   "park"
+  ],
+  "parking": [
+   "amenity",
+   "parking"
+  ],
+  "pet_store": [
+   "shop",
+   "pet"
+  ],
+  "pharmacy": [
+   "amenity",
+   "pharmacy"
+  ],
+  "physiotherapist": [
+   "amenity",
+   "doctors"
+  ],
+  "place_of_worship": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "police": [
+   "amenity",
+   "police"
+  ],
+  "post_office": [
+   "amenity",
+   "post_office"
+  ],
+  "primary_school": [
+   "amenity",
+   "school"
+  ],
+  "real_estate_agency": [
+   "office",
+   "estate_agent"
+  ],
+  "restaurant": [
+   "amenity",
+   "restaurant"
+  ],
+  "school": [
+   "amenity",
+   "school"
+  ],
+  "secondary_school": [
+   "amenity",
+   "school"
+  ],
+  "shoe_store": [
+   "shop",
+   "shoes"
+  ],
+  "shopping_mall": [
+   "shop",
+   "mall"
+  ],
+  "spa": [
+   "leisure",
+   "spa"
+  ],
+  "stadium": [
+   "leisure",
+   "stadium"
+  ],
+  "store": [
+   "shop",
+   "yes"
+  ],
+  "subway_station": [
+   "railway",
+   "station"
+  ],
+  "supermarket": [
+   "shop",
+   "supermarket"
+  ],
+  "synagogue": [
+   "amenity",
+   "place_of_worship"
+  ],
+  "tourist_attraction": [
+   "tourism",
+   "attraction"
+  ],
+  "train_station": [
+   "railway",
+   "station"
+  ],
+  "transit_station": [
+   "public_transport",
+   "station"
+  ],
+  "travel_agency": [
+   "shop",
+   "travel_agency"
+  ],
+  "university": [
+   "amenity",
+   "university"
+  ],
+  "veterinary_care": [
+   "amenity",
+   "veterinary"
+  ],
+  "zoo": [
+   "tourism",
+   "zoo"
+  ]
+ },
+ "places_mapping": [
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "restaurant",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "restaurant",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "food",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "food",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "meal_takeaway",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "meal_takeaway",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "meal_delivery",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "meal_delivery",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "cafe",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "cafe",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "bar",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "bar",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "night_club",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "night_club",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "bakery",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "bakery",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "bank",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "bank",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "atm",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "atm",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "finance",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "finance",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "accounting",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "accounting",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "insurance_agency",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "insurance_agency",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "hospital",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "hospital",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "health",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "health",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "doctor",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "doctor",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "doctors",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "doctors",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "physiotherapist",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "physiotherapist",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "pharmacy",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "pharmacy",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "drugstore",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "drugstore",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "dentist",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "dentist",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "veterinary_care",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "veterinary_care",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "school",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "school",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "primary_school",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "primary_school",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "secondary_school",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "secondary_school",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "university",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "university",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "library",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "library",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "mosque",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "mosque",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "church",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "church",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "synagogue",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "synagogue",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "hindu_temple",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "hindu_temple",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "place_of_worship",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "place_of_worship",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "police",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "police",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "fire_station",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "fire_station",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "post_office",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "post_office",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "local_government_office",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "local_government_office",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "government",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "government",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "city_hall",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "city_hall",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "courthouse",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "courthouse",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "lat": 30.0,
+    "layer": "embassy",
+    "lon": 31.0,
+    "name": "X"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "embassy",
+    "lon": 31.0,
+    "name": "X",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "shop",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "food",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "health",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "education",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "religion",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "finance",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "accommodation",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "entertainment",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "nightlife",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "government",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "professional",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "transport",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "transportation",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "nature",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  },
+  {
+   "rec": {
+    "category": "historic",
+    "lat": 30.0,
+    "lon": 31.0,
+    "name": "Y"
+   },
+   "unified": {
+    "address": {
+     "city": "",
+     "country": "",
+     "country_code": "",
+     "district": "",
+     "full": "",
+     "postcode": "",
+     "state": "",
+     "state_code": "",
+     "street": "",
+     "suburb": ""
+    },
+    "categories": [],
+    "extra": {},
+    "lat": 30.0,
+    "layer": "",
+    "lon": 31.0,
+    "name": "Y",
+    "names": {},
+    "osm_id": "pg_None",
+    "phone": null,
+    "rating": null,
+    "source": "places_pg",
+    "source_id": ""
+   }
+  }
+ ]
+}

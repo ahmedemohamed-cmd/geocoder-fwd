@@ -23,6 +23,10 @@ import logging
 import re
 from dataclasses import dataclass
 
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("interpolation.json")
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,27 +78,9 @@ def _parity(n: int) -> str:
 # normalised form bridges the two so interpolation can actually find a street's
 # address points.  ``_norm_street`` (Python) and ``_STREET_NORM_SQL`` (Postgres)
 # must stay in lock-step — a parity unit test guards this.
-_AR_DELETE = {  # Arabic diacritics (tashkeel) + tatweel + superscript alef
-    *range(0x064B, 0x0653),
-    0x0640,
-    0x0670,
-}
+_AR_DELETE = set(_SPEC["_AR_DELETE"])
 _AR_MAP = {"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي"}  # spelling variants
-_STREET_PREFIXES = {
-    "شارع",
-    "ش",
-    "طريق",
-    "حارة",
-    "حاره",
-    "زقاق",
-    "ميدان",
-    "street",
-    "st",
-    "road",
-    "rd",
-    "avenue",
-    "ave",
-}
+_STREET_PREFIXES = set(_SPEC["_STREET_PREFIXES"])
 
 # SQL mirror of the diacritic-delete + alef-map step (translate maps the first
 # len(_AR_TO) chars and drops the rest, since the FROM string is longer).

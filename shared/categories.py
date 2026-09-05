@@ -25,203 +25,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from shared.spec import load as _load_spec
+
+_SPEC = _load_spec("categories.json")
+
 # First-match-wins precedence over the OSM tag keys that denote a feature's type.
 # Order matters: a bakery tagged both ``building=yes`` and ``shop=bakery`` must
 # classify as the shop, so specific POI keys come before generic ``building`` and
 # geographic keys. Kept identical to the list in shared/llm.py:_build_user_prompt.
-CATEGORY_KEYS = [
-    "amenity",
-    "shop",
-    "tourism",
-    "leisure",
-    "office",
-    "historic",
-    "building",
-    "place",
-    "natural",
-    "highway",
-    "railway",
-    "aeroway",
-    "waterway",
-    "landuse",
-]
+CATEGORY_KEYS = _SPEC["CATEGORY_KEYS"]
 
 # Coarse UI groups → {osm_key: [osm_value, ...]}. This is the authoritative
 # taxonomy: VALUES_BY_GROUP (for the /nearby/categories discovery endpoint) and
 # the (key, value) → group lookup are both derived from it below. Mirrors the
 # groupings in shared/places_mapping.py so curated Google/Pelias places (already
 # tagged amenity=restaurant etc.) land in the same buckets as native OSM data.
-GROUP_DEFS: dict[str, dict[str, list[str]]] = {
-    "food": {
-        "amenity": [
-            "restaurant",
-            "fast_food",
-            "cafe",
-            "bar",
-            "pub",
-            "nightclub",
-            "food_court",
-            "ice_cream",
-            "biergarten",
-        ],
-        "shop": [
-            "bakery",
-            "pastry",
-            "confectionery",
-            "deli",
-            "butcher",
-            "greengrocer",
-            "seafood",
-            "coffee",
-        ],
-    },
-    "finance": {
-        "amenity": ["bank", "atm", "bureau_de_change"],
-        "office": ["accountant", "insurance", "financial", "financial_advisor"],
-    },
-    "health": {
-        "amenity": [
-            "hospital",
-            "clinic",
-            "doctors",
-            "pharmacy",
-            "dentist",
-            "veterinary",
-            "nursing_home",
-        ],
-        "shop": ["optician", "medical_supply", "chemist", "hearing_aids"],
-    },
-    "education": {
-        "amenity": [
-            "school",
-            "university",
-            "college",
-            "kindergarten",
-            "library",
-            "language_school",
-            "driving_school",
-            "music_school",
-        ],
-    },
-    "worship": {
-        "amenity": ["place_of_worship"],
-    },
-    "government": {
-        "amenity": [
-            "police",
-            "fire_station",
-            "post_office",
-            "townhall",
-            "courthouse",
-            "embassy",
-            "prison",
-        ],
-        "office": ["government", "diplomatic"],
-    },
-    "automotive": {
-        "amenity": [
-            "fuel",
-            "parking",
-            "car_wash",
-            "car_rental",
-            "charging_station",
-            "car_sharing",
-        ],
-        "shop": ["car_repair", "car", "car_parts", "tyres", "motorcycle"],
-    },
-    "lodging_tourism": {
-        "tourism": [
-            "hotel",
-            "motel",
-            "guest_house",
-            "hostel",
-            "apartment",
-            "museum",
-            "attraction",
-            "zoo",
-            "gallery",
-            "camp_site",
-            "theme_park",
-            "viewpoint",
-            "artwork",
-            "information",
-            "aquarium",
-        ],
-        "historic": ["monument", "memorial", "castle", "ruins", "archaeological_site"],
-    },
-    "leisure": {
-        "leisure": [
-            "park",
-            "stadium",
-            "fitness_centre",
-            "spa",
-            "sports_centre",
-            "pitch",
-            "playground",
-            "garden",
-            "swimming_pool",
-            "golf_course",
-            "water_park",
-            "marina",
-            "dog_park",
-            "nature_reserve",
-        ],
-        "amenity": ["cinema", "theatre", "arts_centre", "community_centre", "amusement_arcade"],
-    },
-    "shopping": {
-        "shop": [
-            "mall",
-            "supermarket",
-            "convenience",
-            "department_store",
-            "houseware",
-            "furniture",
-            "hardware",
-            "electronics",
-            "clothes",
-            "shoes",
-            "jewelry",
-            "books",
-            "florist",
-            "bicycle",
-            "pet",
-            "alcohol",
-            "beauty",
-            "hairdresser",
-            "mobile_phone",
-            "gift",
-            "toys",
-            "sports",
-            "stationery",
-            "cosmetics",
-            "variety_store",
-            "general",
-            "kiosk",
-            "travel_agency",
-            "yes",
-        ],
-        "office": ["estate_agent", "lawyer"],
-    },
-    "transport": {
-        "aeroway": ["aerodrome", "terminal"],
-        "railway": ["station", "halt", "subway_entrance", "tram_stop"],
-        "amenity": ["bus_station", "taxi", "ferry_terminal", "bicycle_rental"],
-        "highway": ["bus_stop"],
-    },
-}
+GROUP_DEFS = _SPEC["GROUP_DEFS"]
 
 # Coarse key → group fallback for values not explicitly listed above, so an
 # uncommon shop/tourism/leisure value still lands in a sensible chip. Keys that
 # span several groups (amenity, office) are intentionally absent — they must
 # resolve through the precise (key, value) lookup or stay ungrouped.
-GROUP_BY_KEY: dict[str, str] = {
-    "shop": "shopping",
-    "tourism": "lodging_tourism",
-    "leisure": "leisure",
-    "historic": "lodging_tourism",
-    "aeroway": "transport",
-    "railway": "transport",
-}
+GROUP_BY_KEY = _SPEC["GROUP_BY_KEY"]
 
 # Non-POI markers: features tagged with these are geographic areas / admin
 # boundaries, never "places to explore". /nearby drops them via category_group.
@@ -311,21 +136,7 @@ def classify(tags: dict, admin_level: int | None = None) -> Category:
 # included here but are absent from CATEGORY_KEYS. Reading the raw tag dict lets
 # us see `station=subway` WITHOUT touching `classify()` — adding keys there would
 # silently change how /nearby buckets existing places.
-CATEGORY_TEXT_KEYS = (
-    "amenity",
-    "shop",
-    "tourism",
-    "leisure",
-    "office",
-    "historic",
-    "healthcare",
-    "emergency",
-    "cuisine",
-    "railway",
-    "station",
-    "public_transport",
-    "aeroway",
-)
+CATEGORY_TEXT_KEYS = tuple(_SPEC["CATEGORY_TEXT_KEYS"])
 
 # Values that carry no meaning on their own (`building=yes`).
 _JUNK_VALUES = frozenset({"yes", "no", "true", "false", "unknown", "none"})
@@ -341,102 +152,12 @@ _JUNK_VALUES = frozenset({"yes", "no", "true", "false", "unknown", "none"})
 #
 # Excluded from `category_text` (free-text type search) ONLY. They keep their
 # category_key/category_value, so /nearby can still filter for them deliberately.
-_SUBFEATURE_TAGS: dict[str, frozenset[str]] = {
-    "railway": frozenset(
-        {"subway_entrance", "platform", "elevator", "construction", "proposed", "disused"}
-    ),
-    "public_transport": frozenset({"stop_position", "platform"}),
-}
+_SUBFEATURE_TAGS = {k: frozenset(v) for k, v in _SPEC["_SUBFEATURE_TAGS"].items()}
 
 # "key=value" → extra search terms. The raw value is always emitted anyway
 # (`amenity=pharmacy` → "pharmacy"), so this map only needs to add *aliases* and
 # non-English vocabulary.
-CATEGORY_SYNONYMS: dict[str, list[str]] = {
-    # transit — the motivating case
-    "station=subway": [
-        "metro",
-        "subway",
-        "underground",
-        "metro station",
-        "مترو",
-        "محطة مترو",
-        "مترو الأنفاق",
-    ],
-    "railway=station": ["train station", "railway station", "محطة", "محطة قطار", "قطار", "gare"],
-    "railway=halt": ["train stop", "محطة"],
-    "railway=tram_stop": ["tram", "ترام", "محطة ترام"],
-    "public_transport=station": ["station", "محطة"],
-    "public_transport=stop_position": ["stop", "موقف"],
-    "amenity=bus_station": ["bus station", "bus", "أتوبيس", "موقف أتوبيس", "محطة أتوبيس"],
-    "highway=bus_stop": ["bus stop", "موقف أتوبيس"],
-    "aeroway=aerodrome": ["airport", "مطار", "aéroport"],
-    "aeroway=terminal": ["airport terminal", "صالة مطار", "مطار"],
-    # health
-    "amenity=hospital": ["hospital", "مستشفى", "مستشفي", "hôpital"],
-    "amenity=clinic": ["clinic", "عيادة", "clinique"],
-    "amenity=doctors": ["doctor", "طبيب", "عيادة"],
-    "amenity=pharmacy": ["pharmacy", "chemist", "صيدلية", "pharmacie"],
-    "amenity=dentist": ["dentist", "طبيب أسنان", "أسنان"],
-    "healthcare=laboratory": ["lab", "laboratory", "معمل", "مختبر", "تحاليل"],
-    # food & drink
-    "amenity=restaurant": ["restaurant", "مطعم", "أكل"],
-    "amenity=fast_food": ["fast food", "takeaway", "وجبات سريعة", "مطعم"],
-    "amenity=cafe": ["cafe", "coffee", "coffee shop", "مقهى", "كافيه", "قهوة"],
-    "amenity=bar": ["bar", "بار"],
-    "amenity=food_court": ["food court", "مطاعم"],
-    "shop=bakery": ["bakery", "مخبز", "فرن", "boulangerie"],
-    "shop=pastry": ["pastry", "حلواني", "حلويات"],
-    # shopping
-    "shop=supermarket": ["supermarket", "grocery", "سوبر ماركت", "بقالة", "supermarché"],
-    "shop=convenience": ["convenience store", "grocery", "بقالة", "ميني ماركت"],
-    "shop=mall": ["mall", "shopping mall", "مول", "مركز تجاري"],
-    "shop=clothes": ["clothes", "clothing", "ملابس"],
-    "shop=butcher": ["butcher", "جزارة", "لحوم"],
-    "shop=greengrocer": ["greengrocer", "خضار", "فاكهة"],
-    "shop=mobile_phone": ["mobile", "phone shop", "محمول", "موبايل"],
-    "shop=car_repair": ["car repair", "mechanic", "ورشة", "ميكانيكي"],
-    # money
-    "amenity=bank": ["bank", "بنك", "مصرف", "banque"],
-    "amenity=atm": ["atm", "cash machine", "صراف آلي", "ماكينة صراف"],
-    "amenity=bureau_de_change": ["exchange", "money exchange", "صرافة"],
-    # fuel & car
-    "amenity=fuel": ["fuel", "petrol", "gas station", "بنزين", "محطة بنزين", "وقود"],
-    "amenity=parking": ["parking", "car park", "موقف", "جراج", "parking"],
-    "amenity=car_wash": ["car wash", "غسيل سيارات"],
-    # education
-    "amenity=school": ["school", "مدرسة", "école"],
-    "amenity=kindergarten": ["kindergarten", "nursery", "حضانة", "روضة"],
-    "amenity=university": ["university", "جامعة", "université"],
-    "amenity=college": ["college", "institute", "معهد", "كلية"],
-    "amenity=library": ["library", "مكتبة"],
-    # worship
-    "amenity=place_of_worship": ["mosque", "masjid", "church", "مسجد", "جامع", "كنيسة", "زاوية"],
-    # public & civic
-    "amenity=police": ["police", "police station", "شرطة", "قسم شرطة", "بوليس"],
-    "amenity=fire_station": ["fire station", "مطافي", "الحماية المدنية"],
-    "amenity=post_office": ["post office", "بريد", "مكتب بريد"],
-    "amenity=townhall": ["town hall", "مجلس المدينة", "حي"],
-    "amenity=courthouse": ["court", "محكمة"],
-    "amenity=embassy": ["embassy", "سفارة", "ambassade"],
-    "office=government": ["government office", "مصلحة حكومية", "إدارة"],
-    "amenity=toilets": ["toilet", "wc", "حمام", "دورة مياه"],
-    # leisure / tourism
-    "leisure=park": ["park", "حديقة", "منتزه", "parc"],
-    "leisure=garden": ["garden", "حديقة"],
-    "leisure=stadium": ["stadium", "استاد", "ملعب"],
-    "leisure=fitness_centre": ["gym", "fitness", "جيم", "صالة رياضية"],
-    "leisure=sports_centre": ["sports centre", "نادي", "مركز رياضي"],
-    "leisure=pitch": ["pitch", "playground", "ملعب"],
-    "tourism=hotel": ["hotel", "فندق", "hôtel"],
-    "tourism=hostel": ["hostel", "نزل"],
-    "tourism=museum": ["museum", "متحف", "musée"],
-    "tourism=attraction": ["attraction", "معلم سياحي"],
-    "tourism=viewpoint": ["viewpoint", "مطل"],
-    "amenity=cinema": ["cinema", "movie theatre", "سينما"],
-    "amenity=theatre": ["theatre", "مسرح"],
-    "historic=monument": ["monument", "نصب تذكاري", "أثر"],
-    "historic=archaeological_site": ["archaeological site", "ruins", "آثار", "موقع أثري"],
-}
+CATEGORY_SYNONYMS = _SPEC["CATEGORY_SYNONYMS"]
 
 
 # Every word a user might type to mean "a place of this type", derived from the
