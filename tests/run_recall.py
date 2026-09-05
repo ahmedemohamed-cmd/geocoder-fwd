@@ -170,7 +170,8 @@ def probe_interpolation(case, effort="high"):
         if n <= 0:
             continue
         hits = [
-            r for r in geocode(f"{n} {street}, {city}", effort)
+            r
+            for r in geocode(f"{n} {street}, {city}", effort)
             if street_match(street, r.get("addr_street", ""))
         ]
         if any(r.get("match_type") == "interpolated" for r in hits):

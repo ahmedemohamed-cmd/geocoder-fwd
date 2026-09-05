@@ -463,9 +463,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
         try:
             await zitadel_admin.reset_user_mfa_by_email(email=body.email)
         except zitadel_admin.ZitadelError as e:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, f"MFA reset in IdP failed: {e}"
-            ) from e
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"MFA reset in IdP failed: {e}") from e
         return Response(status_code=204)
 
     @app.get("/admin/plans", response_model=list[PlanOut], tags=[router_tag_admin])
@@ -609,9 +607,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
                 plan = await repo.tenant_with_plan(pool, ident.tenant_id)
                 in_group = await apisix_admin.ensure_consumer_group(
                     ident.tenant_id,
-                    quota=await _projected_request_cap(
-                        pool, int(plan.get("monthly_quota") or 0)
-                    ),
+                    quota=await _projected_request_cap(pool, int(plan.get("monthly_quota") or 0)),
                     hard_cap=bool(plan.get("hard_cap")),
                     rps=int(plan.get("rps") or 0),
                 )
@@ -694,9 +690,7 @@ def build_app(pool=None, redis=None) -> FastAPI:
 
     # ── tenant: usage & reports ──────────────────────────────────────────────
     @app.get("/weights", response_model=list[WeightOut], tags=[router_tag_tenant])
-    async def public_weights(
-        _: Identity = Depends(current_identity), pool=Depends(get_pool)
-    ):
+    async def public_weights(_: Identity = Depends(current_identity), pool=Depends(get_pool)):
         """Read-only credit pricing per endpoint, so tenants can see how their
         requests map to billed credits (admin edits via /admin/weights)."""
         return await repo.list_weights(pool)

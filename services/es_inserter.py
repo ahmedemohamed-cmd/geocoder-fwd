@@ -283,7 +283,7 @@ async def set_bulk_mode(es: AsyncElasticsearch, enabled: bool):
             seg_count = stats["indices"][INDEX]["primaries"]["segments"]["count"]
             if seg_count > 10:
                 logger.info(
-                f"[es-inserter] {seg_count} segments detected, starting background force-merge to 1",
+                    f"[es-inserter] {seg_count} segments detected, starting background force-merge to 1",
                 )
                 # Read-heavy index: merge each shard to a single segment for the
                 # lowest per-query overhead. The >10 guard means this only runs

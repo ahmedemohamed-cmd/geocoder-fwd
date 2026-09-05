@@ -35,8 +35,7 @@ def compute_charge(
         line_items.append(
             {
                 "description": (
-                    f"Overage ({overage_credits} credits over "
-                    f"{monthly_quota_credits} included)"
+                    f"Overage ({overage_credits} credits over {monthly_quota_credits} included)"
                 ),
                 "quantity": overage_credits,
                 "unit_cents": float(overage_cents_per_credit),

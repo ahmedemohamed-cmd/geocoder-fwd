@@ -217,6 +217,7 @@ def free_endpoints_regex() -> str:
     alt = "|".join(re.escape(p) for p in sorted(FREE_ENDPOINTS))
     return rf"^({alt})/?$"
 
+
 # Encryption-at-rest for API keys (Fernet). The gateway (APISIX) needs the key
 # material to authenticate requests, so we keep a reversible encrypted copy to
 # re-push on re-enable; the DB still never stores plaintext.

@@ -32,9 +32,7 @@ async def reproject_quotas_for_new_period(pool) -> bool:
                 await apisix_admin.ensure_consumer_group(
                     str(spec["tenant_id"]),
                     # credit quota → raw-request backstop (APISIX counts requests)
-                    quota=weights.projected_request_cap(
-                        w, int(spec.get("monthly_quota") or 0)
-                    ),
+                    quota=weights.projected_request_cap(w, int(spec.get("monthly_quota") or 0)),
                     hard_cap=bool(spec.get("hard_cap")),
                     rps=int(spec.get("rps") or 0),
                     period=period,

@@ -146,9 +146,7 @@ async def push_event(
 ) -> None:
     await redis.rpush(
         config.USAGE_EVENTS_LIST,
-        json.dumps(
-            {"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day, "m": milli}
-        ),
+        json.dumps({"t": tenant_id, "k": key_id, "e": endpoint, "p": period, "d": day, "m": milli}),
     )
 
 

@@ -35,7 +35,9 @@ async def test_weight_crud(cp_client):
     atok = await admin_token(cp_client)
     h = bearer(atok)
 
-    created = await cp_client.put("/admin/weights/describe", headers=h, json={"milli_credits": 2000})
+    created = await cp_client.put(
+        "/admin/weights/describe", headers=h, json={"milli_credits": 2000}
+    )
     assert created.status_code == 200 and created.json()["endpoint"] == "describe"
 
     updated = await cp_client.put("/admin/weights/describe", headers=h, json={"milli_credits": 750})
@@ -137,7 +139,9 @@ def test_projected_request_cap():
 def test_matrix_size_parsing():
     body = b'{"sources": [{}, {}, {}], "targets": [{}, {}]}'
     assert weights.matrix_size(None, body) == (3, 2)
-    assert weights.matrix_size("json=%7B%22sources%22%3A%5B%7B%7D%5D%2C%22targets%22%3A%5B%7B%7D%2C%7B%7D%5D%7D", None) == (1, 2)
+    assert weights.matrix_size(
+        "json=%7B%22sources%22%3A%5B%7B%7D%5D%2C%22targets%22%3A%5B%7B%7D%2C%7B%7D%5D%7D", None
+    ) == (1, 2)
     # body wins over the query param when both are present
     assert weights.matrix_size("json=%7B%7D", body) == (3, 2)
     # unparseable / missing → (0, 0) → flat floor
@@ -177,8 +181,9 @@ async def test_sink_bills_matrix_per_element(cp_client, pool, redis):
 # ── one-time migration idempotency ────────────────────────────────────────────
 async def test_credit_units_migration_runs_once(cp_client, pool):
     # bootstrap already ran in the fixture; the migration must be recorded once
-    n = await pool.fetchval("SELECT count(*) FROM schema_migrations WHERE id=$1",
-                            "2026-07-credit-units")
+    n = await pool.fetchval(
+        "SELECT count(*) FROM schema_migrations WHERE id=$1", "2026-07-credit-units"
+    )
     assert n == 1
     # rollups written after the migration must never be re-multiplied by a re-run
     _, ttok = await make_tenant(cp_client, admin_email="mig@u.io", plan_id="starter")

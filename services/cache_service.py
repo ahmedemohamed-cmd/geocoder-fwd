@@ -34,7 +34,9 @@ _KEY_VERSION = "v1"
 class ResultCache:
     """Cache-aside wrapper around an aioredis client (``decode_responses=True``)."""
 
-    def __init__(self, redis, *, enabled: bool, ttl: int, coord_precision: int, prefix: str = "cache"):
+    def __init__(
+        self, redis, *, enabled: bool, ttl: int, coord_precision: int, prefix: str = "cache"
+    ):
         self._redis = redis
         # enabled only when explicitly on AND a client is actually present
         self.enabled = bool(enabled) and redis is not None

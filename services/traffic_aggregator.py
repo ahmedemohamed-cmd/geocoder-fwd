@@ -419,9 +419,7 @@ async def run():
             _log(f"No external provider active (TRAFFIC_PROVIDER={TRAFFIC_PROVIDER}).")
         else:
             tasks.append(_cell_scheduler(r))
-            tasks.extend(
-                _cell_worker(r, client, i) for i in range(max(1, TRAFFIC_CELL_WORKERS))
-            )
+            tasks.extend(_cell_worker(r, client, i) for i in range(max(1, TRAFFIC_CELL_WORKERS)))
         await asyncio.gather(*tasks)
 
 

@@ -97,8 +97,9 @@ def main() -> None:
         # X-Forwarded-Proto on this hop), which would not match the https issuer
         # Zitadel mints for browser-facing tokens. Prefer the explicit public
         # issuer when provided; fall back to discovery for local/dev.
-        issuer = os.getenv("ZITADEL_ISSUER") or (
-            c.get(f"{API}/.well-known/openid-configuration").json()["issuer"]
+        issuer = (
+            os.getenv("ZITADEL_ISSUER")
+            or (c.get(f"{API}/.well-known/openid-configuration").json()["issuer"])
         )
 
         # 0) Zitadel v4 defaults to "Login UI v2", which is a separate service we
@@ -203,9 +204,17 @@ def _ensure_spa(c, project_id) -> str:
     ).json()
     app_id = apps["result"][0]["id"]
     update_fields = (
-        "redirectUris", "responseTypes", "grantTypes", "appType", "authMethodType",
-        "postLogoutRedirectUris", "devMode", "accessTokenType",
-        "accessTokenRoleAssertion", "idTokenRoleAssertion", "idTokenUserinfoAssertion",
+        "redirectUris",
+        "responseTypes",
+        "grantTypes",
+        "appType",
+        "authMethodType",
+        "postLogoutRedirectUris",
+        "devMode",
+        "accessTokenType",
+        "accessTokenRoleAssertion",
+        "idTokenRoleAssertion",
+        "idTokenUserinfoAssertion",
     )
     upd = c.put(
         f"{API}/management/v1/projects/{project_id}/apps/{app_id}/oidc_config",

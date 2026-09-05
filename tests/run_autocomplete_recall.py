@@ -123,9 +123,7 @@ CATEGORY_QUERIES = [
 
 def autocomplete(q, limit=LIMIT, origin=CAIRO):
     """Query the live endpoint. Returns (results, source, elapsed_ms)."""
-    qs = urllib.parse.urlencode(
-        {"q": q, "lat": origin[0], "lon": origin[1], "limit": limit}
-    )
+    qs = urllib.parse.urlencode({"q": q, "lat": origin[0], "lon": origin[1], "limit": limit})
     url = f"{BASE}/autocomplete?{qs}"
     t0 = time.perf_counter()
     try:
@@ -202,10 +200,7 @@ def eval_case(case):
         for i, r in enumerate(results):
             rn = {norm(r.get("name_en")), norm(r.get("name"))} - {""}
             c = r.get("centroid") or {}
-            near = (
-                c.get("lat") is not None
-                and haversine(exp_c, (c["lat"], c["lon"])) <= NEAR_M
-            )
+            near = c.get("lat") is not None and haversine(exp_c, (c["lat"], c["lon"])) <= NEAR_M
             if (exp_names & rn) or near:
                 lenient = i + 1
                 break
@@ -220,9 +215,7 @@ def eval_case(case):
                 "strict_rank": strict,
                 "lenient_rank": lenient,
                 "ms": ms,
-                "top": (results[0].get("name_en") or results[0].get("name"))
-                if results
-                else None,
+                "top": (results[0].get("name_en") or results[0].get("name")) if results else None,
                 "n_results": len(results),
             }
         )
@@ -266,7 +259,10 @@ def main():
         cases = json.load(f)
     named = [c for c in cases if c.get("kind") == "named"]
     print(f"Autocomplete recall vs {BASE}", file=sys.stderr)
-    print(f"{len(named)} named cases -> keystroke prefixes {PREFIX_LENS} + first word\n", file=sys.stderr)
+    print(
+        f"{len(named)} named cases -> keystroke prefixes {PREFIX_LENS} + first word\n",
+        file=sys.stderr,
+    )
 
     with ThreadPoolExecutor(WORKERS) as ex:
         nested = list(ex.map(eval_case, named))
@@ -294,14 +290,19 @@ def main():
     L = []
     L.append("# Autocomplete recall report\n")
     L.append(f"- Base: `{BASE}`")
-    L.append(f"- Named cases: **{len(named)}** → **{total}** prefix probes "
-             f"(lengths {PREFIX_LENS} + first word)")
+    L.append(
+        f"- Named cases: **{len(named)}** → **{total}** prefix probes "
+        f"(lengths {PREFIX_LENS} + first word)"
+    )
     L.append(f"- Geo-bias: downtown Cairo {CAIRO}, limit {LIMIT}, lenient radius {NEAR_M} m\n")
 
     L.append("## Named — overall\n")
     L.append("| metric | @1 | @5 | @10 |")
     L.append("|---|---|---|---|")
-    for label, field in [("strict (osm_id)", "strict_rank"), ("lenient (name or ≤150 m)", "lenient_rank")]:
+    for label, field in [
+        ("strict (osm_id)", "strict_rank"),
+        ("lenient (name or ≤150 m)", "lenient_rank"),
+    ]:
         L.append(
             f"| {label} | {pct(at(rows, field, 1), total):.1f}% "
             f"| {pct(at(rows, field, 5), total):.1f}% "
@@ -349,8 +350,10 @@ def main():
     # away by the types that happen to work.
     bad = [c for c in cat_rows if c["n_forbidden"]]
     L.append("## Sub-feature check (hard fail)\n")
-    L.append("Station doorways / platforms are parts of a place, not places. None may "
-             "appear in a type-search result.\n")
+    L.append(
+        "Station doorways / platforms are parts of a place, not places. None may "
+        "appear in a type-search result.\n"
+    )
     if bad:
         L.append(f"**FAIL — {sum(c['n_forbidden'] for c in bad)} sub-feature hit(s):**\n")
         L.append("| city | query | offending results |")
@@ -367,21 +370,25 @@ def main():
         L.append("**PASS — no station entrances / platforms in any category result.**\n")
 
     L.append("## Category queries\n")
-    L.append("A type query should return places *of that type*, probed from two cities — "
-             "a single origin cannot reveal locale-specific failures. `hit rate` = share "
-             "of top-5 whose ES category matches. `metro` accepts station *or* "
-             "supermarket: the word means the subway in Cairo and a grocery chain in "
-             "Canada, and the endpoint blends both.\n")
+    L.append(
+        "A type query should return places *of that type*, probed from two cities — "
+        "a single origin cannot reveal locale-specific failures. `hit rate` = share "
+        "of top-5 whose ES category matches. `metro` accepts station *or* "
+        "supermarket: the word means the subway in Cairo and a grocery chain in "
+        "Canada, and the endpoint blends both.\n"
+    )
     L.append("| city | query | source | hit rate | top-5 (category) |")
     L.append("|---|---|---|---|---|")
     for c in cat_rows:
-        top = ", ".join(
-            f"{t['name']}" + (f" *({t['category']})*" if t["category"] else "")
-            for t in c["top5"][:3]
-        ) or "—"
+        top = (
+            ", ".join(
+                f"{t['name']}" + (f" *({t['category']})*" if t["category"] else "")
+                for t in c["top5"][:3]
+            )
+            or "—"
+        )
         L.append(
-            f"| {c['city']} | `{c['query']}` | {c['source']} "
-            f"| {c['hit_rate'] * 100:.0f}% | {top} |"
+            f"| {c['city']} | `{c['query']}` | {c['source']} | {c['hit_rate'] * 100:.0f}% | {top} |"
         )
     L.append("")
     for city in CATEGORY_ORIGINS:

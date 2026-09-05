@@ -533,7 +533,7 @@ async def query(
     geo_ids: set[str] = set()
     candidates: dict[str, dict[str, Any]] = {}
 
-    for key, raw_entries in zip(keys, buckets):
+    for key, raw_entries in zip(keys, buckets, strict=True):
         is_geo = key.startswith("ac:g:")
         for raw in raw_entries:
             try:

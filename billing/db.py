@@ -170,9 +170,7 @@ async def _run_once(conn, mig_id: str, fn) -> None:
     schema_migrations insert claims the id under an advisory lock, and the
     body runs in the same transaction only when the claim succeeds."""
     async with conn.transaction():
-        await conn.execute(
-            "SELECT pg_advisory_xact_lock(hashtext('billing_schema_migrations'))"
-        )
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext('billing_schema_migrations'))")
         claimed = await conn.fetchval(
             "INSERT INTO schema_migrations (id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id",
             mig_id,

@@ -81,8 +81,19 @@ _AR_DELETE = {  # Arabic diacritics (tashkeel) + tatweel + superscript alef
 }
 _AR_MAP = {"أ": "ا", "إ": "ا", "آ": "ا", "ة": "ه", "ى": "ي"}  # spelling variants
 _STREET_PREFIXES = {
-    "شارع", "ش", "طريق", "حارة", "حاره", "زقاق", "ميدان",
-    "street", "st", "road", "rd", "avenue", "ave",
+    "شارع",
+    "ش",
+    "طريق",
+    "حارة",
+    "حاره",
+    "زقاق",
+    "ميدان",
+    "street",
+    "st",
+    "road",
+    "rd",
+    "avenue",
+    "ave",
 }
 
 # SQL mirror of the diacritic-delete + alef-map step (translate maps the first

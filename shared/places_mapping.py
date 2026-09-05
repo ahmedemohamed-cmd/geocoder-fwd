@@ -300,9 +300,7 @@ def _pelias_name(src: dict) -> tuple[str, dict[str, str]]:
     junk = {"", layer} | cats | addr_vals
 
     lang_names = {
-        k: v.strip()
-        for k, v in name.items()
-        if k != "default" and isinstance(v, str) and v.strip()
+        k: v.strip() for k, v in name.items() if k != "default" and isinstance(v, str) and v.strip()
     }
 
     default = name.get("default")

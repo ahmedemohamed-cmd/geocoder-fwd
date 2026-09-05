@@ -17,7 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install ruff
+      # Install from pyproject so the linter version is pinned in exactly one
+      # place (the `dev` extra) and CI can't drift ahead of local checkouts.
+      - run: pip install -e ".[dev]"
       - name: ruff check
         run: ruff check .
       - name: ruff format --check

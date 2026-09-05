@@ -458,9 +458,27 @@ _ORDINAL_RE = re.compile(r"^\d+(?:st|nd|rd|th)$", re.IGNORECASE)
 # and "District 5" is a genuinely different place from "Fifth District", so
 # conflating them would corrupt recall.
 _ORDINAL_WORDS = (
-    "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
-    "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
-    "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth",
+    "zeroth",
+    "first",
+    "second",
+    "third",
+    "fourth",
+    "fifth",
+    "sixth",
+    "seventh",
+    "eighth",
+    "ninth",
+    "tenth",
+    "eleventh",
+    "twelfth",
+    "thirteenth",
+    "fourteenth",
+    "fifteenth",
+    "sixteenth",
+    "seventeenth",
+    "eighteenth",
+    "nineteenth",
+    "twentieth",
 )
 _ORD_WORD_TO_NUM = {w: i for i, w in enumerate(_ORDINAL_WORDS)}
 _ORD_DIGIT_RE = re.compile(r"^(\d+)(?:st|nd|rd|th)$", re.IGNORECASE)

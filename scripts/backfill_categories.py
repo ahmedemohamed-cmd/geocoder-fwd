@@ -204,7 +204,9 @@ def main() -> None:
         ),
     )
     args = ap.parse_args()
-    only = [v.strip() for v in args.only_values.split(",") if v.strip()] if args.only_values else None
+    only = (
+        [v.strip() for v in args.only_values.split(",") if v.strip()] if args.only_values else None
+    )
     asyncio.run(backfill(args.batch_size, args.sleep, args.all, only))
 
 

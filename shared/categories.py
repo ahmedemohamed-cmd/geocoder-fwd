@@ -353,7 +353,15 @@ _SUBFEATURE_TAGS: dict[str, frozenset[str]] = {
 # non-English vocabulary.
 CATEGORY_SYNONYMS: dict[str, list[str]] = {
     # transit — the motivating case
-    "station=subway": ["metro", "subway", "underground", "metro station", "مترو", "محطة مترو", "مترو الأنفاق"],
+    "station=subway": [
+        "metro",
+        "subway",
+        "underground",
+        "metro station",
+        "مترو",
+        "محطة مترو",
+        "مترو الأنفاق",
+    ],
     "railway=station": ["train station", "railway station", "محطة", "محطة قطار", "قطار", "gare"],
     "railway=halt": ["train stop", "محطة"],
     "railway=tram_stop": ["tram", "ترام", "محطة ترام"],
@@ -437,12 +445,8 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
 # Redis prefix index holds names only, so left to itself it answers "metro" with
 # the Metro supermarket chain and never surfaces a single station.
 CATEGORY_QUERY_TERMS: frozenset[str] = frozenset(
-    term.lower()
-    for terms in CATEGORY_SYNONYMS.values()
-    for term in terms
-) | frozenset(
-    key.split("=", 1)[1].replace("_", " ").lower() for key in CATEGORY_SYNONYMS
-)
+    term.lower() for terms in CATEGORY_SYNONYMS.values() for term in terms
+) | frozenset(key.split("=", 1)[1].replace("_", " ").lower() for key in CATEGORY_SYNONYMS)
 
 
 def category_text(tags: dict) -> str:

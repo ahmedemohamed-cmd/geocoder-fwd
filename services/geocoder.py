@@ -97,7 +97,13 @@ from shared.address import (
     parse_address_query,
 )
 from shared.autocomplete import (
+    POPULARITY_CAP as _POPULARITY_CAP,
+)
+from shared.autocomplete import (
     index_entry as ac_index_entry,
+)
+from shared.autocomplete import (
+    is_category_query as ac_is_category_query,
 )
 from shared.autocomplete import (
     query as ac_query,
@@ -107,12 +113,6 @@ from shared.autocomplete import (
 )
 from shared.autocomplete import (
     warm_from_es as ac_warm_from_es,
-)
-from shared.autocomplete import (
-    POPULARITY_CAP as _POPULARITY_CAP,
-)
-from shared.autocomplete import (
-    is_category_query as ac_is_category_query,
 )
 from shared.categories import classify
 from shared.config import (
@@ -1309,9 +1309,7 @@ async def autocomplete(
     # and never surface a station. Only ES sees `category_text`.
     if redis_pool is not None and _AC_REDIS_FAST_PATH and not is_category:
         try:
-            redis_hits, confident = await ac_query(
-                redis_pool, q, limit=limit, lat=lat, lon=lon
-            )
+            redis_hits, confident = await ac_query(redis_pool, q, limit=limit, lat=lat, lon=lon)
             if confident:
                 request.state.result_count = len(redis_hits)
                 return {"source": "redis", "results": redis_hits}
@@ -1380,8 +1378,29 @@ async def autocomplete(
     # query: someone who types the *name* "Black Bank" should still find it.
     if is_category:
         name_query["bool"]["must_not"] = [
-            {"terms": {"category_key": ["place", "boundary", "landuse", "highway", "natural", "waterway"]}},
-            {"terms": {"category_value": ["subway_entrance", "platform", "stop", "stop_position", "elevator"]}},
+            {
+                "terms": {
+                    "category_key": [
+                        "place",
+                        "boundary",
+                        "landuse",
+                        "highway",
+                        "natural",
+                        "waterway",
+                    ]
+                }
+            },
+            {
+                "terms": {
+                    "category_value": [
+                        "subway_entrance",
+                        "platform",
+                        "stop",
+                        "stop_position",
+                        "elevator",
+                    ]
+                }
+            },
         ]
 
     # Matches the place's TYPE ("metro", "مستشفى", "pharmacy").
@@ -1515,9 +1534,7 @@ async def autocomplete(
             searches=[{}, _body(name_query), {}, _body(type_query)],
         )
         name_hits, type_hits = (r["hits"]["hits"] for r in m_resp["responses"])
-        max_score = max(
-            (r["hits"].get("max_score") or 0) for r in m_resp["responses"]
-        )
+        max_score = max((r["hits"].get("max_score") or 0) for r in m_resp["responses"])
 
         # Interleave, starting with the name list (the literal reading of what was
         # typed). Dedupe by osm_id — a place can be in both lists (Vaughan

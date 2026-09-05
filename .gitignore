@@ -70,3 +70,11 @@ data/
 
 # Zitadel service-account PAT (local)
 billing/.zitadel-machinekey/
+
+# BMAD (spec-driven development framework)
+# Team config (_bmad/config.toml, _bmad/custom/config.toml) IS committed so every
+# contributor gets the same agents. These hold per-developer install answers.
+_bmad/config.user.toml
+
+# Claude Code local settings (personal permissions, not team state)
+.claude/settings.local.json
