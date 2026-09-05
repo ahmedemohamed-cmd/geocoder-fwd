@@ -164,12 +164,16 @@ from shared.interpolation import (
 from shared.llm import generate_description, is_ollama_available, warm_up_model
 from shared.nats_client import TRAFFIC_STREAM_CFG, ensure_stream
 from shared.redis_client import make_redis_async
+from shared.spec import load as _load_spec
+
+# Elasticsearch query tuning — see spec/search.toml and shared/spec.py.
+_SEARCH = _load_spec("search.toml")
 
 INDEX = "osm_places"
 
 # Optimized-effort tuning. The rescore window bounds how many top hits the
 # (expensive) function_score is applied to.
-_RESCORE_WINDOW = 200
+_RESCORE_WINDOW = _SEARCH["geocode"]["rescore_window"]
 
 
 # Confidence scoring + street-token matching moved to services/geocoder_helpers.py
@@ -875,7 +879,7 @@ async def geocode(
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 1.5,
+            "weight": _SEARCH["geocode"]["offline_rank_weight"],
         }
     )
 
@@ -886,12 +890,12 @@ async def geocode(
                 "gauss": {
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
-                        "scale": "10km",
-                        "offset": "1km",
-                        "decay": 0.5,
+                        "scale": _SEARCH["geocode"]["geo"]["scale"],
+                        "offset": _SEARCH["geocode"]["geo"]["offset"],
+                        "decay": _SEARCH["geocode"]["geo"]["decay"],
                     }
                 },
-                "weight": 2,
+                "weight": _SEARCH["geocode"]["geo"]["weight"],
             }
         )
 
@@ -953,7 +957,7 @@ async def geocode(
                     "type": "cross_fields",
                     "operator": "or",
                     "minimum_should_match": "75%",
-                    "boost": 4,
+                    "boost": _SEARCH["geocode"]["text"]["cross_fields_boost"],
                 }
             }
         )
@@ -961,7 +965,15 @@ async def geocode(
         # Layer 2: Phrase match on full_address — rewards documents where the
         # query appears as a contiguous phrase in the stored address string
         should_clauses.append(
-            {"match_phrase": {"full_address": {"query": q_norm, "boost": 6, "slop": 2}}}
+            {
+                "match_phrase": {
+                    "full_address": {
+                        "query": q_norm,
+                        "boost": _SEARCH["geocode"]["text"]["full_address_phrase_boost"],
+                        "slop": _SEARCH["geocode"]["text"]["full_address_phrase_slop"],
+                    }
+                }
+            }
         )
 
         # Layer 3: Component-specific targeted matching from the decomposition.
@@ -970,20 +982,51 @@ async def geocode(
             street = parsed_addr["street"]
             # Phrase match: "شارع التحرير" or "Main Street" as ordered tokens
             should_clauses.append(
-                {"match_phrase": {"addr_street": {"query": street, "boost": 10, "slop": 1}}}
+                {
+                    "match_phrase": {
+                        "addr_street": {
+                            "query": street,
+                            "boost": _SEARCH["geocode"]["address"]["street_phrase_boost"],
+                            "slop": 1,
+                        }
+                    }
+                }
             )
             # Fuzzy token match: tolerates typos in street name
             should_clauses.append(
-                {"match": {"addr_street": {"query": street, "fuzziness": "AUTO", "boost": 5}}}
+                {
+                    "match": {
+                        "addr_street": {
+                            "query": street,
+                            "fuzziness": "AUTO",
+                            "boost": _SEARCH["geocode"]["address"]["street_fuzzy_boost"],
+                        }
+                    }
+                }
             )
             # Autocomplete: prefix matching for partial street names
             should_clauses.append(
-                {"match": {"addr_street.autocomplete": {"query": street, "boost": 3}}}
+                {
+                    "match": {
+                        "addr_street.autocomplete": {
+                            "query": street,
+                            "boost": _SEARCH["geocode"]["address"]["street_autocomplete_boost"],
+                        }
+                    }
+                }
             )
             # Also match street name against the place name field (many streets
             # are indexed as named ways/linestrings with the street in "name")
             should_clauses.append(
-                {"match_phrase": {"name": {"query": street, "boost": 4, "slop": 1}}}
+                {
+                    "match_phrase": {
+                        "name": {
+                            "query": street,
+                            "boost": _SEARCH["geocode"]["address"]["name_phrase_boost"],
+                            "slop": 1,
+                        }
+                    }
+                }
             )
 
         if parsed_addr.get("housenumber"):
@@ -1005,44 +1048,112 @@ async def geocode(
                                     }
                                 },
                             ],
-                            "boost": 50,
+                            "boost": _SEARCH["geocode"]["address"][
+                                "exact_housenumber_street_boost"
+                            ],
                         }
                     }
                 )
             else:
                 # No street context: a bare housenumber term match is all we have.
-                should_clauses.append({"term": {"addr_housenumber": {"value": hn, "boost": 15}}})
+                should_clauses.append(
+                    {
+                        "term": {
+                            "addr_housenumber": {
+                                "value": hn,
+                                "boost": _SEARCH["geocode"]["address"]["housenumber_boost"],
+                            }
+                        }
+                    }
+                )
 
         if parsed_addr.get("city"):
             city_val = parsed_addr["city"]
             # City match boosts results in the right locality
-            should_clauses.append({"match": {"addr_city": {"query": city_val, "boost": 3}}})
             should_clauses.append(
-                {"match": {"addr_city.autocomplete": {"query": city_val, "boost": 1.5}}}
+                {
+                    "match": {
+                        "addr_city": {
+                            "query": city_val,
+                            "boost": _SEARCH["geocode"]["address"]["city_boost"],
+                        }
+                    }
+                }
+            )
+            should_clauses.append(
+                {
+                    "match": {
+                        "addr_city.autocomplete": {
+                            "query": city_val,
+                            "boost": _SEARCH["geocode"]["address"]["city_autocomplete_boost"],
+                        }
+                    }
+                }
             )
             # Also check name field — cities themselves are named places
-            should_clauses.append({"match": {"name": {"query": city_val, "boost": 2}}})
+            should_clauses.append(
+                {
+                    "match": {
+                        "name": {
+                            "query": city_val,
+                            "boost": _SEARCH["geocode"]["address"]["city_name_boost"],
+                        }
+                    }
+                }
+            )
 
         if parsed_addr.get("suburb"):
             suburb_val = parsed_addr["suburb"]
-            should_clauses.append({"match": {"addr_suburb": {"query": suburb_val, "boost": 2}}})
+            should_clauses.append(
+                {
+                    "match": {
+                        "addr_suburb": {
+                            "query": suburb_val,
+                            "boost": _SEARCH["geocode"]["address"]["suburb_boost"],
+                        }
+                    }
+                }
+            )
             should_clauses.append(
                 {"match": {"addr_suburb.autocomplete": {"query": suburb_val, "boost": 1}}}
             )
 
         if parsed_addr.get("postcode"):
             should_clauses.append(
-                {"term": {"addr_postcode": {"value": parsed_addr["postcode"], "boost": 6}}}
+                {
+                    "term": {
+                        "addr_postcode": {
+                            "value": parsed_addr["postcode"],
+                            "boost": _SEARCH["geocode"]["address"]["postcode_boost"],
+                        }
+                    }
+                }
             )
 
         if parsed_addr.get("country"):
             should_clauses.append(
-                {"term": {"addr_country": {"value": parsed_addr["country"], "boost": 4}}}
+                {
+                    "term": {
+                        "addr_country": {
+                            "value": parsed_addr["country"],
+                            "boost": _SEARCH["geocode"]["address"]["country_boost"],
+                        }
+                    }
+                }
             )
 
         # Layer 4: Boost documents that have address data (they're more likely
         # to be what the user wants when searching for an address)
-        should_clauses.append({"term": {"has_address": {"value": True, "boost": 2}}})
+        should_clauses.append(
+            {
+                "term": {
+                    "has_address": {
+                        "value": True,
+                        "boost": _SEARCH["geocode"]["text"]["has_address_boost"],
+                    }
+                }
+            }
+        )
 
     text_query: dict = {
         "bool": {
@@ -1077,7 +1188,7 @@ async def geocode(
                         "params": {"requested_hn": requested_hn},
                     }
                 },
-                "weight": 5,
+                "weight": _SEARCH["geocode"]["housenumber_proximity_weight"],
             }
             if parsed_addr.get("street"):
                 proximity_fn["filter"] = {
@@ -1123,8 +1234,8 @@ async def geocode(
         body["knn"] = {
             "field": "name_vector",
             "query_vector": vec,
-            "k": limit * 2,
-            "num_candidates": 300,
+            "k": limit * _SEARCH["geocode"]["vector"]["k_multiplier"],
+            "num_candidates": _SEARCH["geocode"]["vector"]["num_candidates"],
         }
 
     resp = await es.search(index=INDEX, **body)
@@ -1427,7 +1538,7 @@ async def autocomplete(
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 2,
+            "weight": _SEARCH["autocomplete"]["offline_rank_weight"],
         },
         {
             "field_value_factor": {
@@ -1436,7 +1547,7 @@ async def autocomplete(
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 1.5,
+            "weight": _SEARCH["autocomplete"]["popularity_weight"],
         },
     ]
 
@@ -1468,12 +1579,12 @@ async def autocomplete(
                 "gauss": {
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
-                        "scale": "300km",
-                        "offset": "50km",
-                        "decay": 0.5,
+                        "scale": _SEARCH["autocomplete"]["regional"]["scale"],
+                        "offset": _SEARCH["autocomplete"]["regional"]["offset"],
+                        "decay": _SEARCH["autocomplete"]["regional"]["decay"],
                     }
                 },
-                "weight": 25,
+                "weight": _SEARCH["autocomplete"]["regional"]["weight"],
             }
         )
         functions.append(
@@ -1481,12 +1592,12 @@ async def autocomplete(
                 "gauss": {
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
-                        "scale": "15km",
-                        "offset": "2km",
-                        "decay": 0.5,
+                        "scale": _SEARCH["autocomplete"]["local"]["scale"],
+                        "offset": _SEARCH["autocomplete"]["local"]["offset"],
+                        "decay": _SEARCH["autocomplete"]["local"]["decay"],
                     }
                 },
-                "weight": 3,
+                "weight": _SEARCH["autocomplete"]["local"]["weight"],
             }
         )
 
@@ -1720,14 +1831,30 @@ async def address_search(
 
     # 2. Phrase match on full_address for exact ordering boost
     should_clauses.append(
-        {"match_phrase": {"full_address": {"query": q_norm, "boost": 8, "slop": 1}}}
+        {
+            "match_phrase": {
+                "full_address": {
+                    "query": q_norm,
+                    "boost": _SEARCH["address"]["text"]["full_address_phrase_boost"],
+                    "slop": 1,
+                }
+            }
+        }
     )
 
     # 3. Parsed component-specific boosts (higher precision)
     if parsed.get("street"):
         # Exact phrase match on street
         should_clauses.append(
-            {"match_phrase": {"addr_street": {"query": parsed["street"], "boost": 10, "slop": 1}}}
+            {
+                "match_phrase": {
+                    "addr_street": {
+                        "query": parsed["street"],
+                        "boost": _SEARCH["address"]["address"]["street_phrase_boost"],
+                        "slop": 1,
+                    }
+                }
+            }
         )
         # Fuzzy token match on street
         should_clauses.append(
@@ -1736,7 +1863,7 @@ async def address_search(
                     "addr_street": {
                         "query": parsed["street"],
                         "fuzziness": "AUTO",
-                        "boost": 4,
+                        "boost": _SEARCH["address"]["address"]["street_fuzzy_boost"],
                     }
                 }
             }
@@ -1747,7 +1874,7 @@ async def address_search(
                 "match": {
                     "addr_street.autocomplete": {
                         "query": parsed["street"],
-                        "boost": 2,
+                        "boost": _SEARCH["address"]["address"]["street_autocomplete_boost"],
                     }
                 }
             }
@@ -1770,23 +1897,50 @@ async def address_search(
                                 }
                             },
                         ],
-                        "boost": 50,
+                        "boost": _SEARCH["address"]["address"]["exact_housenumber_street_boost"],
                     }
                 }
             )
         else:
             # No street context: a bare housenumber term match is all we have.
-            should_clauses.append({"term": {"addr_housenumber": {"value": hn_val, "boost": 15}}})
+            should_clauses.append(
+                {
+                    "term": {
+                        "addr_housenumber": {
+                            "value": hn_val,
+                            "boost": _SEARCH["address"]["address"]["housenumber_boost"],
+                        }
+                    }
+                }
+            )
 
     # City as boost (when not already a hard filter)
     if parsed.get("city") and not city:
-        should_clauses.append({"match": {"addr_city": {"query": parsed["city"], "boost": 3}}})
+        should_clauses.append(
+            {
+                "match": {
+                    "addr_city": {
+                        "query": parsed["city"],
+                        "boost": _SEARCH["address"]["address"]["city_boost"],
+                    }
+                }
+            }
+        )
         should_clauses.append(
             {"match": {"addr_city.autocomplete": {"query": parsed["city"], "boost": 1}}}
         )
 
     if parsed.get("suburb"):
-        should_clauses.append({"match": {"addr_suburb": {"query": parsed["suburb"], "boost": 2}}})
+        should_clauses.append(
+            {
+                "match": {
+                    "addr_suburb": {
+                        "query": parsed["suburb"],
+                        "boost": _SEARCH["address"]["address"]["suburb_boost"],
+                    }
+                }
+            }
+        )
 
     # 4. Name fallback — search POI/place names so "Cairo Tower" still works
     should_clauses.append(
@@ -1803,17 +1957,35 @@ async def address_search(
                 ],
                 "type": "best_fields",
                 "fuzziness": "AUTO",
-                "boost": 2,
+                "boost": _SEARCH["address"]["text"]["best_fields_boost"],
             }
         }
     )
 
     # 5. Tags-text fallback for broad matching
-    should_clauses.append({"match": {"tags_text": {"query": q_norm, "boost": 0.5}}})
+    should_clauses.append(
+        {
+            "match": {
+                "tags_text": {
+                    "query": q_norm,
+                    "boost": _SEARCH["address"]["text"]["tags_text_boost"],
+                }
+            }
+        }
+    )
 
     # ── Prefer results with addr:* data but don't exclude others ─────────
     # Instead of filtering has_address=true, we boost it
-    should_clauses.append({"term": {"has_address": {"value": True, "boost": 3}}})
+    should_clauses.append(
+        {
+            "term": {
+                "has_address": {
+                    "value": True,
+                    "boost": _SEARCH["address"]["text"]["has_address_boost"],
+                }
+            }
+        }
+    )
 
     text_query: dict = {
         "bool": {
@@ -1837,7 +2009,7 @@ async def address_search(
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 1.5,
+            "weight": _SEARCH["address"]["offline_rank_weight"],
         }
     )
 
@@ -1850,7 +2022,7 @@ async def address_search(
                 "factor": 1,
                 "missing": 0,
             },
-            "weight": 0.5,
+            "weight": _SEARCH["address"]["popularity_weight"],
         }
     )
 
@@ -1861,12 +2033,12 @@ async def address_search(
                 "gauss": {
                     "centroid": {
                         "origin": {"lat": lat, "lon": lon},
-                        "scale": "1km",
-                        "offset": "100m",
-                        "decay": 0.5,
+                        "scale": _SEARCH["address"]["geo"]["scale"],
+                        "offset": _SEARCH["address"]["geo"]["offset"],
+                        "decay": _SEARCH["address"]["geo"]["decay"],
                     }
                 },
-                "weight": 5,
+                "weight": _SEARCH["address"]["geo"]["weight"],
             }
         )
 
@@ -1890,7 +2062,7 @@ async def address_search(
                         "params": {"requested_hn": requested_hn},
                     }
                 },
-                "weight": 5,
+                "weight": _SEARCH["address"]["housenumber_proximity_weight"],
             }
             if parsed.get("street"):
                 proximity_fn["filter"] = {

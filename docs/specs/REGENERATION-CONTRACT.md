@@ -55,18 +55,22 @@ across seven spec files; `services/geocoder.py` remains.**
 | `shared/autocomplete.py` | 136 → 119 | `spec/autocomplete.toml` |
 | `shared/es_mapping.py` | mapping → 2 | `spec/es-mapping.json` |
 | `shared/interpolation.py` | 165 → 157 | `spec/interpolation.json` |
-| `services/geocoder.py` | 401 | ❌ not extracted |
+| `services/geocoder.py` | 401 → 348 | `spec/search.toml` (53 query-tuning values) |
 
 \* `address.py`'s count is unchanged because its literals are regex offsets and
 slice bounds, not tuning; the eight *vocabularies* (abbreviations, street types,
 city keywords, ordinals) are what moved.
 
 Residual literals in the extracted modules are structural — clamps, scale
-factors, regex indices — not tuning knowledge. The remaining tuning debt is
-concentrated in `services/geocoder.py`, whose 401 literals are inline in query
-construction rather than in liftable tables; extracting them means restructuring
-query building, which is the same work as the G-8 file split and should be done
-as one effort.
+factors, regex indices — not tuning knowledge.
+
+`services/geocoder.py` needed a different technique. Its tuning is not in
+liftable tables but inline in Elasticsearch query construction: field boosts,
+phrase slops, geo-decay scales, rescore sizing, vector candidate counts. Those
+53 values are now in `spec/search.toml`, replaced in place by exact AST
+position rather than by moving code, so the extraction did not require the
+`geocode` handler to be split first. Its remaining 348 literals are pagination
+bounds, HTTP limits, string offsets, and Painless-script constants.
 
 Two values in `spec/es-mapping.json` are deliberately **not** frozen:
 `number_of_replicas` and the vector `dims` are `${ES_INDEX_REPLICAS}` and

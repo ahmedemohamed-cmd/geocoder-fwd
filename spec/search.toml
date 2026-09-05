@@ -1,0 +1,100 @@
+# Search specification — Elasticsearch query tuning
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# Every value here shapes the Elasticsearch query the geocoder builds, and so
+# decides what a user gets back. These are measured, not derived. Change one and
+# measure with tests/run_recall.py against docs/quality-baseline.md (AD-9).
+#
+# ── Why autocomplete has TWO geo decays ───────────────────────────────────
+# The index is global (~43.8M docs) and one decay cannot serve both jobs:
+#
+#   regional (300km, weight 25) kills continental distance. Without it,
+#   offline_rank let a far prominent place beat a near relevant one: "metro"
+#   biased to Cairo returned Metrotown and Metro Vancouver, 9,200 km away.
+#   At a 300km scale the term is essentially flat across one city, so it
+#   separates continents without disturbing ranking within a city.
+#
+#   local (15km, weight 3) is the fine-grained "near me" bias.
+#
+# Raising the local weight instead was measured and rejected: 15km@25 fixed
+# category (68%→92%) but cratered named recall (strict@1 48%→37%), because it
+# ranks by "closest to the bias point" rather than "best name match". The split
+# keeps both: strict@1 45%, category 98%.
+
+[geocode]
+rescore_window = 200
+offline_rank_weight = 1.5
+housenumber_proximity_weight = 5
+
+[geocode.geo]
+scale = "10km"
+offset = "1km"
+decay = 0.5
+weight = 2
+
+[geocode.text]
+cross_fields_boost = 4
+full_address_phrase_boost = 6
+full_address_phrase_slop = 2
+has_address_boost = 2
+
+[geocode.address]
+street_phrase_boost = 10
+street_fuzzy_boost = 5
+street_autocomplete_boost = 3
+name_phrase_boost = 4
+exact_housenumber_street_boost = 50
+housenumber_boost = 15
+city_boost = 3
+city_autocomplete_boost = 1.5
+city_name_boost = 2
+suburb_boost = 2
+postcode_boost = 6
+country_boost = 4
+
+[geocode.vector]
+k_multiplier = 2
+num_candidates = 300
+
+[autocomplete]
+offline_rank_weight = 2
+popularity_weight = 1.5
+
+[autocomplete.regional]
+scale = "300km"
+offset = "50km"
+decay = 0.5
+weight = 25
+
+[autocomplete.local]
+scale = "15km"
+offset = "2km"
+decay = 0.5
+weight = 3
+
+[address]
+offline_rank_weight = 1.5
+popularity_weight = 0.5
+housenumber_proximity_weight = 5
+
+[address.text]
+full_address_phrase_boost = 8
+best_fields_boost = 2
+tags_text_boost = 0.5
+has_address_boost = 3
+
+[address.address]
+street_phrase_boost = 10
+street_fuzzy_boost = 4
+street_autocomplete_boost = 2
+exact_housenumber_street_boost = 50
+housenumber_boost = 15
+city_boost = 3
+suburb_boost = 2
+
+[address.geo]
+scale = "1km"
+offset = "100m"
+decay = 0.5
+weight = 5
