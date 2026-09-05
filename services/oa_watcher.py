@@ -195,7 +195,7 @@ def _count_csv_rows(filepath: str) -> int:
 async def publish_csv(filepath: str, js):
     """Read a CSV file and publish rows as NATS messages."""
     basename = os.path.basename(filepath)
-    logger.info(f"[oa-watcher] Processing CSV: {basename}")
+    logger.info("[oa-watcher] Processing CSV: %s", basename)
 
     total_rows = _count_csv_rows(filepath)
     progress = ProgressTracker(f"oa-watcher {basename}", total=total_rows)
@@ -221,7 +221,7 @@ async def publish_csv(filepath: str, js):
                     js, batch, published, consecutive_failures, progress
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    logger.error(f"[oa-watcher] Too many failures, aborting {basename}")
+                    logger.error("[oa-watcher] Too many failures, aborting %s", basename)
                     progress.close()
                     return -1
                 batch.clear()
@@ -233,7 +233,7 @@ async def publish_csv(filepath: str, js):
             )
 
     progress.close()
-    logger.info(f"[oa-watcher] {basename}: published {published} addresses")
+    logger.info("[oa-watcher] %s: published %s addresses", basename, published)
     return published
 
 
@@ -268,7 +268,7 @@ async def publish_geojson(filepath: str, js):
     import gzip
 
     basename = os.path.basename(filepath)
-    logger.info(f"[oa-watcher] Processing GeoJSON: {basename}")
+    logger.info("[oa-watcher] Processing GeoJSON: %s", basename)
 
     is_gz = filepath.endswith(".gz")
     _open = gzip.open if is_gz else open
@@ -316,7 +316,7 @@ async def publish_geojson(filepath: str, js):
             )
             batch.clear()
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                logger.error(f"[oa-watcher] Too many failures, aborting {basename}")
+                logger.error("[oa-watcher] Too many failures, aborting %s", basename)
                 return False
         return True
 
@@ -349,7 +349,7 @@ async def publish_geojson(filepath: str, js):
         )
 
     progress.close()
-    logger.info(f"[oa-watcher] {basename}: published {published} addresses")
+    logger.info("[oa-watcher] %s: published %s addresses", basename, published)
     return published
 
 
@@ -381,7 +381,9 @@ async def _publish_batch(
                     await asyncio.sleep(min(2**attempt, 30))
                 else:
                     logger.error(
-                        f"[oa-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                        "[oa-watcher] Failed to publish after %s attempts: %s",
+                        MAX_RETRIES,
+                        e,
                     )
 
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
@@ -414,7 +416,7 @@ async def _scan_and_process(js) -> int:
     if not pending:
         return 0
 
-    logger.info(f"[oa-watcher] Found {len(pending)} new file(s) to process")
+    logger.info("[oa-watcher] Found %s new file(s) to process", len(pending))
     processed = 0
     for filepath in pending:
         rel_path = os.path.relpath(filepath, OA_DATA_DIR)
@@ -431,10 +433,10 @@ async def _scan_and_process(js) -> int:
             # Only mark as processed if we didn't abort early
             if count >= 0:
                 record_processed(OA_DATA_DIR, filepath, done)
-                logger.info(f"[oa-watcher] Completed {rel_path}")
+                logger.info("[oa-watcher] Completed %s", rel_path)
                 processed += 1
         except Exception as e:
-            logger.error(f"[oa-watcher] Error processing {rel_path}: {e}")
+            logger.error("[oa-watcher] Error processing %s: %s", rel_path, e)
             import traceback
 
             traceback.print_exc()
@@ -448,7 +450,7 @@ async def run():
     os.makedirs(OA_DATA_DIR, exist_ok=True)
 
     nc, js = await nats_client.connect()
-    logger.info(f"[oa-watcher] Watching {OA_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)")
+    logger.info("[oa-watcher] Watching %s (re-scan every %ss)", OA_DATA_DIR, WATCH_POLL_INTERVAL)
 
     try:
         first = True
@@ -456,7 +458,8 @@ async def run():
             n = await _scan_and_process(js)
             if first and n == 0:
                 logger.info(
-                    f"[oa-watcher] No new files in {OA_DATA_DIR} yet; will keep watching.",
+                    "[oa-watcher] No new files in %s yet; will keep watching.",
+                    OA_DATA_DIR,
                 )
             first = False
             await asyncio.sleep(WATCH_POLL_INTERVAL)

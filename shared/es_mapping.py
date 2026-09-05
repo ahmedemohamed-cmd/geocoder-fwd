@@ -4,14 +4,7 @@ Imported by both services/geocoder.py and services/es_inserter.py so
 there is a single source of truth for the index schema.
 """
 
-import os
-
-from shared.config import EMBEDDING_DIM
-
-# 0 on the single-node compose deployment (a replica could never allocate and
-# would leave the cluster yellow); 1 on a multi-node ES cluster so the index
-# survives a node loss and searches spread across the copies.
-ES_INDEX_REPLICAS = int(os.getenv("ES_INDEX_REPLICAS", "0"))
+from shared.config import EMBEDDING_DIM, ES_INDEX_REPLICAS
 
 MAPPING = {
     "settings": {

@@ -228,3 +228,43 @@ BATCH_SIZE = (_BATCH_SIZE // 2) if ENABLE_VECTORS else _BATCH_SIZE
 
 _DEFAULT_WORKERS = 2 if ENABLE_VECTORS else 4
 MAX_CONCURRENT_BATCHES = _safe_int("MAX_CONCURRENT_BATCHES", _DEFAULT_WORKERS)
+
+# ── Logging ────────────────────────────────────────────────────────────────
+# Read here, not in shared/logging.py, so every tunable has one home. No cycle:
+# this module uses stdlib logging and never imports shared.logging.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# ── Embedding model cache ──────────────────────────────────────────────────
+# Where sentence-transformers downloads weights; empty = library default.
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", "")
+
+# ── Elasticsearch index topology ───────────────────────────────────────────
+# 0 on the single-node compose deployment (a replica could never allocate and
+# would leave the cluster yellow); 1 on a multi-node ES cluster so the index
+# survives a node loss and searches spread across the copies.
+ES_INDEX_REPLICAS = _safe_int("ES_INDEX_REPLICAS", 0)
+
+# ── Processed-file ledger (watchers) ───────────────────────────────────────
+# "file" keeps the ledger beside the data; "pg" moves it into Postgres with
+# atomic claims, making multiple watcher replicas safe on one data dir.
+PROCESSED_LEDGER = os.getenv("PROCESSED_LEDGER", "file").strip().lower()
+# Seconds after which an unfinished claim (crashed worker) may be taken over.
+PROCESSED_CLAIM_TTL = _safe_int("PROCESSED_CLAIM_TTL", 21600)  # 6 h
+
+# ── Downloader sources ─────────────────────────────────────────────────────
+OA_URL = os.getenv("OA_URL", "")  # OpenAddresses CSV/GeoJSON archive
+GN_URL = os.getenv("GN_URL", "")  # GeoNames dump zip
+# Anything but false/0/no verifies certificates. Kept as an explicit negative
+# test (not _safe_bool) so the default stays "verify" for unknown values.
+SSL_VERIFY = os.getenv("SSL_VERIFY", "true").strip().lower() not in ("false", "0", "no")
+
+# ── Geocoder serving ───────────────────────────────────────────────────────
+# Serve /autocomplete from the Redis prefix index when it is confident. Set
+# false to route every query to Elasticsearch — a kill switch, and the control
+# arm when A/B-ing the fast path's effect on recall.
+AC_REDIS_FAST_PATH = os.getenv("AC_REDIS_FAST_PATH", "true").strip().lower() != "false"
+# uvicorn worker processes; >1 forks and needs an import string.
+GEOCODER_WORKERS = _safe_int("GEOCODER_WORKERS", 1)
+# Hold idle keep-alive connections longer than uvicorn's 5s default so the
+# APISIX upstream pool reuses warm connections instead of re-handshaking.
+GEOCODER_KEEPALIVE_TIMEOUT = _safe_int("GEOCODER_KEEPALIVE_TIMEOUT", 30)

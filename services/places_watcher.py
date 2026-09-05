@@ -60,7 +60,9 @@ async def _publish_batch(
                     await asyncio.sleep(min(2**attempt, 30))
                 else:
                     logger.error(
-                        f"[places-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                        "[places-watcher] Failed to publish after %s attempts: %s",
+                        MAX_RETRIES,
+                        e,
                     )
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             break
@@ -73,16 +75,16 @@ async def publish_file(filepath: str, js) -> int:
     Returns the number published, or -1 if aborted early (too many failures).
     """
     basename = os.path.basename(filepath)
-    logger.info(f"[places-watcher] Processing: {basename}")
+    logger.info("[places-watcher] Processing: %s", basename)
 
     try:
         with open(filepath, encoding="utf-8") as f:
             records = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        logger.error(f"[places-watcher] Cannot read {basename}: {e}")
+        logger.error("[places-watcher] Cannot read %s: %s", basename, e)
         return -1
     if not isinstance(records, list):
-        logger.error(f"[places-watcher] {basename}: expected a JSON array, skipping")
+        logger.error("[places-watcher] %s: expected a JSON array, skipping", basename)
         return -1
 
     progress = ProgressTracker(f"places-watcher {basename}", total=len(records))
@@ -94,7 +96,7 @@ async def publish_file(filepath: str, js) -> int:
         try:
             msg = place_to_element(rec)
         except Exception as e:
-            logger.debug(f"[places-watcher] {basename}: bad record skipped: {e}")
+            logger.debug("[places-watcher] %s: bad record skipped: %s", basename, e)
             msg = None
         if msg is None:
             progress.skip()
@@ -107,7 +109,7 @@ async def publish_file(filepath: str, js) -> int:
             )
             batch.clear()
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                logger.error(f"[places-watcher] Too many failures, aborting {basename}")
+                logger.error("[places-watcher] Too many failures, aborting %s", basename)
                 progress.close()
                 return -1
 
@@ -117,7 +119,7 @@ async def publish_file(filepath: str, js) -> int:
         )
 
     progress.close()
-    logger.info(f"[places-watcher] {basename}: published {published} places")
+    logger.info("[places-watcher] %s: published %s places", basename, published)
     return published
 
 
@@ -130,7 +132,7 @@ async def _scan_and_process(js) -> int:
     if not pending:
         return 0
 
-    logger.info(f"[places-watcher] Found {len(pending)} new place file(s) to process")
+    logger.info("[places-watcher] Found %s new place file(s) to process", len(pending))
     processed = 0
     for filepath in pending:
         if not claim(PLACES_DATA_DIR, filepath, done):
@@ -139,15 +141,15 @@ async def _scan_and_process(js) -> int:
             count = await publish_file(filepath, js)
             if count >= 0:
                 record_processed(PLACES_DATA_DIR, filepath, done)
-                logger.info(f"[places-watcher] Completed {os.path.basename(filepath)}")
+                logger.info("[places-watcher] Completed %s", os.path.basename(filepath))
                 processed += 1
             else:
                 logger.warning(
-                    f"[places-watcher] Incomplete processing of {os.path.basename(filepath)} "
-                    "— will retry next scan",
+                    "[places-watcher] Incomplete processing of %s — will retry next scan",
+                    os.path.basename(filepath),
                 )
         except Exception as e:
-            logger.error(f"[places-watcher] Error processing {os.path.basename(filepath)}: {e}")
+            logger.error("[places-watcher] Error processing %s: %s", os.path.basename(filepath), e)
             import traceback
 
             traceback.print_exc()
@@ -161,7 +163,7 @@ async def run():
 
     nc, js = await nats_client.connect()
     logger.info(
-        f"[places-watcher] Watching {PLACES_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)"
+        "[places-watcher] Watching %s (re-scan every %ss)", PLACES_DATA_DIR, WATCH_POLL_INTERVAL
     )
 
     try:
@@ -170,7 +172,8 @@ async def run():
             n = await _scan_and_process(js)
             if first and n == 0:
                 logger.info(
-                    f"[places-watcher] No new files in {PLACES_DATA_DIR} yet; will keep watching.",
+                    "[places-watcher] No new files in %s yet; will keep watching.",
+                    PLACES_DATA_DIR,
                 )
             first = False
             await asyncio.sleep(WATCH_POLL_INTERVAL)

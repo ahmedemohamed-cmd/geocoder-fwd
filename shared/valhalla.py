@@ -32,7 +32,7 @@ def link_pbf_for_valhalla(filepath: str, label: str = "valhalla"):
             return
         os.remove(link)
     elif os.path.exists(link):
-        logger.info(f"[{label}] {link} exists and is not a symlink, leaving it")
+        logger.info("[%s] %s exists and is not a symlink, leaving it", label, link)
         return
     os.symlink(target, link)
-    logger.info(f"[{label}] Linked {link} -> {target} for Valhalla")
+    logger.info("[%s] Linked %s -> %s for Valhalla", label, link, target)

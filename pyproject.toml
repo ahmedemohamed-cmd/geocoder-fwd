@@ -52,7 +52,10 @@ extend-exclude = [
 # Conservative starter set: pyflakes (F), pycodestyle errors (E), import sorting
 # (I), bugbear (B), pyupgrade (UP). Kept lenient to match the existing style;
 # tighten over time rather than churn the whole tree at once.
-select = ["E", "F", "I", "B", "UP"]
+# G = flake8-logging-format: keeps log calls lazy (`logger.info("x %s", y)`),
+# so message formatting is skipped when the level is disabled.
+# T20 = flake8-print: service code logs, it does not print (see shared/logging).
+select = ["E", "F", "I", "B", "UP", "G", "T20"]
 ignore = [
     "E501",   # line length is handled by the formatter, not the linter
     "B008",   # FastAPI uses `= Query(...)`/`Depends(...)` as defaults by design
@@ -61,7 +64,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests favour broad fixtures and re-imports; benchmark scripts are throwaway.
-"tests/**" = ["B", "F401", "F811", "E741", "UP031"]
+"tests/**" = ["B", "F401", "F811", "E741", "UP031", "T20"]
+# Operator-facing scripts: stdout is their interface, not a logging channel.
+"scripts/**" = ["T20"]
+"billing/provision_zitadel.py" = ["T20"]
 
 # ──────────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]

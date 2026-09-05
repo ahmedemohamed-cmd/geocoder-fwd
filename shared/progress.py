@@ -36,19 +36,31 @@ class ProgressTracker:
         if self.total > 0:
             pct = processed / self.total * 100
             logger.info(
-                f"[{self.description}] {processed}/{self.total} ({pct:.1f}%) "
-                f"- {rate:.0f} items/sec  ({self.count} published, {self.skipped} skipped)",
+                "[%s] %s/%s (%s%%) - %s items/sec  (%s published, %s skipped)",
+                self.description,
+                processed,
+                self.total,
+                format(pct, ".1f"),
+                format(rate, ".0f"),
+                self.count,
+                self.skipped,
             )
         else:
             logger.info(
-                f"[{self.description}] {self.count} published - {rate:.0f} items/sec"
-                f"  ({self.skipped} skipped)",
+                "[%s] %s published - %s items/sec  (%s skipped)",
+                self.description,
+                self.count,
+                format(rate, ".0f"),
+                self.skipped,
             )
 
     def close(self):
         self._log()
         elapsed = time.time() - self.start_time
         logger.info(
-            f"[{self.description}] Completed in {elapsed:.1f}s -- "
-            f"{self.count} published, {self.skipped} skipped",
+            "[%s] Completed in %ss -- %s published, %s skipped",
+            self.description,
+            format(elapsed, ".1f"),
+            self.count,
+            self.skipped,
         )

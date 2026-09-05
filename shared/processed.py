@@ -28,15 +28,16 @@ import os
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
+from shared.config import PROCESSED_CLAIM_TTL, PROCESSED_LEDGER
 from shared.logging import get_logger
 
 logger = get_logger("processed-ledger")
 
 LEDGER_NAME = ".processed"
 
-LEDGER_MODE = os.getenv("PROCESSED_LEDGER", "file").strip().lower()
-# Seconds after which an unfinished claim (crashed worker) may be taken over.
-CLAIM_TTL = int(os.getenv("PROCESSED_CLAIM_TTL", "21600"))  # 6 h
+# Re-exported under the short names the rest of this module (and its tests) use.
+LEDGER_MODE = PROCESSED_LEDGER
+CLAIM_TTL = PROCESSED_CLAIM_TTL
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS processed_files (

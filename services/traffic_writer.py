@@ -67,7 +67,7 @@ _PIPELINE_BATCH = 500  # HGETALLs per pipeline round-trip
 
 
 def _log(msg: str) -> None:
-    logger.info(f"[traffic-writer] {msg}")
+    logger.info("[traffic-writer] %s", msg)
 
 
 def _resolve_shard() -> tuple[int, int]:

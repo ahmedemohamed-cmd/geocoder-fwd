@@ -124,7 +124,7 @@ async def enrich_address(
             """
             closed_lines = await conn.fetch(closed_lines_query, point_wkt)
     except Exception as e:
-        logger.error(f"[enrichment] PostGIS query failed for {osm_id}: {e}")
+        logger.error("[enrichment] PostGIS query failed for %s: %s", osm_id, e)
         return None
 
     # Collect all osm_ids to fetch from ES.
@@ -152,7 +152,7 @@ async def enrich_address(
             if doc.get("found"):
                 es_data[doc["_id"]] = doc["_source"]
     except Exception as e:
-        logger.error(f"[enrichment] Error fetching address data from ES: {e}")
+        logger.error("[enrichment] Error fetching address data from ES: %s", e)
 
     # Find nearest street: first line in distance order that has a name
     nearest_street = None
@@ -206,7 +206,7 @@ async def enrich_address(
     try:
         await es.update(index=index, id=osm_id, body={"doc": {"address": address}})
     except Exception as e:
-        logger.error(f"[enrichment] Error caching address for {osm_id}: {e}")
+        logger.error("[enrichment] Error caching address for %s: %s", osm_id, e)
 
     return address
 

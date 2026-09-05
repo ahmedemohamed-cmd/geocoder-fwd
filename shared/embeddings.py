@@ -1,7 +1,12 @@
 import logging
 import os
 
-from shared.config import EMBEDDING_DIM, EMBEDDING_MODEL, ENABLE_VECTORS
+from shared.config import (
+    EMBEDDING_DIM,
+    EMBEDDING_MODEL,
+    ENABLE_VECTORS,
+    TRANSFORMERS_CACHE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +74,7 @@ def get_model():
         device = "cpu"
     logger.info("Using device: %s", device)
 
-    cache_folder = os.environ.get("TRANSFORMERS_CACHE")
+    cache_folder = TRANSFORMERS_CACHE
 
     try:
         if os.path.exists(EMBEDDING_MODEL):

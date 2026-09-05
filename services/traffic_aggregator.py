@@ -91,7 +91,7 @@ return n
 
 
 def _log(msg: str) -> None:
-    logger.info(f"[traffic-aggregator] {msg}")
+    logger.info("[traffic-aggregator] %s", msg)
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

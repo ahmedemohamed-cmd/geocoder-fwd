@@ -7,17 +7,15 @@ served by Ollama.
 
 import json
 import logging
-import os
 from typing import Any
 
 import httpx
 
 from shared.categories import CATEGORY_KEYS
+from shared.config import OLLAMA_MODEL, OLLAMA_URL
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
 # Timeout for the generation call (seconds).
 # Small models on GPU should respond in <2s; CPU may take 5-10s.

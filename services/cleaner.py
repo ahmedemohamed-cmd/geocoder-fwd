@@ -35,11 +35,11 @@ async def clean_elasticsearch():
     try:
         if await es.indices.exists(index=ES_INDEX):
             await es.indices.delete(index=ES_INDEX)
-            logger.info(f"[cleaner] Deleted ES index '{ES_INDEX}'")
+            logger.info("[cleaner] Deleted ES index '%s'", ES_INDEX)
         else:
-            logger.warning(f"[cleaner] ES index '{ES_INDEX}' does not exist, skipping")
+            logger.warning("[cleaner] ES index '%s' does not exist, skipping", ES_INDEX)
     except Exception as exc:
-        logger.error(f"[cleaner] ES error: {exc}")
+        logger.error("[cleaner] ES error: %s", exc)
     finally:
         await es.close()
 
@@ -59,9 +59,9 @@ async def clean_postgis():
             await conn.execute(f"DROP TABLE IF EXISTS {PG_TABLE} CASCADE")
             await conn.execute(f"DROP TABLE IF EXISTS {PG_ADDR_TABLE} CASCADE")
         await pool.close()
-        logger.info(f"[cleaner] Dropped PostGIS tables '{PG_TABLE}', '{PG_ADDR_TABLE}'")
+        logger.info("[cleaner] Dropped PostGIS tables '%s', '%s'", PG_TABLE, PG_ADDR_TABLE)
     except Exception as exc:
-        logger.error(f"[cleaner] PostGIS error: {exc}")
+        logger.error("[cleaner] PostGIS error: %s", exc)
 
 
 async def clean_nats():
@@ -72,12 +72,12 @@ async def clean_nats():
         js = nc.jetstream()
         try:
             await js.delete_stream(NATS_STREAM)
-            logger.info(f"[cleaner] Deleted NATS stream '{NATS_STREAM}'")
+            logger.info("[cleaner] Deleted NATS stream '%s'", NATS_STREAM)
         except Exception:
-            logger.warning(f"[cleaner] NATS stream '{NATS_STREAM}' does not exist, skipping")
+            logger.warning("[cleaner] NATS stream '%s' does not exist, skipping", NATS_STREAM)
         await nc.close()
     except Exception as exc:
-        logger.error(f"[cleaner] NATS error: {exc}")
+        logger.error("[cleaner] NATS error: %s", exc)
 
 
 async def clean():

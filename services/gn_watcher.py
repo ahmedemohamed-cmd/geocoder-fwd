@@ -259,21 +259,21 @@ def _extract_zips(data_dir: str):
         extract_marker = f"{zpath}.extracted"
         if os.path.exists(extract_marker):
             continue
-        logger.info(f"[gn-watcher] Extracting {os.path.basename(zpath)} ...")
+        logger.info("[gn-watcher] Extracting %s ...", os.path.basename(zpath))
         try:
             with zipfile.ZipFile(zpath, "r") as zf:
                 zf.extractall(data_dir)
             with open(extract_marker, "w") as f:
                 f.write(f"extracted: {zpath}\n")
-            logger.info(f"[gn-watcher] Extracted {os.path.basename(zpath)}")
+            logger.info("[gn-watcher] Extracted %s", os.path.basename(zpath))
         except Exception as e:
-            logger.error(f"[gn-watcher] Error extracting {os.path.basename(zpath)}: {e}")
+            logger.error("[gn-watcher] Error extracting %s: %s", os.path.basename(zpath), e)
 
 
 async def publish_tsv(filepath: str, js):
     """Read a GeoNames TSV file and publish rows as NATS messages."""
     basename = os.path.basename(filepath)
-    logger.info(f"[gn-watcher] Processing: {basename}")
+    logger.info("[gn-watcher] Processing: %s", basename)
 
     total_lines = _count_lines(filepath)
     progress = ProgressTracker(f"gn-watcher {basename}", total=total_lines)
@@ -302,7 +302,7 @@ async def publish_tsv(filepath: str, js):
                     js, batch, published, consecutive_failures, progress
                 )
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    logger.error(f"[gn-watcher] Too many failures, aborting {basename}")
+                    logger.error("[gn-watcher] Too many failures, aborting %s", basename)
                     progress.close()
                     return -1
                 batch.clear()
@@ -314,7 +314,7 @@ async def publish_tsv(filepath: str, js):
         )
 
     progress.close()
-    logger.info(f"[gn-watcher] {basename}: published {published} places")
+    logger.info("[gn-watcher] %s: published %s places", basename, published)
     return published
 
 
@@ -346,7 +346,9 @@ async def _publish_batch(
                     await asyncio.sleep(min(2**attempt, 30))
                 else:
                     logger.error(
-                        f"[gn-watcher] Failed to publish after {MAX_RETRIES} attempts: {e}",
+                        "[gn-watcher] Failed to publish after %s attempts: %s",
+                        MAX_RETRIES,
+                        e,
                     )
 
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
@@ -383,7 +385,7 @@ async def _scan_and_process(js) -> int:
     if not pending:
         return 0
 
-    logger.info(f"[gn-watcher] Found {len(pending)} new data file(s) to process")
+    logger.info("[gn-watcher] Found %s new data file(s) to process", len(pending))
     processed = 0
     for filepath in pending:
         if not claim(GN_DATA_DIR, filepath, done):
@@ -393,14 +395,15 @@ async def _scan_and_process(js) -> int:
             # Only mark as processed if we didn't abort early
             if count >= 0:
                 record_processed(GN_DATA_DIR, filepath, done)
-                logger.info(f"[gn-watcher] Completed {os.path.basename(filepath)}")
+                logger.info("[gn-watcher] Completed %s", os.path.basename(filepath))
                 processed += 1
             else:
                 logger.warning(
-                    f"[gn-watcher] Incomplete processing of {os.path.basename(filepath)} — will retry next scan",
+                    "[gn-watcher] Incomplete processing of %s — will retry next scan",
+                    os.path.basename(filepath),
                 )
         except Exception as e:
-            logger.error(f"[gn-watcher] Error processing {os.path.basename(filepath)}: {e}")
+            logger.error("[gn-watcher] Error processing %s: %s", os.path.basename(filepath), e)
             import traceback
 
             traceback.print_exc()
@@ -414,7 +417,7 @@ async def run():
     os.makedirs(GN_DATA_DIR, exist_ok=True)
 
     nc, js = await nats_client.connect()
-    logger.info(f"[gn-watcher] Watching {GN_DATA_DIR} (re-scan every {WATCH_POLL_INTERVAL}s)")
+    logger.info("[gn-watcher] Watching %s (re-scan every %ss)", GN_DATA_DIR, WATCH_POLL_INTERVAL)
 
     try:
         first = True
@@ -422,7 +425,8 @@ async def run():
             n = await _scan_and_process(js)
             if first and n == 0:
                 logger.info(
-                    f"[gn-watcher] No new files in {GN_DATA_DIR} yet; will keep watching.",
+                    "[gn-watcher] No new files in %s yet; will keep watching.",
+                    GN_DATA_DIR,
                 )
             first = False
             await asyncio.sleep(WATCH_POLL_INTERVAL)

@@ -12,17 +12,19 @@ import os
 
 import requests
 
-from shared.config import DATA_DIR, GN_DATA_DIR, OA_DATA_DIR, OSM_URL
+from shared.config import (
+    DATA_DIR,
+    GN_DATA_DIR,
+    GN_URL,
+    OA_DATA_DIR,
+    OA_URL,
+    OSM_URL,
+    SSL_VERIFY,
+)
 from shared.logging import get_logger
 from shared.valhalla import link_pbf_for_valhalla
 
 logger = get_logger("downloader")
-
-# Set SSL_VERIFY=false in .env to disable certificate verification (dev only)
-_SSL_VERIFY = os.getenv("SSL_VERIFY", "true").lower() not in ("false", "0", "no")
-
-_OA_URL = os.getenv("OA_URL", "")
-_GN_URL = os.getenv("GN_URL", "")
 
 
 def _download_file(url: str, dest_dir: str, label: str = "downloader"):
@@ -33,11 +35,11 @@ def _download_file(url: str, dest_dir: str, label: str = "downloader"):
     filepath = os.path.join(dest_dir, filename)
 
     if os.path.exists(filepath):
-        logger.info(f"[{label}] {filename} already exists, skipping")
+        logger.info("[%s] %s already exists, skipping", label, filename)
         return filepath
 
-    logger.info(f"[{label}] Downloading {filename} ...")
-    resp = requests.get(url, stream=True, timeout=60, verify=_SSL_VERIFY)
+    logger.info("[%s] Downloading %s ...", label, filename)
+    resp = requests.get(url, stream=True, timeout=60, verify=SSL_VERIFY)
     resp.raise_for_status()
 
     total = int(resp.headers.get("content-length", 0))
@@ -50,12 +52,16 @@ def _download_file(url: str, dest_dir: str, label: str = "downloader"):
             downloaded += len(chunk)
             if total:
                 logger.info(
-                    f"\r[{label}] {downloaded * 100 // total}%  ({downloaded}/{total} bytes)",
+                    "\r[%s] %s%%  (%s/%s bytes)",
+                    label,
+                    downloaded * 100 // total,
+                    downloaded,
+                    total,
                     end="",
                 )
 
     os.rename(tmp, filepath)
-    logger.info(f"\n[{label}] Saved {filename}")
+    logger.info("\n[%s] Saved %s", label, filename)
     return filepath
 
 
@@ -68,14 +74,14 @@ def download():
         logger.warning("[downloader] No osm_url configured, skipping OSM download")
 
     # ── OpenAddresses ─────────────────────────────────────────────────────
-    if _OA_URL:
-        _download_file(_OA_URL, OA_DATA_DIR, label="downloader/oa")
+    if OA_URL:
+        _download_file(OA_URL, OA_DATA_DIR, label="downloader/oa")
     else:
         logger.warning("[downloader] No OA_URL configured, skipping OpenAddresses download")
 
     # ── GeoNames ──────────────────────────────────────────────────────────
-    if _GN_URL:
-        _download_file(_GN_URL, GN_DATA_DIR, label="downloader/gn")
+    if GN_URL:
+        _download_file(GN_URL, GN_DATA_DIR, label="downloader/gn")
     else:
         logger.warning("[downloader] No GN_URL configured, skipping GeoNames download")
 

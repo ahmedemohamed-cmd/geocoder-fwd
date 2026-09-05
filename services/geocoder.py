@@ -116,6 +116,7 @@ from shared.autocomplete import (
 )
 from shared.categories import classify
 from shared.config import (
+    AC_REDIS_FAST_PATH,
     ELASTICSEARCH_URL,
     ENABLE_AI,
     ENABLE_DEEP,
@@ -124,6 +125,8 @@ from shared.config import (
     GEOCODE_CACHE_COORD_PRECISION,
     GEOCODE_CACHE_ENABLED,
     GEOCODE_CACHE_TTL,
+    GEOCODER_KEEPALIVE_TIMEOUT,
+    GEOCODER_WORKERS,
     GOOGLE_MAPS_API_KEY,
     NATS_SUBJECT,
     NATS_URL,
@@ -203,7 +206,7 @@ _AC_REWARM_SECS = 600  # re-warm interval (10 minutes)
 # Serve /autocomplete from the Redis prefix index when it is confident. Set false
 # to route every query to Elasticsearch — a kill switch, and the control arm when
 # A/B-ing the fast path's effect on recall.
-_AC_REDIS_FAST_PATH = os.getenv("AC_REDIS_FAST_PATH", "true").lower() != "false"
+_AC_REDIS_FAST_PATH = AC_REDIS_FAST_PATH
 
 
 async def _warm_autocomplete():
@@ -249,7 +252,7 @@ async def _warm_autocomplete():
                         else:
                             sleep_secs = 30
                         logger.info(
-                            f"[geocoder] Autocomplete warm-up complete: {count} docs indexed"
+                            "[geocoder] Autocomplete warm-up complete: %s docs indexed", count
                         )
                     finally:
                         await redis_pool.delete("geocoder:ac:warming")
@@ -257,7 +260,7 @@ async def _warm_autocomplete():
             logger.info("[geocoder] Autocomplete warm-up task cancelled")
             raise
         except Exception as e:
-            logger.error(f"[geocoder] Autocomplete warm-up failed: {e}")
+            logger.error("[geocoder] Autocomplete warm-up failed: %s", e)
             sleep_secs = 30
         await asyncio.sleep(sleep_secs)
 
@@ -290,7 +293,10 @@ async def lifespan(app: FastAPI):
             break
         except Exception as e:
             logger.error(
-                f"[geocoder] Failed to connect to Elasticsearch (attempt {attempt + 1}/{max_retries}): {e}"
+                "[geocoder] Failed to connect to Elasticsearch (attempt %s/%s): %s",
+                attempt + 1,
+                max_retries,
+                e,
             )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
@@ -317,7 +323,10 @@ async def lifespan(app: FastAPI):
             break
         except Exception as e:
             logger.error(
-                f"[geocoder] Failed to connect to PostGIS (attempt {attempt + 1}/{max_retries}): {e}"
+                "[geocoder] Failed to connect to PostGIS (attempt %s/%s): %s",
+                attempt + 1,
+                max_retries,
+                e,
             )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
@@ -337,11 +346,14 @@ async def lifespan(app: FastAPI):
                     await ensure_stream(js, TRAFFIC_STREAM_CFG)
                     logger.info("[geocoder] Ensured TRAFFIC probe stream")
                 except Exception as te:
-                    logger.warning(f"[geocoder] Warning: could not ensure TRAFFIC stream: {te}")
+                    logger.warning("[geocoder] Warning: could not ensure TRAFFIC stream: %s", te)
             break
         except Exception as e:
             logger.error(
-                f"[geocoder] Failed to connect to NATS (attempt {attempt + 1}/{max_retries}): {e}"
+                "[geocoder] Failed to connect to NATS (attempt %s/%s): %s",
+                attempt + 1,
+                max_retries,
+                e,
             )
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
@@ -352,7 +364,7 @@ async def lifespan(app: FastAPI):
     try:
         if not await es.indices.exists(index=INDEX):
             await es.indices.create(index=INDEX, **ES_MAPPING)
-            logger.info(f"[geocoder] Created ES index {INDEX}")
+            logger.info("[geocoder] Created ES index %s", INDEX)
         else:
             # Additive mapping sync so category_* (and any future scalar field) is
             # present for /nearby even when the index predates it. No-op if there.
@@ -360,14 +372,14 @@ async def lifespan(app: FastAPI):
                 index=INDEX, properties=ES_MAPPING["mappings"]["properties"]
             )
     except Exception as e:
-        logger.error(f"[geocoder] Error checking/creating ES index: {e}")
+        logger.error("[geocoder] Error checking/creating ES index: %s", e)
         try:
             await es.indices.create(index=INDEX, **ES_MAPPING)
-            logger.info(f"[geocoder] Created ES index {INDEX} (fallback)")
+            logger.info("[geocoder] Created ES index %s (fallback)", INDEX)
         except Exception as e2:
             if "resource_already_exists" not in str(e2).lower():
                 raise
-            logger.info(f"[geocoder] ES index {INDEX} already exists (concurrent create)")
+            logger.info("[geocoder] ES index %s already exists (concurrent create)", INDEX)
 
     # Connect to Redis and warm autocomplete index
     try:
@@ -378,7 +390,7 @@ async def lifespan(app: FastAPI):
             socket_connect_timeout=5,
         )
         await redis_pool.ping()
-        logger.info(f"[geocoder] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
+        logger.info("[geocoder] Connected to Redis at %s:%s", REDIS_HOST, REDIS_PORT)
 
         # Result cache (cache-aside) for /geocode + /reverse — offloads ES on
         # repeated queries. Fail-open: a Redis error just becomes a cache miss.
@@ -389,13 +401,13 @@ async def lifespan(app: FastAPI):
             coord_precision=GEOCODE_CACHE_COORD_PRECISION,
         )
         logger.info(
-            f"[geocoder] Result cache enabled={result_cache.enabled} ttl={GEOCODE_CACHE_TTL}s"
+            "[geocoder] Result cache enabled=%s ttl=%ss", result_cache.enabled, GEOCODE_CACHE_TTL
         )
 
         # Warm autocomplete index from ES in background (store ref to prevent GC)
         _ac_task = asyncio.create_task(_warm_autocomplete())
     except Exception as e:
-        logger.error(f"[geocoder] Redis connection failed: {e}")
+        logger.error("[geocoder] Redis connection failed: %s", e)
         logger.info("[geocoder] Autocomplete will fall back to Elasticsearch")
         redis_pool = None  # type: ignore[assignment]
 
@@ -619,7 +631,7 @@ async def _resolve_street_names(
     try:
         resp = await es.search(index=INDEX, **body)
     except Exception as e:
-        logger.error(f"[geocoder] Street resolution failed for {street!r}: {e}")
+        logger.error("[geocoder] Street resolution failed for %r: %s", street, e)
         return names
 
     seen = {n.lower() for n in names}
@@ -692,7 +704,7 @@ async def _generate_and_cache(osm_id: str, place_data: dict) -> dict[str, str] |
     try:
         await es.update(index=INDEX, id=osm_id, body={"doc": {"ai_description": desc}})
     except Exception as e:
-        logger.error(f"[geocoder] Failed to cache ai_description for {osm_id}: {e}")
+        logger.error("[geocoder] Failed to cache ai_description for %s: %s", osm_id, e)
 
     return desc
 
@@ -1314,7 +1326,7 @@ async def autocomplete(
                 request.state.result_count = len(redis_hits)
                 return {"source": "redis", "results": redis_hits}
         except Exception as e:
-            logger.error(f"[geocoder] Redis autocomplete error, falling back to ES: {e}")
+            logger.error("[geocoder] Redis autocomplete error, falling back to ES: %s", e)
 
     # ── Elasticsearch edge-ngram autocomplete (fallback) ────────────────
     q_norm = normalize_address_text(q)
@@ -1609,7 +1621,7 @@ async def feedback(
             },
         )
     except Exception as e:
-        logger.error(f"[geocoder] Failed to update popularity for {osm_id}: {e}")
+        logger.error("[geocoder] Failed to update popularity for %s: %s", osm_id, e)
 
     # Update Redis autocomplete score in background
     if redis_pool is not None:
@@ -1995,7 +2007,7 @@ async def insert(message: InsertMessage):
         if not ack:
             raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
 
-        logger.info(f"[geocoder] Published element {message.osm_id} to NATS stream")
+        logger.info("[geocoder] Published element %s to NATS stream", message.osm_id)
 
         return {
             "status": "ok",
@@ -2004,7 +2016,7 @@ async def insert(message: InsertMessage):
         }
 
     except Exception as e:
-        logger.error(f"[geocoder] Error inserting element: {e}")
+        logger.error("[geocoder] Error inserting element: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to insert element: {str(e)}") from e
 
 
@@ -2065,7 +2077,7 @@ async def add_place(place: PlaceCreate):
         if not ack:
             raise HTTPException(status_code=503, detail="Failed to publish to NATS stream")
 
-        logger.info(f"[geocoder] Published place {custom_id} to NATS stream")
+        logger.info("[geocoder] Published place %s to NATS stream", custom_id)
 
         # Index into Redis autocomplete immediately (don't wait for ES round-trip)
         if redis_pool is not None:
@@ -2101,7 +2113,7 @@ async def add_place(place: PlaceCreate):
         )
 
     except Exception as e:
-        logger.error(f"[geocoder] Error adding place: {e}")
+        logger.error("[geocoder] Error adding place: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to add place: {str(e)}") from e
 
 
@@ -2134,7 +2146,7 @@ async def submit_probes(batch: ProbeBatch):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[geocoder] Error publishing probes: {e}")
+        logger.error("[geocoder] Error publishing probes: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to submit probes: {str(e)}") from e
     return {"status": "accepted", "device_id": batch.device_id, "points": n}
 
@@ -2148,7 +2160,7 @@ async def submit_probe(ping: ProbePing, device_id: str = Query(..., min_length=1
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[geocoder] Error publishing probe: {e}")
+        logger.error("[geocoder] Error publishing probe: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to submit probe: {str(e)}") from e
     return {"status": "accepted", "device_id": device_id, "points": 1}
 
@@ -2285,7 +2297,7 @@ async def reverse(
                 if doc.get("found"):
                     es_data[doc["_id"]] = doc["_source"]
         except Exception as e:
-            logger.error(f"[geocoder] Error fetching from Elasticsearch: {e}")
+            logger.error("[geocoder] Error fetching from Elasticsearch: %s", e)
 
     # Helper to merge PostGIS and ES data
     def merge_result(pg_row, es_source):
@@ -2406,7 +2418,7 @@ async def _publish_element(message: dict) -> bool:
         await js.publish(NATS_SUBJECT, json.dumps(message).encode(), timeout=10)
         return True
     except Exception as e:
-        logger.error(f"[geocoder] deep: failed to publish {message.get('osm_id')} to NATS: {e}")
+        logger.error("[geocoder] deep: failed to publish %s to NATS: %s", message.get("osm_id"), e)
         return False
 
 
@@ -2442,7 +2454,7 @@ async def deep_forward(
         try:
             mapped.append(map_result_to_element(r, language))
         except Exception as e:
-            logger.warning(f"[geocoder] deep/forward: skipped a result ({e})")
+            logger.warning("[geocoder] deep/forward: skipped a result (%s)", e)
 
     published = 0
     if publish:
@@ -2510,7 +2522,7 @@ async def deep_reverse(
         try:
             mapped.append(map_result_to_element(r, language))
         except Exception as e:
-            logger.warning(f"[geocoder] deep/reverse: skipped a result ({e})")
+            logger.warning("[geocoder] deep/reverse: skipped a result (%s)", e)
 
     published = 0
     if publish:
@@ -2521,7 +2533,7 @@ async def deep_reverse(
     try:
         result = await reverse(lat=lat, lon=lon, describe=describe)
     except Exception as e:
-        logger.error(f"[geocoder] deep/reverse: local reverse failed ({e})")
+        logger.error("[geocoder] deep/reverse: local reverse failed (%s)", e)
         result = {
             "nearest_address": None,
             "interpolated_address": None,
@@ -2627,7 +2639,7 @@ async def deep_nearby(
         try:
             mapped.append(map_place_to_element(p, language))
         except Exception as e:
-            logger.warning(f"[geocoder] deep/nearby: skipped a result ({e})")
+            logger.warning("[geocoder] deep/nearby: skipped a result (%s)", e)
 
     published = 0
     if publish:
@@ -2690,11 +2702,11 @@ if __name__ == "__main__":
     # vertically via uvicorn workers and horizontally via replicas. With >1 worker
     # uvicorn needs an import string to fork; the per-worker warm-up is guarded by
     # a fleet-wide Redis lock so workers/replicas don't all rescan ES.
-    workers = int(os.getenv("GEOCODER_WORKERS", "1"))
+    workers = GEOCODER_WORKERS
     # Hold idle keep-alive connections longer than uvicorn's 5s default so the
     # APISIX upstream pool (and any keep-alive client) reuses warm connections
     # instead of re-handshaking between bursts. Tunable via env.
-    keep_alive = int(os.getenv("GEOCODER_KEEPALIVE_TIMEOUT", "30"))
+    keep_alive = GEOCODER_KEEPALIVE_TIMEOUT
     if workers > 1:
         uvicorn.run(
             "services.geocoder:app",

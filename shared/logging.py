@@ -14,8 +14,9 @@ Usage::
 """
 
 import logging
-import os
 import sys
+
+from shared.config import LOG_LEVEL
 
 _CONFIGURED = False
 
@@ -31,8 +32,7 @@ def _configure_root() -> None:
     if _CONFIGURED:
         return
 
-    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    level = getattr(logging, LOG_LEVEL, logging.INFO)
 
     root = logging.getLogger("geocoder")
     root.setLevel(level)

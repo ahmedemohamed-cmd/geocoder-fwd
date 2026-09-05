@@ -101,7 +101,7 @@ def main():
         asyncio.run(clean())
 
     else:
-        logger.info(f"Unknown service: {service}")
+        logger.info("Unknown service: %s", service)
         logger.info("Run  python run.py --help  for available services.")
         sys.exit(1)
 
