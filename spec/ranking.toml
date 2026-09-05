@@ -1,0 +1,266 @@
+# Ranking specification — offline importance scoring
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION.
+#
+# Every number here is a tuning decision that cannot be re-derived from the
+# architecture. `shared/ranking.py` is thin logic that reads this file; the
+# knowledge lives here so a regenerated implementation produces the same
+# ranking instead of inventing its own.
+#
+# Changing any value changes search results. Measure against
+# docs/quality-baseline.md before and after — see AD-9 in the geocoder spine.
+#
+# Model: each signal scores 0..1, is multiplied by its weight below, and the
+# weighted sum is normalised by the total weight of the signals that APPLIED,
+# then scaled to 0..10. Signals that do not apply to an element (area on a
+# point, admin_level on a non-boundary) are excluded from the denominator so
+# points are not systematically penalised.
+
+[weights]
+# admin_level and area dominate for boundaries and polygons.
+# poi merges venue/building/office/named-floor via max() to avoid double count.
+admin = 5.0
+area = 4.0
+place = 2.5
+population = 1.5
+highway = 1.5
+natural = 1.0
+metadata = 0.5
+landuse = 1.0
+poi = 1.0
+brand = 0.3
+
+[scalars]
+# admin_level 2 (country) scores 1.0, decaying per level: 4 -> 0.80, 10 -> 0.20.
+admin_decay_per_level = 0.10
+admin_base_level = 2
+# log10(population) / divisor, capped at 1.0. 10M -> ~1.0, 1000 -> ~0.43.
+population_log_divisor = 7.0
+# (log10(area_km2) + offset) / divisor, clamped. 10000 km2 -> 1.0, 0.01 -> 0.
+area_log_offset = 2.0
+area_log_divisor = 6.0
+# Wikidata and Wikipedia presence each contribute half the metadata signal.
+metadata_wikidata = 0.5
+metadata_wikipedia = 0.5
+# An office type not in the table still outranks a bare node.
+office_unknown_floor = 0.30
+# A named POI with real-place evidence never sits at 0.
+named_poi_floor = 0.25
+
+[keys]
+# Tag keys consulted for the venue signal; the highest scoring one wins.
+venue_tags = ["amenity", "shop", "leisure", "tourism", "aeroway"]
+# Presence of any of these is evidence a named element is a real curated POI,
+# which gates the named_poi_floor so trivially-named bare nodes are not lifted.
+poi_evidence = ["source", "phone", "website", "rating", "opening_hours", "brand", "operator", "ref:google_place_id", "ref:source_id"]
+
+[tables.place]
+"continent" = 1.0
+"country" = 0.95
+"state" = 0.85
+"region" = 0.8
+"province" = 0.8
+"city" = 0.9
+"town" = 0.75
+"village" = 0.6
+"suburb" = 0.55
+"neighbourhood" = 0.45
+"quarter" = 0.4
+"borough" = 0.55
+"island" = 0.5
+"hamlet" = 0.35
+"locality" = 0.2
+"isolated_dwelling" = 0.1
+"farm" = 0.1
+
+[tables.landuse]
+"residential" = 0.7
+"commercial" = 0.65
+"retail" = 0.6
+"industrial" = 0.5
+"education" = 0.55
+"healthcare" = 0.6
+"recreation_ground" = 0.45
+"park" = 0.5
+"garden" = 0.4
+"cemetery" = 0.35
+"forest" = 0.3
+"farmland" = 0.25
+"meadow" = 0.25
+"grass" = 0.2
+"construction" = 0.3
+"military" = 0.2
+"brownfield" = 0.15
+"greenfield" = 0.15
+
+[tables.venue]
+"restaurant" = 0.8
+"cafe" = 0.75
+"bar" = 0.7
+"pub" = 0.7
+"fast_food" = 0.6
+"food_court" = 0.55
+"cinema" = 0.75
+"theatre" = 0.8
+"arts_centre" = 0.7
+"music_venue" = 0.75
+"nightclub" = 0.65
+"library" = 0.7
+"museum" = 0.8
+"gallery" = 0.65
+"conference_centre" = 0.75
+"events_venue" = 0.7
+"hospital" = 0.85
+"clinic" = 0.7
+"pharmacy" = 0.65
+"doctors" = 0.6
+"dentist" = 0.55
+"veterinary" = 0.5
+"school" = 0.7
+"university" = 0.8
+"college" = 0.7
+"kindergarten" = 0.6
+"bank" = 0.65
+"atm" = 0.5
+"post_office" = 0.6
+"police" = 0.7
+"fire_station" = 0.65
+"townhall" = 0.75
+"courthouse" = 0.7
+"community_centre" = 0.6
+"place_of_worship" = 0.65
+"money_transfer" = 0.5
+"fuel" = 0.6
+"bus_station" = 0.65
+"taxi" = 0.5
+"embassy" = 0.7
+"aerodrome" = 0.9
+"terminal" = 0.75
+"supermarket" = 0.75
+"department_store" = 0.7
+"convenience" = 0.6
+"mall" = 0.7
+"marketplace" = 0.65
+"bakery" = 0.55
+"butcher" = 0.5
+"clothes" = 0.55
+"shoes" = 0.5
+"electronics" = 0.6
+"books" = 0.55
+"gift" = 0.5
+"jewelry" = 0.55
+"furniture" = 0.55
+"hardware" = 0.55
+"sports" = 0.55
+"toys" = 0.5
+"car" = 0.55
+"car_repair" = 0.5
+"sports_centre" = 0.7
+"stadium" = 0.8
+"swimming_pool" = 0.65
+"fitness_centre" = 0.6
+"golf_course" = 0.6
+"ice_rink" = 0.55
+"bowling_alley" = 0.5
+"park" = 0.55
+"hotel" = 0.75
+"hostel" = 0.6
+"motel" = 0.55
+"guest_house" = 0.6
+"apartment" = 0.55
+"camp_site" = 0.5
+"attraction" = 0.7
+"theme_park" = 0.75
+"zoo" = 0.7
+"aquarium" = 0.65
+"viewpoint" = 0.5
+"picnic_site" = 0.45
+"information" = 0.4
+
+[tables.highway]
+"motorway" = 0.9
+"trunk" = 0.8
+"primary" = 0.7
+"secondary" = 0.6
+"tertiary" = 0.5
+"motorway_link" = 0.45
+"trunk_link" = 0.4
+"primary_link" = 0.35
+"unclassified" = 0.3
+"residential" = 0.35
+"living_street" = 0.25
+"service" = 0.15
+"pedestrian" = 0.2
+"track" = 0.1
+"footway" = 0.1
+"cycleway" = 0.1
+"path" = 0.05
+
+[tables.natural]
+"coastline" = 0.8
+"water" = 0.7
+"peak" = 0.7
+"volcano" = 0.75
+"glacier" = 0.65
+"bay" = 0.65
+"beach" = 0.6
+"cliff" = 0.5
+"cave_entrance" = 0.5
+"wetland" = 0.45
+"wood" = 0.3
+"scrub" = 0.15
+"grassland" = 0.2
+"heath" = 0.15
+"sand" = 0.15
+
+[tables.waterway]
+"river" = 0.75
+"canal" = 0.6
+"stream" = 0.4
+"drain" = 0.2
+"ditch" = 0.1
+
+[tables.building]
+# Generic buildings (building=yes) score 0 deliberately: millions of
+# unclassified buildings would otherwise add pure noise.
+"commercial" = 0.65
+"office" = 0.6
+"retail" = 0.6
+"supermarket" = 0.7
+"department_store" = 0.65
+"hotel" = 0.7
+"hospital" = 0.8
+"school" = 0.65
+"university" = 0.75
+
+[tables.office]
+"government" = 0.55
+"diplomatic" = 0.55
+"financial" = 0.5
+"insurance" = 0.45
+"lawyer" = 0.45
+"notary" = 0.45
+"estate_agent" = 0.45
+"telecommunication" = 0.45
+"accountant" = 0.4
+"company" = 0.4
+"it" = 0.4
+"travel_agent" = 0.4
+"employment_agency" = 0.35
+"coworking" = 0.35
+"yes" = 0.3
+
+[tables.brand]
+# Brand names are normalised (lowercased, non-alphanumerics stripped) before
+# lookup, so "McDonald's" matches the key "mcdonalds".
+"microsoft" = 0.4
+"apple" = 0.4
+"google" = 0.4
+"amazon" = 0.4
+"samsung" = 0.35
+"mcdonalds" = 0.35
+"starbucks" = 0.35
+"cocacola" = 0.35
+"pepsi" = 0.35
+"nike" = 0.35
+"adidas" = 0.35

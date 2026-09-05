@@ -17,6 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy only necessary application directories
 COPY services/ /app/services/
 COPY shared/ /app/shared/
+# Ranking specification — shared/ranking.py loads this at import time.
+COPY spec/ /app/spec/
 COPY run.py /app/
 
 # Create data directory

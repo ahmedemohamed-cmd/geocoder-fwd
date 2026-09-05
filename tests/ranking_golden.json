@@ -1,0 +1,5172 @@
+[
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=continent",
+  "rank": 3.6765,
+  "tags": {
+   "place": "continent"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=country",
+  "rank": 3.4926,
+  "tags": {
+   "place": "country"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=state",
+  "rank": 3.125,
+  "tags": {
+   "place": "state"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=region",
+  "rank": 2.9412,
+  "tags": {
+   "place": "region"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=province",
+  "rank": 2.9412,
+  "tags": {
+   "place": "province"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=city",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=town",
+  "rank": 2.7574,
+  "tags": {
+   "place": "town"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=village",
+  "rank": 2.2059,
+  "tags": {
+   "place": "village"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=suburb",
+  "rank": 2.0221,
+  "tags": {
+   "place": "suburb"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=neighbourhood",
+  "rank": 1.6544,
+  "tags": {
+   "place": "neighbourhood"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=quarter",
+  "rank": 1.4706,
+  "tags": {
+   "place": "quarter"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=borough",
+  "rank": 2.0221,
+  "tags": {
+   "place": "borough"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=island",
+  "rank": 1.8382,
+  "tags": {
+   "place": "island"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=hamlet",
+  "rank": 1.2868,
+  "tags": {
+   "place": "hamlet"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=locality",
+  "rank": 0.7353,
+  "tags": {
+   "place": "locality"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=isolated_dwelling",
+  "rank": 0.3676,
+  "tags": {
+   "place": "isolated_dwelling"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "place=farm",
+  "rank": 0.3676,
+  "tags": {
+   "place": "farm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=residential",
+  "rank": 1.0294,
+  "tags": {
+   "landuse": "residential"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=commercial",
+  "rank": 0.9559,
+  "tags": {
+   "landuse": "commercial"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=retail",
+  "rank": 0.8824,
+  "tags": {
+   "landuse": "retail"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=industrial",
+  "rank": 0.7353,
+  "tags": {
+   "landuse": "industrial"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=education",
+  "rank": 0.8088,
+  "tags": {
+   "landuse": "education"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=healthcare",
+  "rank": 0.8824,
+  "tags": {
+   "landuse": "healthcare"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=recreation_ground",
+  "rank": 0.6618,
+  "tags": {
+   "landuse": "recreation_ground"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=park",
+  "rank": 0.7353,
+  "tags": {
+   "landuse": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=garden",
+  "rank": 0.5882,
+  "tags": {
+   "landuse": "garden"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=cemetery",
+  "rank": 0.5147,
+  "tags": {
+   "landuse": "cemetery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=forest",
+  "rank": 0.4412,
+  "tags": {
+   "landuse": "forest"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=farmland",
+  "rank": 0.3676,
+  "tags": {
+   "landuse": "farmland"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=meadow",
+  "rank": 0.3676,
+  "tags": {
+   "landuse": "meadow"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=grass",
+  "rank": 0.2941,
+  "tags": {
+   "landuse": "grass"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=construction",
+  "rank": 0.4412,
+  "tags": {
+   "landuse": "construction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=military",
+  "rank": 0.2941,
+  "tags": {
+   "landuse": "military"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=brownfield",
+  "rank": 0.2206,
+  "tags": {
+   "landuse": "brownfield"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "landuse=greenfield",
+  "rank": 0.2206,
+  "tags": {
+   "landuse": "greenfield"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=restaurant",
+  "rank": 1.1765,
+  "tags": {
+   "amenity": "restaurant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=restaurant",
+  "rank": 1.1765,
+  "tags": {
+   "shop": "restaurant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=restaurant",
+  "rank": 1.1765,
+  "tags": {
+   "leisure": "restaurant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=restaurant",
+  "rank": 1.1765,
+  "tags": {
+   "tourism": "restaurant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=restaurant",
+  "rank": 1.1765,
+  "tags": {
+   "aeroway": "restaurant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=cafe",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "cafe"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=cafe",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "cafe"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=cafe",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "cafe"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=cafe",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "cafe"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=cafe",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "cafe"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=bar",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "bar"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=bar",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "bar"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=bar",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "bar"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=bar",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "bar"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=bar",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "bar"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=pub",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "pub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=pub",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "pub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=pub",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "pub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=pub",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "pub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=pub",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "pub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=fast_food",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "fast_food"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=fast_food",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "fast_food"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=fast_food",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "fast_food"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=fast_food",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "fast_food"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=fast_food",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "fast_food"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=food_court",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "food_court"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=food_court",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "food_court"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=food_court",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "food_court"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=food_court",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "food_court"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=food_court",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "food_court"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=cinema",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "cinema"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=cinema",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "cinema"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=cinema",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "cinema"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=cinema",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "cinema"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=cinema",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "cinema"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=theatre",
+  "rank": 1.1765,
+  "tags": {
+   "amenity": "theatre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=theatre",
+  "rank": 1.1765,
+  "tags": {
+   "shop": "theatre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=theatre",
+  "rank": 1.1765,
+  "tags": {
+   "leisure": "theatre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=theatre",
+  "rank": 1.1765,
+  "tags": {
+   "tourism": "theatre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=theatre",
+  "rank": 1.1765,
+  "tags": {
+   "aeroway": "theatre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=arts_centre",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "arts_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=arts_centre",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "arts_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=arts_centre",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "arts_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=arts_centre",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "arts_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=arts_centre",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "arts_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=music_venue",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "music_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=music_venue",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "music_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=music_venue",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "music_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=music_venue",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "music_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=music_venue",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "music_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=nightclub",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "nightclub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=nightclub",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "nightclub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=nightclub",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "nightclub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=nightclub",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "nightclub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=nightclub",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "nightclub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=library",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "library"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=library",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "library"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=library",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "library"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=library",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "library"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=library",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "library"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=museum",
+  "rank": 1.1765,
+  "tags": {
+   "amenity": "museum"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=museum",
+  "rank": 1.1765,
+  "tags": {
+   "shop": "museum"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=museum",
+  "rank": 1.1765,
+  "tags": {
+   "leisure": "museum"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=museum",
+  "rank": 1.1765,
+  "tags": {
+   "tourism": "museum"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=museum",
+  "rank": 1.1765,
+  "tags": {
+   "aeroway": "museum"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=gallery",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "gallery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=gallery",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "gallery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=gallery",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "gallery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=gallery",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "gallery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=gallery",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "gallery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=conference_centre",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "conference_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=conference_centre",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "conference_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=conference_centre",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "conference_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=conference_centre",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "conference_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=conference_centre",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "conference_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=events_venue",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "events_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=events_venue",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "events_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=events_venue",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "events_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=events_venue",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "events_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=events_venue",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "events_venue"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=hospital",
+  "rank": 1.25,
+  "tags": {
+   "amenity": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=hospital",
+  "rank": 1.25,
+  "tags": {
+   "shop": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=hospital",
+  "rank": 1.25,
+  "tags": {
+   "leisure": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=hospital",
+  "rank": 1.25,
+  "tags": {
+   "tourism": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=hospital",
+  "rank": 1.25,
+  "tags": {
+   "aeroway": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=clinic",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "clinic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=clinic",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "clinic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=clinic",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "clinic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=clinic",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "clinic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=clinic",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "clinic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=pharmacy",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "pharmacy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=pharmacy",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "pharmacy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=pharmacy",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "pharmacy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=pharmacy",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "pharmacy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=pharmacy",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "pharmacy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=doctors",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "doctors"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=doctors",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "doctors"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=doctors",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "doctors"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=doctors",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "doctors"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=doctors",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "doctors"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=dentist",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "dentist"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=dentist",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "dentist"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=dentist",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "dentist"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=dentist",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "dentist"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=dentist",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "dentist"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=veterinary",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "veterinary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=veterinary",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "veterinary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=veterinary",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "veterinary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=veterinary",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "veterinary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=veterinary",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "veterinary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=school",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=school",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=school",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=school",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=school",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=university",
+  "rank": 1.1765,
+  "tags": {
+   "amenity": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=university",
+  "rank": 1.1765,
+  "tags": {
+   "shop": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=university",
+  "rank": 1.1765,
+  "tags": {
+   "leisure": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=university",
+  "rank": 1.1765,
+  "tags": {
+   "tourism": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=university",
+  "rank": 1.1765,
+  "tags": {
+   "aeroway": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=college",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "college"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=college",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "college"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=college",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "college"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=college",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "college"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=college",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "college"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=kindergarten",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "kindergarten"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=kindergarten",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "kindergarten"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=kindergarten",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "kindergarten"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=kindergarten",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "kindergarten"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=kindergarten",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "kindergarten"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=bank",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "bank"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=bank",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "bank"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=bank",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "bank"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=bank",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "bank"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=bank",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "bank"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=atm",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "atm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=atm",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "atm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=atm",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "atm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=atm",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "atm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=atm",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "atm"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=post_office",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "post_office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=post_office",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "post_office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=post_office",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "post_office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=post_office",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "post_office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=post_office",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "post_office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=police",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "police"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=police",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "police"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=police",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "police"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=police",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "police"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=police",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "police"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=fire_station",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "fire_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=fire_station",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "fire_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=fire_station",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "fire_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=fire_station",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "fire_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=fire_station",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "fire_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=townhall",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "townhall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=townhall",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "townhall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=townhall",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "townhall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=townhall",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "townhall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=townhall",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "townhall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=courthouse",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "courthouse"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=courthouse",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "courthouse"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=courthouse",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "courthouse"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=courthouse",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "courthouse"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=courthouse",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "courthouse"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=community_centre",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "community_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=community_centre",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "community_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=community_centre",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "community_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=community_centre",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "community_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=community_centre",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "community_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=place_of_worship",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "place_of_worship"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=place_of_worship",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "place_of_worship"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=place_of_worship",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "place_of_worship"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=place_of_worship",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "place_of_worship"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=place_of_worship",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "place_of_worship"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=money_transfer",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "money_transfer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=money_transfer",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "money_transfer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=money_transfer",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "money_transfer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=money_transfer",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "money_transfer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=money_transfer",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "money_transfer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=fuel",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "fuel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=fuel",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "fuel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=fuel",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "fuel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=fuel",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "fuel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=fuel",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "fuel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=bus_station",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "bus_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=bus_station",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "bus_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=bus_station",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "bus_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=bus_station",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "bus_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=bus_station",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "bus_station"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=taxi",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "taxi"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=taxi",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "taxi"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=taxi",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "taxi"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=taxi",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "taxi"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=taxi",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "taxi"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=embassy",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "embassy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=embassy",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "embassy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=embassy",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "embassy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=embassy",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "embassy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=embassy",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "embassy"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=aerodrome",
+  "rank": 1.3235,
+  "tags": {
+   "amenity": "aerodrome"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=aerodrome",
+  "rank": 1.3235,
+  "tags": {
+   "shop": "aerodrome"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=aerodrome",
+  "rank": 1.3235,
+  "tags": {
+   "leisure": "aerodrome"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=aerodrome",
+  "rank": 1.3235,
+  "tags": {
+   "tourism": "aerodrome"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=aerodrome",
+  "rank": 1.3235,
+  "tags": {
+   "aeroway": "aerodrome"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=terminal",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "terminal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=terminal",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "terminal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=terminal",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "terminal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=terminal",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "terminal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=terminal",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "terminal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=supermarket",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=supermarket",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=supermarket",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=supermarket",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=supermarket",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=department_store",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=department_store",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=department_store",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=department_store",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=department_store",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=convenience",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "convenience"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=convenience",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "convenience"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=convenience",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "convenience"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=convenience",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "convenience"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=convenience",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "convenience"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=mall",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "mall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=mall",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "mall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=mall",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "mall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=mall",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "mall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=mall",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "mall"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=marketplace",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "marketplace"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=marketplace",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "marketplace"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=marketplace",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "marketplace"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=marketplace",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "marketplace"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=marketplace",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "marketplace"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=bakery",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "bakery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=bakery",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "bakery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=bakery",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "bakery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=bakery",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "bakery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=bakery",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "bakery"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=butcher",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "butcher"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=butcher",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "butcher"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=butcher",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "butcher"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=butcher",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "butcher"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=butcher",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "butcher"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=clothes",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "clothes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=clothes",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "clothes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=clothes",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "clothes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=clothes",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "clothes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=clothes",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "clothes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=shoes",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "shoes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=shoes",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "shoes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=shoes",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "shoes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=shoes",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "shoes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=shoes",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "shoes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=electronics",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "electronics"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=electronics",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "electronics"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=electronics",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "electronics"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=electronics",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "electronics"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=electronics",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "electronics"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=books",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "books"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=books",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "books"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=books",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "books"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=books",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "books"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=books",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "books"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=gift",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "gift"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=gift",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "gift"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=gift",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "gift"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=gift",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "gift"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=gift",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "gift"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=jewelry",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "jewelry"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=jewelry",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "jewelry"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=jewelry",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "jewelry"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=jewelry",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "jewelry"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=jewelry",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "jewelry"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=furniture",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "furniture"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=furniture",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "furniture"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=furniture",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "furniture"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=furniture",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "furniture"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=furniture",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "furniture"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=hardware",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "hardware"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=hardware",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "hardware"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=hardware",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "hardware"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=hardware",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "hardware"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=hardware",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "hardware"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=sports",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "sports"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=sports",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "sports"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=sports",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "sports"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=sports",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "sports"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=sports",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "sports"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=toys",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "toys"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=toys",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "toys"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=toys",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "toys"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=toys",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "toys"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=toys",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "toys"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=car",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "car"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=car",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "car"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=car",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "car"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=car",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "car"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=car",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "car"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=car_repair",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "car_repair"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=car_repair",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "car_repair"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=car_repair",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "car_repair"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=car_repair",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "car_repair"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=car_repair",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "car_repair"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=sports_centre",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "sports_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=sports_centre",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "sports_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=sports_centre",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "sports_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=sports_centre",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "sports_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=sports_centre",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "sports_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=stadium",
+  "rank": 1.1765,
+  "tags": {
+   "amenity": "stadium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=stadium",
+  "rank": 1.1765,
+  "tags": {
+   "shop": "stadium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=stadium",
+  "rank": 1.1765,
+  "tags": {
+   "leisure": "stadium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=stadium",
+  "rank": 1.1765,
+  "tags": {
+   "tourism": "stadium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=stadium",
+  "rank": 1.1765,
+  "tags": {
+   "aeroway": "stadium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=swimming_pool",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "swimming_pool"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=swimming_pool",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "swimming_pool"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=swimming_pool",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "swimming_pool"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=swimming_pool",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "swimming_pool"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=swimming_pool",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "swimming_pool"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=fitness_centre",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "fitness_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=fitness_centre",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "fitness_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=fitness_centre",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "fitness_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=fitness_centre",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "fitness_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=fitness_centre",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "fitness_centre"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=golf_course",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "golf_course"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=golf_course",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "golf_course"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=golf_course",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "golf_course"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=golf_course",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "golf_course"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=golf_course",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "golf_course"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=ice_rink",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "ice_rink"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=ice_rink",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "ice_rink"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=ice_rink",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "ice_rink"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=ice_rink",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "ice_rink"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=ice_rink",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "ice_rink"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=bowling_alley",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "bowling_alley"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=bowling_alley",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "bowling_alley"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=bowling_alley",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "bowling_alley"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=bowling_alley",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "bowling_alley"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=bowling_alley",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "bowling_alley"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=park",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=park",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=park",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=park",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=park",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=hotel",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=hotel",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=hotel",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=hotel",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=hotel",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=hostel",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "hostel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=hostel",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "hostel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=hostel",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "hostel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=hostel",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "hostel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=hostel",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "hostel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=motel",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "motel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=motel",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "motel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=motel",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "motel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=motel",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "motel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=motel",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "motel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=guest_house",
+  "rank": 0.8824,
+  "tags": {
+   "amenity": "guest_house"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=guest_house",
+  "rank": 0.8824,
+  "tags": {
+   "shop": "guest_house"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=guest_house",
+  "rank": 0.8824,
+  "tags": {
+   "leisure": "guest_house"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=guest_house",
+  "rank": 0.8824,
+  "tags": {
+   "tourism": "guest_house"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=guest_house",
+  "rank": 0.8824,
+  "tags": {
+   "aeroway": "guest_house"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=apartment",
+  "rank": 0.8088,
+  "tags": {
+   "amenity": "apartment"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=apartment",
+  "rank": 0.8088,
+  "tags": {
+   "shop": "apartment"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=apartment",
+  "rank": 0.8088,
+  "tags": {
+   "leisure": "apartment"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=apartment",
+  "rank": 0.8088,
+  "tags": {
+   "tourism": "apartment"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=apartment",
+  "rank": 0.8088,
+  "tags": {
+   "aeroway": "apartment"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=camp_site",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "camp_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=camp_site",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "camp_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=camp_site",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "camp_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=camp_site",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "camp_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=camp_site",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "camp_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=attraction",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "attraction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=attraction",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "attraction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=attraction",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "attraction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=attraction",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "attraction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=attraction",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "attraction"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=theme_park",
+  "rank": 1.1029,
+  "tags": {
+   "amenity": "theme_park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=theme_park",
+  "rank": 1.1029,
+  "tags": {
+   "shop": "theme_park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=theme_park",
+  "rank": 1.1029,
+  "tags": {
+   "leisure": "theme_park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=theme_park",
+  "rank": 1.1029,
+  "tags": {
+   "tourism": "theme_park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=theme_park",
+  "rank": 1.1029,
+  "tags": {
+   "aeroway": "theme_park"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=zoo",
+  "rank": 1.0294,
+  "tags": {
+   "amenity": "zoo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=zoo",
+  "rank": 1.0294,
+  "tags": {
+   "shop": "zoo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=zoo",
+  "rank": 1.0294,
+  "tags": {
+   "leisure": "zoo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=zoo",
+  "rank": 1.0294,
+  "tags": {
+   "tourism": "zoo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=zoo",
+  "rank": 1.0294,
+  "tags": {
+   "aeroway": "zoo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=aquarium",
+  "rank": 0.9559,
+  "tags": {
+   "amenity": "aquarium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=aquarium",
+  "rank": 0.9559,
+  "tags": {
+   "shop": "aquarium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=aquarium",
+  "rank": 0.9559,
+  "tags": {
+   "leisure": "aquarium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=aquarium",
+  "rank": 0.9559,
+  "tags": {
+   "tourism": "aquarium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=aquarium",
+  "rank": 0.9559,
+  "tags": {
+   "aeroway": "aquarium"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=viewpoint",
+  "rank": 0.7353,
+  "tags": {
+   "amenity": "viewpoint"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=viewpoint",
+  "rank": 0.7353,
+  "tags": {
+   "shop": "viewpoint"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=viewpoint",
+  "rank": 0.7353,
+  "tags": {
+   "leisure": "viewpoint"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=viewpoint",
+  "rank": 0.7353,
+  "tags": {
+   "tourism": "viewpoint"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=viewpoint",
+  "rank": 0.7353,
+  "tags": {
+   "aeroway": "viewpoint"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=picnic_site",
+  "rank": 0.6618,
+  "tags": {
+   "amenity": "picnic_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=picnic_site",
+  "rank": 0.6618,
+  "tags": {
+   "shop": "picnic_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=picnic_site",
+  "rank": 0.6618,
+  "tags": {
+   "leisure": "picnic_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=picnic_site",
+  "rank": 0.6618,
+  "tags": {
+   "tourism": "picnic_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=picnic_site",
+  "rank": 0.6618,
+  "tags": {
+   "aeroway": "picnic_site"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "amenity=information",
+  "rank": 0.5882,
+  "tags": {
+   "amenity": "information"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "shop=information",
+  "rank": 0.5882,
+  "tags": {
+   "shop": "information"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "leisure=information",
+  "rank": 0.5882,
+  "tags": {
+   "leisure": "information"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "tourism=information",
+  "rank": 0.5882,
+  "tags": {
+   "tourism": "information"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "aeroway=information",
+  "rank": 0.5882,
+  "tags": {
+   "aeroway": "information"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=motorway",
+  "rank": 1.6265,
+  "tags": {
+   "highway": "motorway"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=trunk",
+  "rank": 1.4458,
+  "tags": {
+   "highway": "trunk"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=primary",
+  "rank": 1.2651,
+  "tags": {
+   "highway": "primary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=secondary",
+  "rank": 1.0843,
+  "tags": {
+   "highway": "secondary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=tertiary",
+  "rank": 0.9036,
+  "tags": {
+   "highway": "tertiary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=motorway_link",
+  "rank": 0.8133,
+  "tags": {
+   "highway": "motorway_link"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=trunk_link",
+  "rank": 0.7229,
+  "tags": {
+   "highway": "trunk_link"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=primary_link",
+  "rank": 0.6325,
+  "tags": {
+   "highway": "primary_link"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=unclassified",
+  "rank": 0.5422,
+  "tags": {
+   "highway": "unclassified"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=residential",
+  "rank": 0.6325,
+  "tags": {
+   "highway": "residential"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=living_street",
+  "rank": 0.4518,
+  "tags": {
+   "highway": "living_street"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=service",
+  "rank": 0.2711,
+  "tags": {
+   "highway": "service"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=pedestrian",
+  "rank": 0.3614,
+  "tags": {
+   "highway": "pedestrian"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=track",
+  "rank": 0.1807,
+  "tags": {
+   "highway": "track"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=footway",
+  "rank": 0.1807,
+  "tags": {
+   "highway": "footway"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=cycleway",
+  "rank": 0.1807,
+  "tags": {
+   "highway": "cycleway"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "highway=path",
+  "rank": 0.0904,
+  "tags": {
+   "highway": "path"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=coastline",
+  "rank": 1.0256,
+  "tags": {
+   "natural": "coastline"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=water",
+  "rank": 0.8974,
+  "tags": {
+   "natural": "water"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=peak",
+  "rank": 0.8974,
+  "tags": {
+   "natural": "peak"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=volcano",
+  "rank": 0.9615,
+  "tags": {
+   "natural": "volcano"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=glacier",
+  "rank": 0.8333,
+  "tags": {
+   "natural": "glacier"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=bay",
+  "rank": 0.8333,
+  "tags": {
+   "natural": "bay"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=beach",
+  "rank": 0.7692,
+  "tags": {
+   "natural": "beach"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=cliff",
+  "rank": 0.641,
+  "tags": {
+   "natural": "cliff"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=cave_entrance",
+  "rank": 0.641,
+  "tags": {
+   "natural": "cave_entrance"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=wetland",
+  "rank": 0.5769,
+  "tags": {
+   "natural": "wetland"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=wood",
+  "rank": 0.3846,
+  "tags": {
+   "natural": "wood"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=scrub",
+  "rank": 0.1923,
+  "tags": {
+   "natural": "scrub"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=grassland",
+  "rank": 0.2564,
+  "tags": {
+   "natural": "grassland"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=heath",
+  "rank": 0.1923,
+  "tags": {
+   "natural": "heath"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "natural=sand",
+  "rank": 0.1923,
+  "tags": {
+   "natural": "sand"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "waterway=river",
+  "rank": 0.9615,
+  "tags": {
+   "waterway": "river"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "waterway=canal",
+  "rank": 0.7692,
+  "tags": {
+   "waterway": "canal"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "waterway=stream",
+  "rank": 0.5128,
+  "tags": {
+   "waterway": "stream"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "waterway=drain",
+  "rank": 0.2564,
+  "tags": {
+   "waterway": "drain"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "waterway=ditch",
+  "rank": 0.1282,
+  "tags": {
+   "waterway": "ditch"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=commercial",
+  "rank": 0.9559,
+  "tags": {
+   "building": "commercial"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=office",
+  "rank": 0.8824,
+  "tags": {
+   "building": "office"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=retail",
+  "rank": 0.8824,
+  "tags": {
+   "building": "retail"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=supermarket",
+  "rank": 1.0294,
+  "tags": {
+   "building": "supermarket"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=department_store",
+  "rank": 0.9559,
+  "tags": {
+   "building": "department_store"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=hotel",
+  "rank": 1.0294,
+  "tags": {
+   "building": "hotel"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=hospital",
+  "rank": 1.1765,
+  "tags": {
+   "building": "hospital"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=school",
+  "rank": 0.9559,
+  "tags": {
+   "building": "school"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=university",
+  "rank": 1.1029,
+  "tags": {
+   "building": "university"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=government",
+  "rank": 0.8088,
+  "tags": {
+   "office": "government"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=diplomatic",
+  "rank": 0.8088,
+  "tags": {
+   "office": "diplomatic"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=financial",
+  "rank": 0.7353,
+  "tags": {
+   "office": "financial"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=insurance",
+  "rank": 0.6618,
+  "tags": {
+   "office": "insurance"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=lawyer",
+  "rank": 0.6618,
+  "tags": {
+   "office": "lawyer"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=notary",
+  "rank": 0.6618,
+  "tags": {
+   "office": "notary"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=estate_agent",
+  "rank": 0.6618,
+  "tags": {
+   "office": "estate_agent"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=telecommunication",
+  "rank": 0.6618,
+  "tags": {
+   "office": "telecommunication"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=accountant",
+  "rank": 0.5882,
+  "tags": {
+   "office": "accountant"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=company",
+  "rank": 0.5882,
+  "tags": {
+   "office": "company"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=it",
+  "rank": 0.5882,
+  "tags": {
+   "office": "it"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=travel_agent",
+  "rank": 0.5882,
+  "tags": {
+   "office": "travel_agent"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=employment_agency",
+  "rank": 0.5147,
+  "tags": {
+   "office": "employment_agency"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=coworking",
+  "rank": 0.5147,
+  "tags": {
+   "office": "coworking"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=yes",
+  "rank": 0.4412,
+  "tags": {
+   "office": "yes"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "office=unknown-floor",
+  "rank": 0.4412,
+  "tags": {
+   "office": "zzz-unknown"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "building=unknown",
+  "rank": 0.0,
+  "tags": {
+   "building": "zzz-unknown"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Microsoft'",
+  "rank": 0.5441,
+  "tags": {
+   "brand": "Microsoft",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Apple'",
+  "rank": 0.5441,
+  "tags": {
+   "brand": "Apple",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Google'",
+  "rank": 0.5441,
+  "tags": {
+   "brand": "Google",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Amazon'",
+  "rank": 0.5441,
+  "tags": {
+   "brand": "Amazon",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Samsung'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Samsung",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand=\"McDonald's\"",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "McDonald's",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Starbucks'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Starbucks",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Coca-Cola'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Coca-Cola",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Pepsi'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Pepsi",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Nike'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Nike",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Adidas'",
+  "rank": 0.5221,
+  "tags": {
+   "brand": "Adidas",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand='Unknown Brand'",
+  "rank": 0.3676,
+  "tags": {
+   "brand": "Unknown Brand",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "brand=''",
+  "rank": 0.0,
+  "tags": {
+   "brand": "",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=source",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "source": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=phone",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "phone": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=website",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "website": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=rating",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "rating": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=opening_hours",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "opening_hours": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=brand",
+  "rank": 0.3676,
+  "tags": {
+   "brand": "v",
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=operator",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "operator": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=ref:google_place_id",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "ref:google_place_id": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "poi-evidence=ref:source_id",
+  "rank": 0.3676,
+  "tags": {
+   "name": "X",
+   "ref:source_id": "v"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "named-no-evidence",
+  "rank": 0.0,
+  "tags": {
+   "name": "X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "evidence-no-name",
+  "rank": 0.0,
+  "tags": {
+   "phone": "1"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "admin=None",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": -1,
+  "area": 0.0,
+  "label": "admin=-1",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 0,
+  "area": 0.0,
+  "label": "admin=0",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 1,
+  "area": 0.0,
+  "label": "admin=1",
+  "rank": 6.1441,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 2,
+  "area": 0.0,
+  "label": "admin=2",
+  "rank": 6.1441,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 3,
+  "area": 0.0,
+  "label": "admin=3",
+  "rank": 5.7203,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 4,
+  "area": 0.0,
+  "label": "admin=4",
+  "rank": 5.2966,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 6,
+  "area": 0.0,
+  "label": "admin=6",
+  "rank": 4.4492,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 8,
+  "area": 0.0,
+  "label": "admin=8",
+  "rank": 3.6017,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 10,
+  "area": 0.0,
+  "label": "admin=10",
+  "rank": 2.7542,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 12,
+  "area": 0.0,
+  "label": "admin=12",
+  "rank": 1.9068,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": 20,
+  "area": 0.0,
+  "label": "admin=20",
+  "rank": 1.9068,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "area=0.0",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": -1.0,
+  "label": "area=-1.0",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.001,
+  "label": "area=0.001",
+  "rank": 2.0833,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.01,
+  "label": "area=0.01",
+  "rank": 2.0833,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 1.0,
+  "label": "area=1.0",
+  "rank": 3.3179,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 100.0,
+  "label": "area=100.0",
+  "rank": 4.5525,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 10000.0,
+  "label": "area=10000.0",
+  "rank": 5.787,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 1000000.0,
+  "label": "area=1000000.0",
+  "rank": 5.787,
+  "tags": {
+   "place": "city"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='0'",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city",
+   "population": "0"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='-5'",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city",
+   "population": "-5"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='1000'",
+  "rank": 4.2542,
+  "tags": {
+   "place": "city",
+   "population": "1000"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='50000'",
+  "rank": 4.7896,
+  "tags": {
+   "place": "city",
+   "population": "50000"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='10000000'",
+  "rank": 5.5147,
+  "tags": {
+   "place": "city",
+   "population": "10000000"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='1,234,567'",
+  "rank": 5.2284,
+  "tags": {
+   "place": "city",
+   "population": "1,234,567"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='1 234'",
+  "rank": 4.283,
+  "tags": {
+   "place": "city",
+   "population": "1 234"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop='abc'",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city",
+   "population": "abc"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop=''",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city",
+   "population": ""
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "pop=None",
+  "rank": 3.3088,
+  "tags": {
+   "place": "city",
+   "population": null
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "meta-both",
+  "rank": 0.7353,
+  "tags": {
+   "wikidata": "Q1",
+   "wikipedia": "en:X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "meta-wd",
+  "rank": 0.3676,
+  "tags": {
+   "wikidata": "Q1"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "meta-wp",
+  "rank": 0.3676,
+  "tags": {
+   "wikipedia": "en:X"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "empty",
+  "rank": 0.0,
+  "tags": {}
+ },
+ {
+  "admin": 4,
+  "area": 3000.0,
+  "label": "combo-city",
+  "rank": 7.5295,
+  "tags": {
+   "place": "city",
+   "population": "9500000",
+   "wikidata": "Q1",
+   "wikipedia": "en:Cairo"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "combo-poi",
+  "rank": 1.4044,
+  "tags": {
+   "amenity": "hospital",
+   "brand": "Nike",
+   "building": "hospital",
+   "name": "H",
+   "phone": "1"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "combo-street",
+  "rank": 1.2651,
+  "tags": {
+   "highway": "primary",
+   "name": "Tahrir"
+  }
+ },
+ {
+  "admin": null,
+  "area": 0.0,
+  "label": "combo-natural",
+  "rank": 0.9615,
+  "tags": {
+   "natural": "water",
+   "waterway": "river"
+  }
+ }
+]

@@ -25,188 +25,38 @@ denominator so that points and venues are not systematically penalised.
 
 import math
 import re
+import tomllib
+from pathlib import Path
+
+# ── ranking specification ─────────────────────────────────────────────────
+# Every weight and table below is loaded from spec/ranking.toml. That file is
+# specification, not configuration: the numbers are tuning decisions that
+# cannot be re-derived from the architecture, so they live in one declarative
+# place a regenerated implementation can read instead of reinventing.
+SPEC_PATH = Path(__file__).resolve().parent.parent / "spec" / "ranking.toml"
+
+with SPEC_PATH.open("rb") as _fh:
+    _SPEC = tomllib.load(_fh)
+
+_W = _SPEC["weights"]
+_S = _SPEC["scalars"]
 
 # ── place-type importance (0..1) ──────────────────────────────────────────
-_PLACE_SCORES: dict[str, float] = {
-    "continent": 1.0,
-    "country": 0.95,
-    "state": 0.85,
-    "region": 0.80,
-    "province": 0.80,
-    "city": 0.90,
-    "town": 0.75,
-    "village": 0.60,
-    "suburb": 0.55,
-    "neighbourhood": 0.45,
-    "quarter": 0.40,
-    "borough": 0.55,
-    "island": 0.50,
-    "hamlet": 0.35,
-    "locality": 0.20,
-    "isolated_dwelling": 0.10,
-    "farm": 0.10,
-}
+_PLACE_SCORES: dict[str, float] = _SPEC["tables"]["place"]
 
 # ── landuse importance (0..1) ─────────────────────────────────────────────
-_LANDUSE_SCORES: dict[str, float] = {
-    "residential": 0.70,
-    "commercial": 0.65,
-    "retail": 0.60,
-    "industrial": 0.50,
-    "education": 0.55,
-    "healthcare": 0.60,
-    "recreation_ground": 0.45,
-    "park": 0.50,
-    "garden": 0.40,
-    "cemetery": 0.35,
-    "forest": 0.30,
-    "farmland": 0.25,
-    "meadow": 0.25,
-    "grass": 0.20,
-    "construction": 0.30,
-    "military": 0.20,
-    "brownfield": 0.15,
-    "greenfield": 0.15,
-}
+_LANDUSE_SCORES: dict[str, float] = _SPEC["tables"]["landuse"]
 
 # ── venue importance (0..1) ───────────────────────────────────────────────
-_VENUE_SCORES: dict[str, float] = {
-    # amenity venues
-    "restaurant": 0.80,
-    "cafe": 0.75,
-    "bar": 0.70,
-    "pub": 0.70,
-    "fast_food": 0.60,
-    "food_court": 0.55,
-    "cinema": 0.75,
-    "theatre": 0.80,
-    "arts_centre": 0.70,
-    "music_venue": 0.75,
-    "nightclub": 0.65,
-    "library": 0.70,
-    "museum": 0.80,
-    "gallery": 0.65,
-    "conference_centre": 0.75,
-    "events_venue": 0.70,
-    "hospital": 0.85,
-    "clinic": 0.70,
-    "pharmacy": 0.65,
-    "doctors": 0.60,
-    "dentist": 0.55,
-    "veterinary": 0.50,
-    "school": 0.70,
-    "university": 0.80,
-    "college": 0.70,
-    "kindergarten": 0.60,
-    "bank": 0.65,
-    "atm": 0.50,
-    "post_office": 0.60,
-    "police": 0.70,
-    "fire_station": 0.65,
-    "townhall": 0.75,
-    "courthouse": 0.70,
-    "community_centre": 0.60,
-    "place_of_worship": 0.65,
-    "money_transfer": 0.50,
-    "fuel": 0.60,
-    "bus_station": 0.65,
-    "taxi": 0.50,
-    "embassy": 0.70,
-    # aeroway venues
-    "aerodrome": 0.90,
-    "terminal": 0.75,
-    # shop venues
-    "supermarket": 0.75,
-    "department_store": 0.70,
-    "convenience": 0.60,
-    "mall": 0.70,
-    "marketplace": 0.65,
-    "bakery": 0.55,
-    "butcher": 0.50,
-    "clothes": 0.55,
-    "shoes": 0.50,
-    "electronics": 0.60,
-    "books": 0.55,
-    "gift": 0.50,
-    "jewelry": 0.55,
-    "furniture": 0.55,
-    "hardware": 0.55,
-    "sports": 0.55,
-    "toys": 0.50,
-    "car": 0.55,
-    "car_repair": 0.50,
-    # leisure venues
-    "sports_centre": 0.70,
-    "stadium": 0.80,
-    "swimming_pool": 0.65,
-    "fitness_centre": 0.60,
-    "golf_course": 0.60,
-    "ice_rink": 0.55,
-    "bowling_alley": 0.50,
-    "park": 0.55,
-    # tourism venues
-    "hotel": 0.75,
-    "hostel": 0.60,
-    "motel": 0.55,
-    "guest_house": 0.60,
-    "apartment": 0.55,
-    "camp_site": 0.50,
-    "attraction": 0.70,
-    "theme_park": 0.75,
-    "zoo": 0.70,
-    "aquarium": 0.65,
-    "viewpoint": 0.50,
-    "picnic_site": 0.45,
-    "information": 0.40,
-}
+_VENUE_SCORES: dict[str, float] = _SPEC["tables"]["venue"]
 
 # ── highway importance (0..1) ─────────────────────────────────────────────
-_HIGHWAY_SCORES: dict[str, float] = {
-    "motorway": 0.90,
-    "trunk": 0.80,
-    "primary": 0.70,
-    "secondary": 0.60,
-    "tertiary": 0.50,
-    "motorway_link": 0.45,
-    "trunk_link": 0.40,
-    "primary_link": 0.35,
-    "unclassified": 0.30,
-    "residential": 0.35,
-    "living_street": 0.25,
-    "service": 0.15,
-    "pedestrian": 0.20,
-    "track": 0.10,
-    "footway": 0.10,
-    "cycleway": 0.10,
-    "path": 0.05,
-}
+_HIGHWAY_SCORES: dict[str, float] = _SPEC["tables"]["highway"]
 
 # ── natural feature importance (0..1) ─────────────────────────────────────
-_NATURAL_SCORES: dict[str, float] = {
-    "coastline": 0.80,
-    "water": 0.70,
-    "peak": 0.70,
-    "volcano": 0.75,
-    "glacier": 0.65,
-    "bay": 0.65,
-    "beach": 0.60,
-    "cliff": 0.50,
-    "cave_entrance": 0.50,
-    "wetland": 0.45,
-    "wood": 0.30,
-    "scrub": 0.15,
-    "grassland": 0.20,
-    "heath": 0.15,
-    "sand": 0.15,
-}
+_NATURAL_SCORES: dict[str, float] = _SPEC["tables"]["natural"]
 
-_WATERWAY_SCORES: dict[str, float] = {
-    "river": 0.75,
-    "canal": 0.60,
-    "stream": 0.40,
-    "drain": 0.20,
-    "ditch": 0.10,
-}
+_WATERWAY_SCORES: dict[str, float] = _SPEC["tables"]["waterway"]
 
 
 # ── admin_level → score  (OSM admin_level: 2=country … 10=suburb) ─────────
@@ -216,7 +66,8 @@ def _admin_score(admin_level: int | None) -> float:
     if admin_level is None or admin_level <= 0:
         return 0.0
     # 2 → 1.0, 4 → 0.80, 6 → 0.60, 8 → 0.40, 10 → 0.20
-    return min(1.0, max(0.0, 1.0 - (admin_level - 2) * 0.10))
+    decay = (admin_level - _S["admin_base_level"]) * _S["admin_decay_per_level"]
+    return min(1.0, max(0.0, 1.0 - decay))
 
 
 def _place_score(tags: dict) -> float:
@@ -233,22 +84,23 @@ def _population_score(tags: dict) -> float:
     if pop <= 0:
         return 0.0
     # log10(10M)=7 → score ~1.0;  log10(1000)=3 → ~0.43
-    return min(1.0, math.log10(pop) / 7.0)
+    return min(1.0, math.log10(pop) / _S["population_log_divisor"])
 
 
 def _area_score(area_km2: float) -> float:
     if area_km2 <= 0:
         return 0.0
     # log10(10000 km²)=4 → 1.0;  log10(0.01)=-2 → 0
-    return min(1.0, max(0.0, (math.log10(area_km2) + 2) / 6.0))
+    scaled = (math.log10(area_km2) + _S["area_log_offset"]) / _S["area_log_divisor"]
+    return min(1.0, max(0.0, scaled))
 
 
 def _metadata_score(tags: dict) -> float:
     score = 0.0
     if tags.get("wikidata"):
-        score += 0.5
+        score += _S["metadata_wikidata"]
     if tags.get("wikipedia"):
-        score += 0.5
+        score += _S["metadata_wikipedia"]
     return score
 
 
@@ -260,24 +112,14 @@ def _landuse_score(tags: dict) -> float:
 def _venue_score(tags: dict) -> float:
     """Score based on venue tags (amenity, shop, leisure, tourism, aeroway)."""
     score = 0.0
-    for key in ("amenity", "shop", "leisure", "tourism", "aeroway"):
+    for key in _SPEC["keys"]["venue_tags"]:
         val = tags.get(key, "")
         if val:
             score = max(score, _VENUE_SCORES.get(val, 0.0))
     return score
 
 
-_BUILDING_SCORES: dict[str, float] = {
-    "commercial": 0.65,
-    "office": 0.60,
-    "retail": 0.60,
-    "supermarket": 0.70,
-    "department_store": 0.65,
-    "hotel": 0.70,
-    "hospital": 0.80,
-    "school": 0.65,
-    "university": 0.75,
-}
+_BUILDING_SCORES: dict[str, float] = _SPEC["tables"]["building"]
 
 
 def _building_score(tags: dict) -> float:
@@ -297,23 +139,7 @@ def _building_score(tags: dict) -> float:
 # offices, …) are real POIs but were previously unscored, so every office
 # element landed at offline_rank 0.0.  Unknown office types get a small floor
 # rather than 0 so a named office still outranks a bare node.
-_OFFICE_SCORES: dict[str, float] = {
-    "government": 0.55,
-    "diplomatic": 0.55,
-    "financial": 0.50,
-    "insurance": 0.45,
-    "lawyer": 0.45,
-    "notary": 0.45,
-    "estate_agent": 0.45,
-    "telecommunication": 0.45,
-    "accountant": 0.40,
-    "company": 0.40,
-    "it": 0.40,
-    "travel_agent": 0.40,
-    "employment_agency": 0.35,
-    "coworking": 0.35,
-    "yes": 0.30,
-}
+_OFFICE_SCORES: dict[str, float] = _SPEC["tables"]["office"]
 
 
 def _office_score(tags: dict) -> float:
@@ -321,7 +147,7 @@ def _office_score(tags: dict) -> float:
     office = tags.get("office", "")
     if not office:
         return 0.0
-    return _OFFICE_SCORES.get(office, 0.30)
+    return _OFFICE_SCORES.get(office, _S["office_unknown_floor"])
 
 
 # ── named-POI floor ───────────────────────────────────────────────────────
@@ -330,18 +156,8 @@ def _office_score(tags: dict) -> float:
 # a small nonzero rank so it isn't buried at 0.0 behind classified venues.
 # Gated on evidence that it is a real curated/imported POI (a source/contact/
 # rating/ref tag) so we don't lift every trivially-named bare OSM node.
-_POI_EVIDENCE_KEYS = (
-    "source",
-    "phone",
-    "website",
-    "rating",
-    "opening_hours",
-    "brand",
-    "operator",
-    "ref:google_place_id",
-    "ref:source_id",
-)
-_NAMED_POI_FLOOR = 0.25
+_POI_EVIDENCE_KEYS = tuple(_SPEC["keys"]["poi_evidence"])
+_NAMED_POI_FLOOR = _S["named_poi_floor"]
 
 
 def _named_poi_score(tags: dict) -> float:
@@ -373,6 +189,7 @@ def _natural_score(tags: dict) -> float:
 
 # Regex to strip non-alphanumeric characters for brand matching
 _BRAND_CLEAN_RE = re.compile(r"[^a-z0-9]")
+_BRAND_SCORES: dict[str, float] = _SPEC["tables"]["brand"]
 
 
 def _brand_score(tags: dict) -> float:
@@ -388,35 +205,22 @@ def _brand_score(tags: dict) -> float:
     if not brand_clean:
         return 0.0
 
-    major_brands = {
-        "microsoft": 0.4,
-        "apple": 0.4,
-        "google": 0.4,
-        "amazon": 0.4,
-        "samsung": 0.35,
-        "mcdonalds": 0.35,
-        "starbucks": 0.35,
-        "cocacola": 0.35,
-        "pepsi": 0.35,
-        "nike": 0.35,
-        "adidas": 0.35,
-    }
-    return major_brands.get(brand_clean, 0.0)
+    return _BRAND_SCORES.get(brand_clean, 0.0)
 
 
 # ── weights ───────────────────────────────────────────────────────────────
 # admin_level and area are the dominant signals for boundaries/polygons.
 # W_POI merges venue + building via max() to avoid double-counting.
-W_ADMIN = 5.0
-W_AREA = 4.0
-W_PLACE = 2.5
-W_POP = 1.5
-W_HIGHWAY = 1.5
-W_NATURAL = 1.0
-W_META = 0.5
-W_LANDUSE = 1.0
-W_POI = 1.0
-W_BRAND = 0.3
+W_ADMIN = _W["admin"]
+W_AREA = _W["area"]
+W_PLACE = _W["place"]
+W_POP = _W["population"]
+W_HIGHWAY = _W["highway"]
+W_NATURAL = _W["natural"]
+W_META = _W["metadata"]
+W_LANDUSE = _W["landuse"]
+W_POI = _W["poi"]
+W_BRAND = _W["brand"]
 
 # Base weight total for signals that always participate in normalisation
 _W_BASE = W_PLACE + W_POP + W_META + W_LANDUSE + W_POI + W_BRAND
