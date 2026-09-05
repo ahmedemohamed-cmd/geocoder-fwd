@@ -19,50 +19,40 @@ logger = logging.getLogger(__name__)
 
 # Desired stream config — applied whether the stream is new or already exists.
 # num_replicas follows NATS_STREAM_REPLICAS (1 on compose, 3 on clustered NATS).
-OSM_STREAM_CFG = StreamConfig(
-    name=NATS_STREAM,
-    subjects=[NATS_SUBJECT],
-    retention=RetentionPolicy.LIMITS,
-    max_age=86400,  # 24 h
-    max_bytes=10737418240,  # 10 GB
-    storage="file",
-    max_msg_size=-1,  # unlimited — server ceiling is 64 MB (nats.conf)
-    discard="old",
-    num_replicas=NATS_STREAM_REPLICAS,
-)
+from shared.spec import load as _load_spec
+
+_STREAMS = _load_spec("streams.toml")
+
+
+def _stream_cfg(key: str) -> StreamConfig:
+    """Build a StreamConfig from spec/streams.toml.
+
+    Retention and size caps are the producer/consumer contract and come from
+    the spec. `replicas` is a ${...} placeholder because it follows the NATS
+    deployment (1 on compose, 3 on a clustered NATS), not the product.
+    """
+    c = _STREAMS[key]
+    replicas = c["replicas"]
+    if isinstance(replicas, str) and replicas.startswith("${"):
+        replicas = NATS_STREAM_REPLICAS
+    return StreamConfig(
+        name=c["name"],
+        subjects=list(c["subjects"]),
+        retention=RetentionPolicy(c["retention"]),
+        max_age=c["max_age"],
+        max_bytes=c["max_bytes"],
+        storage=c["storage"],
+        max_msg_size=c["max_msg_size"],
+        discard=c["discard"],
+        num_replicas=replicas,
+    )
+
+
+OSM_STREAM_CFG = _stream_cfg("osm")
+
+TRAFFIC_STREAM_CFG = _stream_cfg("traffic")
+TRAFFIC_CELLS_STREAM_CFG = _stream_cfg("traffic_cells")
 _STREAM_CFG = OSM_STREAM_CFG  # back-compat alias
-
-# Live-traffic probe firehose: high volume, low value once consumed. Short
-# retention + a memory-backed cap so a probe burst can never starve the OSM
-# stream's disk budget, and stale probes self-expire.
-TRAFFIC_STREAM_CFG = StreamConfig(
-    name=TRAFFIC_STREAM,
-    subjects=[TRAFFIC_SUBJECT],
-    retention=RetentionPolicy.LIMITS,
-    max_age=3600,  # 1 h
-    max_bytes=536870912,  # 512 MB
-    storage="file",
-    max_msg_size=-1,
-    discard="old",
-    num_replicas=NATS_STREAM_REPLICAS,
-)
-
-# Provider poll cells: a true work queue — each cell message is delivered to
-# exactly one worker and deleted on ack, so N aggregator replicas share the
-# external-provider polling without duplicating calls. Cells are worthless once
-# their poll window has passed, hence the short max_age. WORKQUEUE retention
-# allows only one consumer per subject: everyone attaches to the same durable.
-TRAFFIC_CELLS_STREAM_CFG = StreamConfig(
-    name=TRAFFIC_CELLS_STREAM,
-    subjects=[TRAFFIC_CELLS_SUBJECT],
-    retention=RetentionPolicy.WORK_QUEUE,
-    max_age=600,  # stale cells self-expire
-    max_bytes=67108864,  # 64 MB — cells are tiny
-    storage="file",
-    max_msg_size=-1,
-    discard="old",
-    num_replicas=NATS_STREAM_REPLICAS,
-)
 
 
 def is_transient_error(err: Exception) -> bool:

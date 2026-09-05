@@ -1,0 +1,50 @@
+# Stream specification — NATS JetStream topology
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# Retention, size caps and delivery semantics are the contract between every
+# producer and consumer in the pipeline. Getting one wrong does not fail loudly:
+# it drops messages under load, or lets one stream starve another. `replicas`
+# is the exception — it follows the NATS deployment and comes from
+# NATS_STREAM_REPLICAS, so it is a ${...} placeholder resolved at load.
+
+[osm]
+# Ingest elements from every watcher. 24h/10GB gives a slow
+# consumer a full day to catch up before the oldest messages roll off.
+name = "OSM"
+subjects = ["osm.elements"]
+retention = "limits"
+max_age = 86400
+max_bytes = 10737418240
+storage = "file"
+max_msg_size = -1
+discard = "old"
+replicas = "${NATS_STREAM_REPLICAS}"
+
+[traffic]
+# GPS probes. Short retention and a hard byte cap so a probe burst
+# can never starve the OSM stream's disk budget; stale probes self-expire.
+name = "TRAFFIC"
+subjects = ["traffic.probes"]
+retention = "limits"
+max_age = 3600
+max_bytes = 536870912
+storage = "file"
+max_msg_size = -1
+discard = "old"
+replicas = "${NATS_STREAM_REPLICAS}"
+
+[traffic_cells]
+# Provider poll cells. WORK_QUEUE means each message is delivered to
+# exactly one worker and deleted on ack, so N aggregator replicas share the
+# external-provider polling without duplicating calls. Cells are worthless once
+# their poll window passes, hence the short max_age.
+name = "TRAFFIC_CELLS"
+subjects = ["traffic.cells"]
+retention = "workqueue"
+max_age = 600
+max_bytes = 67108864
+storage = "file"
+max_msg_size = -1
+discard = "old"
+replicas = "${NATS_STREAM_REPLICAS}"

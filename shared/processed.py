@@ -30,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from shared.config import PROCESSED_CLAIM_TTL, PROCESSED_LEDGER
 from shared.logging import get_logger
+from shared.spec import SPEC_DIR as _SPEC_DIR
 
 logger = get_logger("processed-ledger")
 
@@ -39,16 +40,7 @@ LEDGER_NAME = ".processed"
 LEDGER_MODE = PROCESSED_LEDGER
 CLAIM_TTL = PROCESSED_CLAIM_TTL
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS processed_files (
-    source       TEXT NOT NULL,             -- normalized data dir
-    key          TEXT NOT NULL,             -- path relative to the data dir
-    claimed_by   TEXT,
-    claimed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    processed_at TIMESTAMPTZ,               -- NULL while an import is in flight
-    PRIMARY KEY (source, key)
-);
-"""
+_SCHEMA = (_SPEC_DIR / "schema" / "processed-ledger.sql").read_text(encoding="utf-8")
 
 
 def ledger_path(data_dir: str) -> str:

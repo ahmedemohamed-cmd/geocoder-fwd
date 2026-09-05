@@ -1,0 +1,1948 @@
+{
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InsertMessage": {
+        "description": "Model for insert endpoint - matches watcher.py message format exactly.",
+        "properties": {
+          "admin_level": {
+            "default": 0,
+            "description": "Administrative level",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Admin Level",
+            "type": "integer"
+          },
+          "area_km2": {
+            "default": 0.0,
+            "description": "Area in square kilometers",
+            "minimum": 0.0,
+            "title": "Area Km2",
+            "type": "number"
+          },
+          "geom": {
+            "additionalProperties": true,
+            "description": "GeoJSON geometry",
+            "title": "Geom",
+            "type": "object"
+          },
+          "osm_id": {
+            "description": "OSM ID (e.g., 'n123', 'w456', 'r789')",
+            "title": "Osm Id",
+            "type": "string"
+          },
+          "osm_type": {
+            "description": "OSM type: node, way, or relation",
+            "title": "Osm Type",
+            "type": "string"
+          },
+          "tags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "OSM tags",
+            "title": "Tags",
+            "type": "object"
+          }
+        },
+        "required": [
+          "osm_id",
+          "osm_type",
+          "tags",
+          "geom"
+        ],
+        "title": "InsertMessage",
+        "type": "object"
+      },
+      "PlaceCreate": {
+        "description": "Model for creating a new place.",
+        "properties": {
+          "addr_city": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "City or town",
+            "title": "Addr City"
+          },
+          "addr_country": {
+            "anyOf": [
+              {
+                "maxLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 3166-1 country code",
+            "title": "Addr Country"
+          },
+          "addr_housenumber": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "House/building number",
+            "title": "Addr Housenumber"
+          },
+          "addr_postcode": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Postal / ZIP code",
+            "title": "Addr Postcode"
+          },
+          "addr_state": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "State / governorate",
+            "title": "Addr State"
+          },
+          "addr_street": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Street name",
+            "title": "Addr Street"
+          },
+          "addr_suburb": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Suburb / neighbourhood",
+            "title": "Addr Suburb"
+          },
+          "admin_level": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Admin Level",
+            "type": "integer"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "name_fr": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Fr"
+          },
+          "osm_type": {
+            "default": "node",
+            "description": "OSM type: node, way, or relation",
+            "title": "Osm Type",
+            "type": "string"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "required": [
+          "name",
+          "lat",
+          "lon"
+        ],
+        "title": "PlaceCreate",
+        "type": "object"
+      },
+      "PlaceResponse": {
+        "description": "Model for place response.",
+        "properties": {
+          "admin_level": {
+            "title": "Admin Level",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "name_fr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Fr"
+          },
+          "osm_id": {
+            "title": "Osm Id",
+            "type": "string"
+          },
+          "osm_type": {
+            "title": "Osm Type",
+            "type": "string"
+          },
+          "tags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "object"
+          }
+        },
+        "required": [
+          "osm_id",
+          "osm_type",
+          "name",
+          "name_en",
+          "name_fr",
+          "tags",
+          "lat",
+          "lon",
+          "admin_level",
+          "created_at"
+        ],
+        "title": "PlaceResponse",
+        "type": "object"
+      },
+      "ProbeBatch": {
+        "description": "An ordered GPS trace from one device/session (best for map-matching).",
+        "properties": {
+          "device_id": {
+            "description": "Opaque device/session id",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProbePing"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_id",
+          "points"
+        ],
+        "title": "ProbeBatch",
+        "type": "object"
+      },
+      "ProbePing": {
+        "description": "A single GPS observation from a moving device.",
+        "properties": {
+          "heading": {
+            "anyOf": [
+              {
+                "maximum": 360.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bearing in degrees, if known",
+            "title": "Heading"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Instantaneous speed in m/s, if known",
+            "title": "Speed"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix epoch seconds for this fix",
+            "title": "Ts"
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "ProbePing",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Geocoding Service",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/address": {
+      "get": {
+        "description": "Structured address search powered by Elasticsearch.\n\nSupports free-form queries like:\n- ``\"123 Tahrir Street, Cairo\"``  → parsed into housenumber + street + city\n- ``\"Tahrir Street, Zamalek\"``    → street + suburb/city\n- ``\"شارع التحرير, القاهرة\"``     → Arabic address\n- ``\"ش التحرير\"``                 → abbreviated Arabic\n- ``\"11511\"``                     → postcode lookup\n- ``\"Cairo Tower\"``               → name fallback (no addr:* required)\n\nUse the ``postcode``, ``city``, ``country`` query params to add hard filters\non top of the free-text query.\n\nResults are ordered by: text relevance × (offline_rank + geo proximity).\nSearches addr:* fields first, then falls back to name/full-text if no\naddress-specific results are found.",
+        "operationId": "address_search_address_get",
+        "parameters": [
+          {
+            "description": "Address query string",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Address query string",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Latitude for proximity boost",
+            "in": "query",
+            "name": "lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Latitude for proximity boost",
+              "title": "Lat"
+            }
+          },
+          {
+            "description": "Longitude for proximity boost",
+            "in": "query",
+            "name": "lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Longitude for proximity boost",
+              "title": "Lon"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Restrict results to postal code",
+            "in": "query",
+            "name": "postcode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict results to postal code",
+              "title": "Postcode"
+            }
+          },
+          {
+            "description": "Restrict results to city/town",
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict results to city/town",
+              "title": "City"
+            }
+          },
+          {
+            "description": "Restrict to ISO country code (e.g. EG)",
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict to ISO country code (e.g. EG)",
+              "title": "Country"
+            }
+          },
+          {
+            "description": "Include AI-generated descriptions (cached where available)",
+            "in": "query",
+            "name": "describe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include AI-generated descriptions (cached where available)",
+              "title": "Describe",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Address Search"
+      }
+    },
+    "/autocomplete": {
+      "get": {
+        "description": "Fast prefix-based autocomplete, Redis fast path over an Elasticsearch base.\n\nDesigned for keystroke-by-keystroke suggestions.  The Redis prefix index\n(~1-3 ms) answers only when it is *confident*: it found ``limit`` genuine\nmatches for the full query and matched at least at whole-name-prefix strength.\nAnything less — a thin bucket, a weak match, a category query like \"metro\"\nthat no name prefix satisfies — defers to the Elasticsearch edge-ngram query\nbelow, which indexes the whole corpus (Redis holds only the top 100k by\n``offline_rank``) and can additionally match on category.\n\nThis gate is load-bearing.  Redis used to answer whenever it returned\n*anything*, and because it silently truncated the query to a 2-char prefix it\nalways returned something — so ES was never consulted and ``q=metro`` came\nback with MEDITOWN and Mena Garden City.\n\nRanking blends match quality, ``offline_rank``, ``popularity`` (updated via\n``/feedback``) and, when ``lat``/``lon`` are given, a gaussian distance decay\nmatching the ES one.",
+        "operationId": "autocomplete_autocomplete_get",
+        "parameters": [
+          {
+            "description": "Partial query text",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Partial query text",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Latitude for geo-bias",
+            "in": "query",
+            "name": "lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Latitude for geo-bias",
+              "title": "Lat"
+            }
+          },
+          {
+            "description": "Longitude for geo-bias",
+            "in": "query",
+            "name": "lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Longitude for geo-bias",
+              "title": "Lon"
+            }
+          },
+          {
+            "description": "Max suggestions",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "description": "Max suggestions",
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autocomplete"
+      }
+    },
+    "/deep/forward": {
+      "get": {
+        "description": "Deep forward geocoding via Google Maps.\n\nCalls Google in the requested ``language``, maps each result to OSM tags\n(with a ``name:<language>`` tag), publishes it to NATS for the inserters to\nindex/merge, then returns results in the same shape as /geocode (with address\nenrichment from local PostGIS where available).",
+        "operationId": "deep_forward_deep_forward_get",
+        "parameters": [
+          {
+            "description": "Free-text place/address query",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Free-text place/address query",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Result language (mandatory), e.g. en, ar, fr",
+            "in": "query",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "description": "Result language (mandatory), e.g. en, ar, fr",
+              "maxLength": 10,
+              "minLength": 2,
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 25,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "ccTLD region bias, e.g. 'eg'",
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ccTLD region bias, e.g. 'eg'",
+              "title": "Region"
+            }
+          },
+          {
+            "description": "Publish mapped results to NATS for indexing",
+            "in": "query",
+            "name": "publish",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Publish mapped results to NATS for indexing",
+              "title": "Publish",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Attach parent/nearest-street enrichment from local data",
+            "in": "query",
+            "name": "enrich",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Attach parent/nearest-street enrichment from local data",
+              "title": "Enrich",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deep Forward"
+      }
+    },
+    "/deep/nearby": {
+      "get": {
+        "description": "Deep nearby search via Google Places API (New) Text Search.\n\nQueries Google around ``(lat, lon)`` (radius applied as a location bias), maps\neach place into the OSM-element NATS format (so the inserters index/merge it\nlike native data), publishes it, then returns the places nearby-shaped (with\n``distance_m`` + category). Freshly-discovered places have ``address: null``;\nthe /nearby PostGIS enrichment fills nearest-street/parents once indexed.\n\nScroll with ``pagination.next_cursor`` → pass it back as ``cursor`` for the\nnext page (it's Google's page token; keep every other param identical).\n``type`` or ``keyword`` is required (it is the text query).",
+        "operationId": "deep_nearby_deep_nearby_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Result language (mandatory), e.g. en, ar, fr",
+            "in": "query",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "description": "Result language (mandatory), e.g. en, ar, fr",
+              "maxLength": 10,
+              "minLength": 2,
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Location-bias radius in metres",
+            "in": "query",
+            "name": "radius",
+            "required": false,
+            "schema": {
+              "default": 1500,
+              "description": "Location-bias radius in metres",
+              "maximum": 50000,
+              "minimum": 1,
+              "title": "Radius",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Google place type, e.g. restaurant, cafe, pharmacy",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Google place type, e.g. restaurant, cafe, pharmacy",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "Free-text query (one of type/keyword required)",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Free-text query (one of type/keyword required)",
+              "title": "Keyword"
+            }
+          },
+          {
+            "description": "prominence = ranked by relevance; distance = nearest first",
+            "in": "query",
+            "name": "rankby",
+            "required": false,
+            "schema": {
+              "default": "prominence",
+              "description": "prominence = ranked by relevance; distance = nearest first",
+              "pattern": "^(prominence|distance)$",
+              "title": "Rankby",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Results per page (Google max 20)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Results per page (Google max 20)",
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "pagination.next_cursor from a previous response (keep other params identical)",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "pagination.next_cursor from a previous response (keep other params identical)",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Publish mapped results to NATS for indexing",
+            "in": "query",
+            "name": "publish",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Publish mapped results to NATS for indexing",
+              "title": "Publish",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deep Nearby"
+      }
+    },
+    "/deep/reverse": {
+      "get": {
+        "description": "Deep reverse geocoding via Google Maps.\n\nResolves the point's address with Google in the requested ``language``, maps +\npublishes it to NATS, and returns the same structure as /reverse:\n``nearest_address`` comes from Google (the freshly resolved address) while\n``nearest_line``, ``enclosing_polygons`` and ``interpolated_address`` are\nenriched from local PostGIS data.",
+        "operationId": "deep_reverse_deep_reverse_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Result language (mandatory), e.g. en, ar, fr",
+            "in": "query",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "description": "Result language (mandatory), e.g. en, ar, fr",
+              "maxLength": 10,
+              "minLength": 2,
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Publish mapped results to NATS for indexing",
+            "in": "query",
+            "name": "publish",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Publish mapped results to NATS for indexing",
+              "title": "Publish",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Include AI descriptions on local geometry context",
+            "in": "query",
+            "name": "describe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include AI descriptions on local geometry context",
+              "title": "Describe",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deep Reverse"
+      }
+    },
+    "/describe": {
+      "get": {
+        "description": "Generate (or return cached) AI title + description for a place.\n\nBlocks until the description is ready.  Result is cached in\nElasticsearch for subsequent requests.",
+        "operationId": "describe_describe_get",
+        "parameters": [
+          {
+            "description": "OSM ID of the place to describe",
+            "in": "query",
+            "name": "osm_id",
+            "required": true,
+            "schema": {
+              "description": "OSM ID of the place to describe",
+              "title": "Osm Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Describe"
+      }
+    },
+    "/features": {
+      "get": {
+        "description": "Return which optional features are enabled on this instance.",
+        "operationId": "features_features_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Features"
+      }
+    },
+    "/feedback": {
+      "post": {
+        "description": "Increment popularity for an element in Elasticsearch and Redis.\n\nThe boost value is clamped to [0.1, 10.0] and popularity is capped\nat 1000 to prevent unbounded growth or abuse.\n\nAlso updates the Redis autocomplete index so that popular results\nrank higher in real-time without waiting for a full re-warm.",
+        "operationId": "feedback_feedback_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "osm_id",
+            "required": true,
+            "schema": {
+              "title": "Osm Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "boost",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "maximum": 10.0,
+              "minimum": 0.1,
+              "title": "Boost",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feedback"
+      }
+    },
+    "/geocode": {
+      "get": {
+        "description": "Full geocoding search.\n\nOnline ranking = text_similarity × function_score(offline_rank, geo, popularity).\nUses boost_mode=multiply so text relevance gates ranking — a high-importance\nelement with a weak text match cannot outscore a lower-rank exact match.\n\nText similarity searches across name, name_en, name_fr, and tags_text (all tags)\nwith phrase and exact-match boosting for multi-word queries.\nvector=true adds KNN cosine similarity re-ranking (requires ENABLE_VECTORS).\nai=true enables AI-assisted query expansion (requires ENABLE_AI).",
+        "operationId": "geocode_geocode_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lat"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lon"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Result offset for pagination/scrolling (from + size must stay ≤ 10000)",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Result offset for pagination/scrolling (from + size must stay ≤ 10000)",
+              "maximum": 9950,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Enable semantic vector search",
+            "in": "query",
+            "name": "vector",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Enable semantic vector search",
+              "title": "Vector",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Enable AI-assisted search",
+            "in": "query",
+            "name": "ai",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Enable AI-assisted search",
+              "title": "Ai",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Include AI-generated descriptions (cached where available)",
+            "in": "query",
+            "name": "describe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include AI-generated descriptions (cached where available)",
+              "title": "Describe",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Scoring effort: 'high' (full fuzzy recall + per-doc function_score over all matches) or 'optimized' (lean fuzzy + function_score applied via rescore over top hits + no exact hit counting, far cheaper for ES under load).",
+            "in": "query",
+            "name": "effort",
+            "required": false,
+            "schema": {
+              "default": "optimized",
+              "description": "Scoring effort: 'high' (full fuzzy recall + per-doc function_score over all matches) or 'optimized' (lean fuzzy + function_score applied via rescore over top hits + no exact hit counting, far cheaper for ES under load).",
+              "pattern": "^(high|optimized)$",
+              "title": "Effort",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Geocode"
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Check connectivity to all backend dependencies.\n\nReturns HTTP 200 when all critical services (Elasticsearch, PostGIS)\nare reachable, or 503 if any critical dependency is down.\nNon-critical services (Redis, NATS) are reported but don't fail the check.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/insert": {
+      "post": {
+        "description": "Insert an OSM element by publishing it to NATS stream.\n\nThis endpoint accepts the exact same message format that watcher.py publishes,\nallowing you to manually insert OSM elements that will be processed by the\nes-inserter and postgis-inserter services.\n\nMessage format matches watcher.py:\n{\n    \"osm_id\": \"n123\" | \"w456\" | \"r789\",\n    \"osm_type\": \"node\" | \"way\" | \"relation\",\n    \"tags\": {\"name\": \"...\", \"addr:street\": \"...\", ...},\n    \"geom\": {\"type\": \"Point|LineString|Polygon|MultiPolygon\", \"coordinates\": [...]},\n    \"admin_level\": 0-10,\n    \"area_km2\": 0.0\n}",
+        "operationId": "insert_insert_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsertMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Insert"
+      }
+    },
+    "/isochrone": {
+      "post": {
+        "description": "Reachability polygons at given time/distance contours.",
+        "operationId": "routing_isochrone_isochrone_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Routing Isochrone",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/locate": {
+      "post": {
+        "description": "Snap coordinates to the routing graph (nearest edges/nodes).",
+        "operationId": "routing_locate_locate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Routing Locate",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/nearby": {
+      "get": {
+        "description": "Return nearby POIs within ``radius`` metres of ``(lat, lon)``.\n\nAdmin boundaries and area features (``place=*``, large polygons) are excluded\nso results are places to visit, never \"Cairo\"/\"Egypt\". Each result carries a\n``distance_m`` from the query point.\n\nPagination has two modes. ``offset`` is the simple shallow pager (bounded to\nES's 10k window). For deep scrolling, follow ``pagination.next_cursor``: pass\nit back as ``cursor`` to get the next page with no depth limit (``search_after``).\nWhen ``cursor`` is set, ``offset`` is ignored.",
+        "operationId": "nearby_nearby_get",
+        "parameters": [
+          {
+            "description": "Latitude of the search point",
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude of the search point",
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude of the search point",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude of the search point",
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Search radius in metres",
+            "in": "query",
+            "name": "radius",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "description": "Search radius in metres",
+              "maximum": 50000,
+              "minimum": 1,
+              "title": "Radius",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "OSM type value(s), e.g. restaurant, pharmacy, cafe",
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "OSM type value(s), e.g. restaurant, pharmacy, cafe",
+              "title": "Category"
+            }
+          },
+          {
+            "description": "Coarse group(s), e.g. food, health, shopping",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Coarse group(s), e.g. food, health, shopping",
+              "title": "Group"
+            }
+          },
+          {
+            "description": "best = distance blended with importance/popularity; distance = nearest first",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "best",
+              "description": "best = distance blended with importance/popularity; distance = nearest first",
+              "pattern": "^(best|distance)$",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Shallow paging; ignored when cursor is set",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Shallow paging; ignored when cursor is set",
+              "maximum": 9950,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque token from a previous response's pagination.next_cursor; scrolls past the offset window (keep the other params identical)",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque token from a previous response's pagination.next_cursor; scrolls past the offset window (keep the other params identical)",
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Nearby",
+        "tags": [
+          "nearby"
+        ]
+      }
+    },
+    "/nearby/categories": {
+      "get": {
+        "description": "Discovery: the coarse groups and the precise values in each, for building\nfilter chips. Static (derived from shared.categories), so no ES round-trip.",
+        "operationId": "nearby_categories_nearby_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Nearby Categories",
+        "tags": [
+          "nearby"
+        ]
+      }
+    },
+    "/optimized_route": {
+      "post": {
+        "description": "Optimized route (TSP) — reorders waypoints for shortest tour.",
+        "operationId": "routing_optimized_route_optimized_route_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Routing Optimized Route",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/places": {
+      "post": {
+        "description": "Add a new place to the geocoding database.\n\nPublishes the place to NATS stream for processing by the inserters.\nReturns the created place with its generated ID immediately.",
+        "operationId": "add_place_places_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Place"
+      }
+    },
+    "/reverse": {
+      "get": {
+        "description": "Reverse geocoding using PostGIS + Elasticsearch.\n\nReturns:\n- nearest_address: Closest building-level address point from osm_addresses\n                   (housenumber, street, city, postcode, distance_m)\n- nearest_line: The closest LineString geometry (road/street) with ES metadata\n- enclosing_polygons: Admin boundaries / areas containing the point with ES metadata",
+        "operationId": "reverse_reverse_get",
+        "parameters": [
+          {
+            "description": "Latitude",
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude",
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude",
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Include AI-generated descriptions (cached where available)",
+            "in": "query",
+            "name": "describe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include AI-generated descriptions (cached where available)",
+              "title": "Describe",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reverse"
+      }
+    },
+    "/route": {
+      "post": {
+        "description": "Turn-by-turn directions. Supports language=ar for Arabic narration.\n\n``?traffic=true`` routes *using* live traffic, not just painting it: it\ninjects ``date_time: {type: 0}`` so Valhalla costs each edge at its live\nspeed from traffic.tar (fed by probes + the on-demand fetch), making the ETA\nand route choice traffic-aware wherever we have data — then annotates each\nleg with coloured ``traffic`` runs + a trip-level ``traffic_coverage``. A\ncaller-supplied ``date_time`` is respected; plain ``/route`` is unchanged.",
+        "operationId": "routing_route_route_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "traffic",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Traffic",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Routing Route",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/sources_to_targets": {
+      "post": {
+        "description": "Time/distance matrix (many sources to many targets).",
+        "operationId": "routing_sources_to_targets_sources_to_targets_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Routing Sources To Targets",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/status": {
+      "get": {
+        "description": "Valhalla engine status (version, tileset bbox, available actions).",
+        "operationId": "routing_status_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Routing Status",
+        "tags": [
+          "routing"
+        ]
+      }
+    },
+    "/traffic/edge": {
+      "get": {
+        "description": "Debug/ops: snap a point to its Valhalla edge and report the current live speed.\n\nSnaps via Valhalla /locate to get the edge GraphId, then reads the smoothed\nspeed the aggregator keeps in Redis (null if no live data for that edge yet).",
+        "operationId": "traffic_edge_traffic_edge_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "maximum": 90,
+              "minimum": -90,
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "maximum": 180,
+              "minimum": -180,
+              "title": "Lon",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Traffic Edge"
+      }
+    },
+    "/traffic/probe": {
+      "post": {
+        "description": "Submit a single GPS ping (convenience wrapper around /traffic/probes).",
+        "operationId": "submit_probe_traffic_probe_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbePing"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Probe"
+      }
+    },
+    "/traffic/probes": {
+      "post": {
+        "description": "Submit an ordered GPS trace (multiple pings) for live-traffic aggregation.",
+        "operationId": "submit_probes_traffic_probes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Probes"
+      }
+    }
+  }
+}
