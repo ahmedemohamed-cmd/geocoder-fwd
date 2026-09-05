@@ -134,15 +134,51 @@ Items are evidence-backed unless marked *unverified*.
   budgets per endpoint, a dependency-audit gate, a secret-scanning step.
 - **Why:** an unmeasurable requirement cannot fail, so it cannot hold.
 
-## Needs clarification
+## Regeneration readiness
 
-### G-14 — "Code should have its own directory"
+Resolved 2026-09-05: the intent behind G-14 is that **code is machine-authored
+from here on** — humans edit specs, not source. That reframes the register. The
+items below are what stand between the current artifacts and a repo where
+regeneration is a safe operation.
 
-- **Stated:** the repo should be refactored so code lives in its own directory,
-  "not to be manually edited".
-- **Blocked on:** two readings. Either (a) generated or vendored output that
-  agents must not hand-edit, or (b) a source reorganization — e.g. moving
-  `services/`, `shared/`, `billing/` under a `src/` root.
-- **Why it matters:** (a) is a policy line and a `.gitignore` change; (b) is a
-  repo-wide move touching every import, the Dockerfile, compose commands, CI, and
-  the ruff config. They are not the same piece of work.
+### G-14 — Code is machine-authored [POLICY]
+
+- **Stated:** no human edits code moving forward.
+- **Implication:** a requested change updates the spec or story and regenerates;
+  it is never hand-patched into source. The spec, not the diff, is the artifact
+  under review.
+- **Note:** this is a governance rule, not the source reorganization the earlier
+  reading assumed. No `src/` move is implied.
+
+### G-15 — The specs are descriptive, not generative
+
+- **As-built:** 8,169 words of specification describe 18,729 lines of code. The
+  spines fix invariants — deliberately, since a spine is a consistency contract
+  whose structural detail is owned by the code.
+- **Desired:** enough specification that a regeneration passes the quality
+  baseline.
+- **Why:** regenerating today would satisfy every AD and still behave
+  differently. Equivalence must be defined as "passes the baseline within
+  tolerance", never as "identical code".
+
+### G-16 — ~1,140 tuned constants live only in code
+
+- **As-built:** `shared/ranking.py` alone holds 315 numeric literals
+  (`city: 0.90`, `town: 0.75`, …); `services/geocoder.py` holds 401. None appear
+  in any spec, and none are derivable from one.
+- **Desired:** ranking weights, the category taxonomy, and the ES analyzer
+  config externalized into declarative data files versioned as specification.
+- **Why:** the single highest-leverage step toward regeneration. It converts the
+  largest block of unspecifiable behavior into spec that a regeneration reads
+  instead of reinventing.
+
+### G-17 — No behavioral specs at capability altitude
+
+- **As-built:** the spines cover invariants; nothing states what `/geocode` does
+  with an unmatched housenumber, how cross-language street resolution behaves, or
+  what interpolation guarantees.
+- **Desired:** a behavioral spec per capability, with the recall harness as its
+  executable check.
+- **Why:** prose cannot verify a regeneration. The 198 tests and the 1,000-case
+  benchmark already can — they are the real contract and should be treated as
+  part of the specification.
