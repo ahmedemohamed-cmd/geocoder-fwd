@@ -49,12 +49,6 @@ def test_free_regex_matches_free_paths_only():
         assert not rx.match(p), f"{p} should be paid"
 
 
-def test_free_filter_is_a_negated_uri_regex():
-    assert apisix_admin._free_filter() == {
-        "_meta": {"filter": [["uri", "!", "~~", config.free_endpoints_regex()]]}
-    }
-
-
 # ── usage sink (APISIX http-logger backstop) ──────────────────────────────────
 async def test_sink_does_not_bill_free_endpoints(cp_client, pool, redis):
     _, ttok = await make_tenant(cp_client, admin_email="free-sink@u.io", plan_id="starter")

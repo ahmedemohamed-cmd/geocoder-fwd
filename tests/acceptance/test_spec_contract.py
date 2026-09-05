@@ -26,7 +26,6 @@ from shared import address as A
 from shared import autocomplete as AC
 from shared import categories as C
 from shared import es_mapping as EM
-from shared import interpolation as I
 from shared import places_mapping as PM
 from shared.spec import SPEC_DIR, load
 
@@ -233,8 +232,9 @@ def build_snapshot():
         for q in ["metro", "hospital", "مستشفى", "cafe", "Starbucks", "15 Tahrir", ""]
     ]
 
-    out["interp_street_prefixes"] = sorted(I._STREET_PREFIXES)
-    out["interp_ar_delete"] = sorted(I._AR_DELETE)
+    interp = load("interpolation.json")
+    out["interp_street_prefixes"] = sorted(interp["_STREET_PREFIXES"])
+    out["interp_ar_delete"] = sorted(interp["_AR_DELETE"])
     return json.loads(json.dumps(out, sort_keys=True, default=str, ensure_ascii=False))
 
 

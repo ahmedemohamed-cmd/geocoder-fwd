@@ -14,7 +14,7 @@ import sys
 import httpx
 import pytest_asyncio
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import services.geocoder as geocoder  # noqa: E402
 

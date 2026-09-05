@@ -17,7 +17,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 # Point the subsystem at the isolated test database before importing it.
 os.environ.setdefault("BILLING_PG_DB", "billing_test")

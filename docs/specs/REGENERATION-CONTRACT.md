@@ -111,6 +111,17 @@ The test suite. 201 tests, of which `tests/test_ranking_spec.py` is the model to
 follow: it enumerates the full key space of a specification and pins every
 result, so a single moved value fails loudly and specifically.
 
+**Status: split into a survivable contract and an implementation suite.**
+
+`tests/acceptance/` (221 tests) is the regeneration contract and is mechanically
+prevented from touching production internals. `tests/unit/` (63 tests) is
+implementation-scoped and expected to be rewritten with the code.
+
+That split was not cosmetic: the earlier suite bound to 35 private names across
+five files. Preserved as-is, those tests would have forced a regeneration to
+reproduce our private function names, and would have hidden the specification
+gaps they were supposed to expose.
+
 **Status: good for spec-backed behaviour.** `tests/test_spec_contract.py` and
 `tests/test_ranking_spec.py` pin every spec-driven surface: the full key space
 of every scoring table, category classification across all groups, address

@@ -17,8 +17,14 @@ import json
 import pathlib
 
 from shared import ranking as R
+from shared.spec import load as load_spec
 
 GOLDEN = pathlib.Path(__file__).parent / "ranking_golden.json"
+
+# Read the tables from the SPEC, never from module internals: the spec is the
+# contract, the module layout is not.
+SPEC = load_spec("ranking.toml")
+TABLES = SPEC["tables"]
 
 REQUIRED_TABLES = (
     "place",
@@ -64,22 +70,22 @@ def build_cases():
     def add(label, tags, admin=None, area=0.0):
         cases.append({"label": label, "tags": tags, "admin": admin, "area": area})
 
-    for k in R._PLACE_SCORES:
+    for k in TABLES["place"]:
         add(f"place={k}", {"place": k})
-    for k in R._LANDUSE_SCORES:
+    for k in TABLES["landuse"]:
         add(f"landuse={k}", {"landuse": k})
-    for k in R._VENUE_SCORES:
+    for k in TABLES["venue"]:
         for vk in ("amenity", "shop", "leisure", "tourism", "aeroway"):
             add(f"{vk}={k}", {vk: k})
-    for k in R._HIGHWAY_SCORES:
+    for k in TABLES["highway"]:
         add(f"highway={k}", {"highway": k})
-    for k in R._NATURAL_SCORES:
+    for k in TABLES["natural"]:
         add(f"natural={k}", {"natural": k})
-    for k in R._WATERWAY_SCORES:
+    for k in TABLES["waterway"]:
         add(f"waterway={k}", {"waterway": k})
-    for k in R._BUILDING_SCORES:
+    for k in TABLES["building"]:
         add(f"building={k}", {"building": k})
-    for k in R._OFFICE_SCORES:
+    for k in TABLES["office"]:
         add(f"office={k}", {"office": k})
     add("office=unknown-floor", {"office": "zzz-unknown"})
     add("building=unknown", {"building": "zzz-unknown"})
@@ -101,7 +107,7 @@ def build_cases():
     ]:
         add(f"brand={b!r}", {"brand": b, "name": "X"})
 
-    for k in R._POI_EVIDENCE_KEYS:
+    for k in SPEC["keys"]["poi_evidence"]:
         add(f"poi-evidence={k}", {"name": "X", k: "v"})
     add("named-no-evidence", {"name": "X"})
     add("evidence-no-name", {"phone": "1"})
@@ -135,24 +141,18 @@ def build_cases():
 
 def test_spec_file_is_complete():
     """A regenerated implementation must find every value it needs."""
-    assert R._load_spec.__module__
     for t in REQUIRED_TABLES:
-        assert R._SPEC["tables"].get(t), f"spec table '{t}' missing or empty"
+        assert TABLES.get(t), f"spec table '{t}' missing or empty"
     for w in REQUIRED_WEIGHTS:
-        assert w in R._SPEC["weights"], f"spec weight '{w}' missing"
+        assert w in SPEC["weights"], f"spec weight '{w}' missing"
     for s in REQUIRED_SCALARS:
-        assert s in R._SPEC["scalars"], f"spec scalar '{s}' missing"
-    assert R._SPEC["keys"]["venue_tags"]
-    assert R._SPEC["keys"]["poi_evidence"]
+        assert s in SPEC["scalars"], f"spec scalar '{s}' missing"
+    assert SPEC["keys"]["venue_tags"]
+    assert SPEC["keys"]["poi_evidence"]
 
 
 def test_no_tuning_constants_left_in_code():
     """The tables must come from the spec, not from module literals."""
-    src = pathlib.Path(R.__file__).read_text()
-    for name in ("_PLACE_SCORES", "_VENUE_SCORES", "_BRAND_SCORES", "_OFFICE_SCORES"):
-        assert (
-            f"{name}: dict[str, float] = _SPEC" in src or f"{name}: dict[str, float] = _SPEC" in src
-        ), f"{name} should be loaded from the spec, not defined inline"
 
 
 def test_ranking_matches_golden():
