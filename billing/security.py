@@ -14,10 +14,13 @@ from typing import Any
 import jwt
 
 from . import config
+from .spec import load as _load_spec
+
+_SEC = _load_spec()["security"]
 
 # ── passwords (dev-mode auth; Zitadel owns this in production) ──────────────
 # stdlib PBKDF2-HMAC-SHA256; format: pbkdf2_sha256$<iters>$<salt_hex>$<hash_hex>
-_PBKDF2_ITERS = 240_000
+_PBKDF2_ITERS = _SEC["pbkdf2_iterations"]
 
 
 def hash_password(plain: str) -> str:
@@ -38,7 +41,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ── API keys ────────────────────────────────────────────────────────────────
-_KEY_BYTES = 24
+_KEY_BYTES = _SEC["api_key_bytes"]
 
 
 def generate_api_key() -> tuple[str, str, str]:

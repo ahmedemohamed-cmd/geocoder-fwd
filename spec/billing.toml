@@ -1,0 +1,105 @@
+# Billing specification — pricing, plans, and metering units
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See billing/spec.py.
+#
+# These values decide what customers are charged. They are product decisions,
+# not derivable ones, and a regenerated implementation must read them rather
+# than invent a price list. Changing anything here changes invoices.
+#
+# Plans and weights are SEEDS: they populate the database on bootstrap and are
+# editable by an admin afterwards. The database is authoritative at runtime;
+# this file is what a fresh deployment starts from.
+
+[units]
+# Usage is metered in integer milli-credits so counters never go floating
+# point — see AD-7 in the billing architecture spine.
+milli_per_credit = 1000
+default_weight_milli = 1000  # unlisted endpoints cost 1 credit
+default_matrix_element_milli = 100  # 0.1 credit per element
+matrix_endpoint = "sources_to_targets"
+matrix_element_key = "sources_to_targets_element"
+
+[weights]
+# Per-endpoint cost in milli-credits, keyed on the FIRST path segment, so
+# deep/forward and deep/nearby both bill as "deep". A request's price reflects
+# what it costs to serve: an autocomplete keystroke is a filtered ES query; a
+# Valhalla matrix or a deep vector search is an order of magnitude more.
+"autocomplete" = 250
+"geocode" = 1000
+"reverse" = 1000
+"nearby" = 1000
+"deep" = 3000
+"route" = 5000
+"optimized_route" = 5000
+"sources_to_targets" = 5000
+"isochrone" = 5000
+"locate" = 5000
+# LLM inference (Ollama) on cache miss — the heaviest single op in the stack,
+# amortized by the permanent per-place ES cache. Priced above worst-case GPU
+# cost per generation so a cache miss is never underwater.
+"describe" = 25000
+"sources_to_targets_element" = 100
+
+# Endpoints that never bill and never count against quota: liveness, capability
+# discovery, and contributory writes. Matched on the FULL normalized path (see
+# AD-12), so /traffic/probes is free while /traffic/edge bills. An operator may
+# override with BILLING_FREE_ENDPOINTS.
+free_endpoints = [
+  "/features",
+  "/feedback",
+  "/health",
+  "/insert",
+  "/nearby/categories",
+  "/places",
+  "/status",
+  "/traffic/probe",
+  "/traffic/probes",
+]
+
+[security]
+# Password hashing cost and API-key entropy. These are minimums: raise them as
+# hardware improves, never lower them. Existing hashes carry their own iteration
+# count, so raising this does not invalidate stored passwords.
+pbkdf2_iterations = 240000
+api_key_bytes = 24
+
+# ── Plans ──────────────────────────────────────────────────────────────────
+# Seeded on bootstrap. quota_credits is the monthly included allowance;
+# overage_cents_per_credit prices usage beyond it; hard_cap stops the tenant at
+# the quota instead of billing overage; rps is the per-tenant rate cap.
+
+[[plans]]
+id = "free"
+name = "Free"
+quota_credits = 25000
+base_price_cents = 0
+overage_cents_per_credit = 0.0
+hard_cap = true
+rps = 2
+
+[[plans]]
+id = "starter"
+name = "Starter"
+quota_credits = 250000
+base_price_cents = 2900
+overage_cents_per_credit = 0.03
+hard_cap = false
+rps = 10
+
+[[plans]]
+id = "pro"
+name = "Pro"
+quota_credits = 3000000
+base_price_cents = 29900
+overage_cents_per_credit = 0.015
+hard_cap = false
+rps = 25
+
+[[plans]]
+id = "scale"
+name = "Scale"
+quota_credits = 12000000
+base_price_cents = 99900
+overage_cents_per_credit = 0.01
+hard_cap = false
+rps = 50

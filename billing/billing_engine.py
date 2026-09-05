@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 
 from . import repo
+from .weights import MILLI_PER_CREDIT as _MILLI
 
 
 def compute_charge(
@@ -26,9 +27,9 @@ def compute_charge(
     ]
     amount = int(base_price_cents)
 
-    quota_milli = int(monthly_quota_credits) * 1000
+    quota_milli = int(monthly_quota_credits) * _MILLI
     overage_milli = max(0, total_milli_credits - quota_milli)
-    overage_credits = math.ceil(overage_milli / 1000)
+    overage_credits = math.ceil(overage_milli / _MILLI)
     if overage_credits > 0 and overage_cents_per_credit > 0:
         overage_cents = math.ceil(overage_credits * float(overage_cents_per_credit))
         amount += overage_cents
@@ -43,7 +44,7 @@ def compute_charge(
             }
         )
     else:
-        used_credits = total_milli_credits / 1000
+        used_credits = total_milli_credits / _MILLI
         line_items.append(
             {
                 "description": f"Included credits ({used_credits:g}/{monthly_quota_credits})",

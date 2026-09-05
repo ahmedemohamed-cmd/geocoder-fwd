@@ -6,6 +6,7 @@ from decimal import Decimal
 import asyncpg
 
 from . import config, security, weights
+from .spec import load as _load_spec
 
 _log = logging.getLogger("billing.db")
 
@@ -102,11 +103,16 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 """
 
 DEFAULT_PLANS = [
-    # id,       name,     quota (credits), base_cents, overage ¢/credit, hard_cap, rps
-    ("free", "Free", 25_000, 0, 0.0, True, 2),
-    ("starter", "Starter", 250_000, 2900, 0.03, False, 10),  # $0.30 / 1k credits
-    ("pro", "Pro", 3_000_000, 29900, 0.015, False, 25),  # $0.15 / 1k credits
-    ("scale", "Scale", 12_000_000, 99900, 0.010, False, 50),  # $0.10 / 1k credits
+    (
+        p["id"],
+        p["name"],
+        p["quota_credits"],
+        p["base_price_cents"],
+        p["overage_cents_per_credit"],
+        p["hard_cap"],
+        p["rps"],
+    )
+    for p in _load_spec()["plans"]
 ]
 
 

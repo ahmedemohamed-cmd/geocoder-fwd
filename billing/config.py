@@ -9,6 +9,8 @@ isolated from the geocoding data.
 import os
 import re
 
+from .spec import load as _load_spec
+
 
 def _int(name: str, default: int) -> int:
     try:
@@ -196,13 +198,11 @@ def norm_path(p: str) -> str:
     return "/" + (p or "").split("?", 1)[0].strip().lower().strip("/")
 
 
+# The default list is a product decision and lives in spec/billing.toml; the
+# env var is the operator's override.
+_SPEC_FREE = ",".join(_load_spec()["weights"]["free_endpoints"])
 FREE_ENDPOINTS = frozenset(
-    norm_path(s)
-    for s in os.getenv(
-        "BILLING_FREE_ENDPOINTS",
-        "/health,/status,/features,/feedback,/insert,/places,/traffic/probe,/traffic/probes,/nearby/categories",
-    ).split(",")
-    if s.strip()
+    norm_path(s) for s in os.getenv("BILLING_FREE_ENDPOINTS", _SPEC_FREE).split(",") if s.strip()
 )
 
 

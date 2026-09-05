@@ -43,8 +43,8 @@ Values that exist only because someone measured, tuned, and kept them. No
 architecture implies them, and a regeneration cannot invent them correctly.
 These live in `spec/` as declarative data that the implementation *reads*.
 
-**Status: complete for domain knowledge. ~1,440 values across eleven spec
-files.**
+**Status: complete for domain knowledge in both domains. ~1,496 values across
+twelve spec files.**
 
 What is deliberately *not* in `spec/`, because it is not specification:
 
@@ -59,7 +59,14 @@ What is deliberately *not* in `spec/`, because it is not specification:
 
 The boundary matters: putting an operator knob in `spec/` would make a
 deployment choice look like a product decision, and a regeneration would treat
-it as fixed.
+it as fixed. The free-endpoint list shows the layering working: the default list
+is a product decision and lives in `spec/billing.toml`, while
+`BILLING_FREE_ENDPOINTS` remains the operator's override.
+
+Billing loads `spec/` through its own `billing/spec.py` rather than
+`shared/spec.py`, because AD-13 keeps that subsystem independently deployable.
+The data in `spec/` is shared; the loader is deliberately not. Both images COPY
+`spec/`.
 
 | Area | Literals before → after | Spec file |
 | --- | --- | --- |
@@ -74,6 +81,7 @@ it as fixed.
 | `services/routing.py` | Arabic narration, traffic bands | `spec/routing.toml` |
 | `services/gn_watcher.py` | GeoNames feature taxonomy | `spec/geonames.json` |
 | `services/geocoder_helpers.py` | confidence ladder, street tokens, text clauses | `spec/matching.toml`, `spec/search.toml` |
+| `billing/` | plan pricing, endpoint credit weights, metering units, security minimums | `spec/billing.toml` |
 
 \* `address.py`'s count is unchanged because its literals are regex offsets and
 slice bounds, not tuning; the eight *vocabularies* (abbreviations, street types,

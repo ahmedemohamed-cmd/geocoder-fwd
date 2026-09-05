@@ -1,0 +1,1249 @@
+{
+ "charges": [
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0/25000)",
+     "quantity": 0.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 0
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1/25000)",
+     "quantity": 1.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 1
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (12500/25000)",
+     "quantity": 12500.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 12500
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (24999/25000)",
+     "quantity": 24999.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 24999
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (25000/25000)",
+     "quantity": 25000.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 25000
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (25001/25000)",
+     "quantity": 25001.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 25001
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (25999/25000)",
+     "quantity": 25999.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 25999
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (50000/25000)",
+     "quantity": 50000.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 50000
+  },
+  {
+   "amount_cents": 0,
+   "line_items": [
+    {
+     "amount_cents": 0,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (250000/25000)",
+     "quantity": 250000.0
+    }
+   ],
+   "plan": "free",
+   "used_credits": 250000
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0/250000)",
+     "quantity": 0.0
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 0
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1/250000)",
+     "quantity": 1.0
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 1
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (125000/250000)",
+     "quantity": 125000.0
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 125000
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (249999/250000)",
+     "quantity": 249999.0
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 249999
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (250000/250000)",
+     "quantity": 250000.0
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 250000
+  },
+  {
+   "amount_cents": 2901,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 1,
+     "description": "Overage (1 credits over 250000 included)",
+     "quantity": 1,
+     "unit_cents": 0.03
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 250001
+  },
+  {
+   "amount_cents": 2930,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 30,
+     "description": "Overage (999 credits over 250000 included)",
+     "quantity": 999,
+     "unit_cents": 0.03
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 250999
+  },
+  {
+   "amount_cents": 10400,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 7500,
+     "description": "Overage (250000 credits over 250000 included)",
+     "quantity": 250000,
+     "unit_cents": 0.03
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 500000
+  },
+  {
+   "amount_cents": 70400,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 67500,
+     "description": "Overage (2250000 credits over 250000 included)",
+     "quantity": 2250000,
+     "unit_cents": 0.03
+    }
+   ],
+   "plan": "starter",
+   "used_credits": 2500000
+  },
+  {
+   "amount_cents": 29900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0/3000000)",
+     "quantity": 0.0
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 0
+  },
+  {
+   "amount_cents": 29900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1/3000000)",
+     "quantity": 1.0
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 1
+  },
+  {
+   "amount_cents": 29900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1.5e+06/3000000)",
+     "quantity": 1500000.0
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 1500000
+  },
+  {
+   "amount_cents": 29900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (3e+06/3000000)",
+     "quantity": 2999999.0
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 2999999
+  },
+  {
+   "amount_cents": 29900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (3e+06/3000000)",
+     "quantity": 3000000.0
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 3000000
+  },
+  {
+   "amount_cents": 29901,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 1,
+     "description": "Overage (1 credits over 3000000 included)",
+     "quantity": 1,
+     "unit_cents": 0.015
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 3000001
+  },
+  {
+   "amount_cents": 29915,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 15,
+     "description": "Overage (999 credits over 3000000 included)",
+     "quantity": 999,
+     "unit_cents": 0.015
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 3000999
+  },
+  {
+   "amount_cents": 74900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 45000,
+     "description": "Overage (3000000 credits over 3000000 included)",
+     "quantity": 3000000,
+     "unit_cents": 0.015
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 6000000
+  },
+  {
+   "amount_cents": 434900,
+   "line_items": [
+    {
+     "amount_cents": 29900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 405000,
+     "description": "Overage (27000000 credits over 3000000 included)",
+     "quantity": 27000000,
+     "unit_cents": 0.015
+    }
+   ],
+   "plan": "pro",
+   "used_credits": 30000000
+  },
+  {
+   "amount_cents": 99900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0/12000000)",
+     "quantity": 0.0
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 0
+  },
+  {
+   "amount_cents": 99900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1/12000000)",
+     "quantity": 1.0
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 1
+  },
+  {
+   "amount_cents": 99900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (6e+06/12000000)",
+     "quantity": 6000000.0
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 6000000
+  },
+  {
+   "amount_cents": 99900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1.2e+07/12000000)",
+     "quantity": 11999999.0
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 11999999
+  },
+  {
+   "amount_cents": 99900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1.2e+07/12000000)",
+     "quantity": 12000000.0
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 12000000
+  },
+  {
+   "amount_cents": 99901,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 1,
+     "description": "Overage (1 credits over 12000000 included)",
+     "quantity": 1,
+     "unit_cents": 0.01
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 12000001
+  },
+  {
+   "amount_cents": 99910,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 10,
+     "description": "Overage (999 credits over 12000000 included)",
+     "quantity": 999,
+     "unit_cents": 0.01
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 12000999
+  },
+  {
+   "amount_cents": 219900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 120000,
+     "description": "Overage (12000000 credits over 12000000 included)",
+     "quantity": 12000000,
+     "unit_cents": 0.01
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 24000000
+  },
+  {
+   "amount_cents": 1179900,
+   "line_items": [
+    {
+     "amount_cents": 99900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 1080000,
+     "description": "Overage (108000000 credits over 12000000 included)",
+     "quantity": 108000000,
+     "unit_cents": 0.01
+    }
+   ],
+   "plan": "scale",
+   "used_credits": 120000000
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0/25000)",
+     "quantity": 0.0
+    }
+   ],
+   "milli": 0,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0.001/25000)",
+     "quantity": 0.001
+    }
+   ],
+   "milli": 1,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (0.999/25000)",
+     "quantity": 0.999
+    }
+   ],
+   "milli": 999,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1/25000)",
+     "quantity": 1.0
+    }
+   ],
+   "milli": 1000,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1.001/25000)",
+     "quantity": 1.001
+    }
+   ],
+   "milli": 1001,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (1500/25000)",
+     "quantity": 1500.0
+    }
+   ],
+   "milli": 1500000,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2900,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 0,
+     "description": "Included credits (25000/25000)",
+     "quantity": 25000.0
+    }
+   ],
+   "milli": 25000000,
+   "plan": "boundary"
+  },
+  {
+   "amount_cents": 2901,
+   "line_items": [
+    {
+     "amount_cents": 2900,
+     "description": "Base subscription",
+     "quantity": 1
+    },
+    {
+     "amount_cents": 1,
+     "description": "Overage (1 credits over 25000 included)",
+     "quantity": 1,
+     "unit_cents": 0.03
+    }
+   ],
+   "milli": 25000001,
+   "plan": "boundary"
+  }
+ ],
+ "default_plans": [
+  [
+   "free",
+   "Free",
+   25000,
+   0,
+   0.0,
+   true,
+   2
+  ],
+  [
+   "starter",
+   "Starter",
+   250000,
+   2900,
+   0.03,
+   false,
+   10
+  ],
+  [
+   "pro",
+   "Pro",
+   3000000,
+   29900,
+   0.015,
+   false,
+   25
+  ],
+  [
+   "scale",
+   "Scale",
+   12000000,
+   99900,
+   0.01,
+   false,
+   50
+  ]
+ ],
+ "default_weights": {
+  "autocomplete": 250,
+  "deep": 3000,
+  "describe": 25000,
+  "geocode": 1000,
+  "isochrone": 5000,
+  "locate": 5000,
+  "nearby": 1000,
+  "optimized_route": 5000,
+  "reverse": 1000,
+  "route": 5000,
+  "sources_to_targets": 5000,
+  "sources_to_targets_element": 100
+ },
+ "free_endpoints": [
+  "/features",
+  "/feedback",
+  "/health",
+  "/insert",
+  "/nearby/categories",
+  "/places",
+  "/status",
+  "/traffic/probe",
+  "/traffic/probes"
+ ],
+ "free_paths": [
+  {
+   "free": true,
+   "norm": "/health",
+   "p": "/health"
+  },
+  {
+   "free": true,
+   "norm": "/status",
+   "p": "/status"
+  },
+  {
+   "free": true,
+   "norm": "/features",
+   "p": "/features"
+  },
+  {
+   "free": true,
+   "norm": "/feedback",
+   "p": "/feedback"
+  },
+  {
+   "free": true,
+   "norm": "/insert",
+   "p": "/insert"
+  },
+  {
+   "free": true,
+   "norm": "/places",
+   "p": "/places"
+  },
+  {
+   "free": true,
+   "norm": "/traffic/probe",
+   "p": "/traffic/probe"
+  },
+  {
+   "free": true,
+   "norm": "/traffic/probes",
+   "p": "/traffic/probes"
+  },
+  {
+   "free": true,
+   "norm": "/nearby/categories",
+   "p": "/nearby/categories"
+  },
+  {
+   "free": false,
+   "norm": "/traffic/edge",
+   "p": "/traffic/edge"
+  },
+  {
+   "free": false,
+   "norm": "/geocode",
+   "p": "/geocode"
+  },
+  {
+   "free": false,
+   "norm": "/geocode",
+   "p": "/geocode?q=x"
+  },
+  {
+   "free": false,
+   "norm": "/geocode",
+   "p": "/GEOCODE"
+  },
+  {
+   "free": true,
+   "norm": "/health",
+   "p": "/health/"
+  },
+  {
+   "free": true,
+   "norm": "/health",
+   "p": "health"
+  },
+  {
+   "free": false,
+   "norm": "/",
+   "p": ""
+  },
+  {
+   "free": false,
+   "norm": "/",
+   "p": "/"
+  },
+  {
+   "free": false,
+   "norm": "/deep/forward",
+   "p": "/deep/forward"
+  },
+  {
+   "free": false,
+   "norm": "/nearby",
+   "p": "/nearby"
+  }
+ ],
+ "free_regex": "^(/features|/feedback|/health|/insert|/nearby/categories|/places|/status|/traffic/probe|/traffic/probes)/?$",
+ "matrix_milli": [
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 1
+  },
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 2
+  },
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 5
+  },
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 10
+  },
+  {
+   "milli": 5000,
+   "s": 0,
+   "t": 50
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 1
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 2
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 5
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 10
+  },
+  {
+   "milli": 5000,
+   "s": 1,
+   "t": 50
+  },
+  {
+   "milli": 5000,
+   "s": 2,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 2,
+   "t": 1
+  },
+  {
+   "milli": 5000,
+   "s": 2,
+   "t": 2
+  },
+  {
+   "milli": 5000,
+   "s": 2,
+   "t": 5
+  },
+  {
+   "milli": 5000,
+   "s": 2,
+   "t": 10
+  },
+  {
+   "milli": 10000,
+   "s": 2,
+   "t": 50
+  },
+  {
+   "milli": 5000,
+   "s": 5,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 5,
+   "t": 1
+  },
+  {
+   "milli": 5000,
+   "s": 5,
+   "t": 2
+  },
+  {
+   "milli": 5000,
+   "s": 5,
+   "t": 5
+  },
+  {
+   "milli": 5000,
+   "s": 5,
+   "t": 10
+  },
+  {
+   "milli": 25000,
+   "s": 5,
+   "t": 50
+  },
+  {
+   "milli": 5000,
+   "s": 10,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 10,
+   "t": 1
+  },
+  {
+   "milli": 5000,
+   "s": 10,
+   "t": 2
+  },
+  {
+   "milli": 5000,
+   "s": 10,
+   "t": 5
+  },
+  {
+   "milli": 10000,
+   "s": 10,
+   "t": 10
+  },
+  {
+   "milli": 50000,
+   "s": 10,
+   "t": 50
+  },
+  {
+   "milli": 5000,
+   "s": 50,
+   "t": 0
+  },
+  {
+   "milli": 5000,
+   "s": 50,
+   "t": 1
+  },
+  {
+   "milli": 10000,
+   "s": 50,
+   "t": 2
+  },
+  {
+   "milli": 25000,
+   "s": 50,
+   "t": 5
+  },
+  {
+   "milli": 50000,
+   "s": 50,
+   "t": 10
+  },
+  {
+   "milli": 250000,
+   "s": 50,
+   "t": 50
+  }
+ ],
+ "matrix_size": [
+  {
+   "qs": null,
+   "r": [
+    0,
+    0
+   ]
+  },
+  {
+   "qs": "",
+   "r": [
+    0,
+    0
+   ]
+  },
+  {
+   "qs": "sources=1|2&targets=3",
+   "r": [
+    0,
+    0
+   ]
+  },
+  {
+   "qs": "sources=1",
+   "r": [
+    0,
+    0
+   ]
+  },
+  {
+   "qs": "targets=1|2|3",
+   "r": [
+    0,
+    0
+   ]
+  }
+ ],
+ "min_weight": 250,
+ "now_parts": [
+  "2026-03",
+  "2026-03-01"
+ ],
+ "projected_cap": [
+  {
+   "cap": 0,
+   "quota": 0
+  },
+  {
+   "cap": 4,
+   "quota": 1
+  },
+  {
+   "cap": 100000,
+   "quota": 25000
+  },
+  {
+   "cap": 1000000,
+   "quota": 250000
+  },
+  {
+   "cap": 12000000,
+   "quota": 3000000
+  },
+  {
+   "cap": 48000000,
+   "quota": 12000000
+  }
+ ],
+ "units": {
+  "DEFAULT_MATRIX_ELEMENT_MILLI": 100,
+  "DEFAULT_WEIGHT_MILLI": 1000,
+  "MATRIX_ELEMENT_KEY": "sources_to_targets_element",
+  "MATRIX_ENDPOINT": "sources_to_targets",
+  "MILLI_PER_CREDIT": 1000
+ },
+ "weight_for": [
+  {
+   "e": "autocomplete",
+   "w": 250
+  },
+  {
+   "e": "deep",
+   "w": 3000
+  },
+  {
+   "e": "describe",
+   "w": 25000
+  },
+  {
+   "e": "geocode",
+   "w": 1000
+  },
+  {
+   "e": "isochrone",
+   "w": 5000
+  },
+  {
+   "e": "locate",
+   "w": 5000
+  },
+  {
+   "e": "nearby",
+   "w": 1000
+  },
+  {
+   "e": "optimized_route",
+   "w": 5000
+  },
+  {
+   "e": "reverse",
+   "w": 1000
+  },
+  {
+   "e": "route",
+   "w": 5000
+  },
+  {
+   "e": "sources_to_targets",
+   "w": 5000
+  },
+  {
+   "e": "sources_to_targets_element",
+   "w": 100
+  },
+  {
+   "e": "unknown",
+   "w": 1000
+  },
+  {
+   "e": "",
+   "w": 1000
+  },
+  {
+   "e": "geocode",
+   "w": 1000
+  },
+  {
+   "e": "deep",
+   "w": 3000
+  }
+ ]
+}

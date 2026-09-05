@@ -21,37 +21,26 @@ import asyncio
 import logging
 import time
 
+from .spec import load as _load_spec
+
+_SPEC = _load_spec()
+_U = _SPEC["units"]
+
 _log = logging.getLogger("billing.weights")
 
-MILLI_PER_CREDIT = 1000
-DEFAULT_WEIGHT_MILLI = 1000  # unlisted endpoints cost 1 credit
+MILLI_PER_CREDIT = _U["milli_per_credit"]
+DEFAULT_WEIGHT_MILLI = _U["default_weight_milli"]
 
 # Matrix calls are billed per source×target element (market prices matrices per
 # element; a flat per-call weight lets a 100×100 request buy 10k routings for 5
 # credits). The element rate lives in the weights table under this pseudo-key so
 # it stays admin-tunable; the flat sources_to_targets weight acts as the floor
 # for requests whose size can't be determined.
-MATRIX_ENDPOINT = "sources_to_targets"
-MATRIX_ELEMENT_KEY = "sources_to_targets_element"
-DEFAULT_MATRIX_ELEMENT_MILLI = 100  # 0.1 credit per element
+MATRIX_ENDPOINT = _U["matrix_endpoint"]
+MATRIX_ELEMENT_KEY = _U["matrix_element_key"]
+DEFAULT_MATRIX_ELEMENT_MILLI = _U["default_matrix_element_milli"]
 
-DEFAULT_WEIGHTS: dict[str, int] = {
-    "autocomplete": 250,
-    "geocode": 1000,
-    "reverse": 1000,
-    "nearby": 1000,
-    "deep": 3000,
-    "route": 5000,
-    "optimized_route": 5000,
-    "sources_to_targets": 5000,
-    "isochrone": 5000,
-    "locate": 5000,
-    # LLM inference (Ollama) on cache miss — heaviest single op in the stack,
-    # amortized by the permanent per-place ES cache. Priced above worst-case
-    # GPU cost per generation so cache misses are never underwater.
-    "describe": 25000,
-    MATRIX_ELEMENT_KEY: DEFAULT_MATRIX_ELEMENT_MILLI,
-}
+DEFAULT_WEIGHTS = {k: int(v) for k, v in _SPEC["weights"].items() if k != "free_endpoints"}
 
 _TTL = 15.0  # seconds
 _cache: dict[str, int] | None = None

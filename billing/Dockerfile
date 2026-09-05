@@ -6,6 +6,8 @@ COPY billing/requirements.txt /app/billing/requirements.txt
 RUN pip install --no-cache-dir -r /app/billing/requirements.txt
 
 COPY billing /app/billing
+# Billing specification — billing/spec.py loads this at import time.
+COPY spec /app/spec
 
 # Default to the control plane; compose overrides `command` per service.
 EXPOSE 8100 8080
