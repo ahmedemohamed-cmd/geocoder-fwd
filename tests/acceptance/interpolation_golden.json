@@ -1,0 +1,98 @@
+[
+ {
+  "case": "odd-between-known",
+  "hn": 7,
+  "result": {
+   "bracket_high": "11",
+   "bracket_low": "5",
+   "confidence": 0.85,
+   "lat": 30.0404667,
+   "lon": 31.2304667,
+   "side": "odd"
+  }
+ },
+ {
+  "case": "odd-wide-gap",
+  "hn": 13,
+  "result": {
+   "bracket_high": "15",
+   "bracket_low": "11",
+   "confidence": 0.85,
+   "lat": 30.0407,
+   "lon": 31.2307,
+   "side": "odd"
+  }
+ },
+ {
+  "case": "even-between-known",
+  "hn": 8,
+  "result": {
+   "bracket_high": "12",
+   "bracket_low": "6",
+   "confidence": 0.85,
+   "lat": 30.0405667,
+   "lon": 31.2305667,
+   "side": "even"
+  }
+ },
+ {
+  "case": "even-wide-gap",
+  "hn": 14,
+  "result": {
+   "bracket_high": "16",
+   "bracket_low": "12",
+   "confidence": 0.85,
+   "lat": 30.0408,
+   "lon": 31.2308,
+   "side": "even"
+  }
+ },
+ {
+  "case": "below-range",
+  "hn": 0,
+  "result": {
+   "bracket_high": "2",
+   "bracket_low": null,
+   "confidence": 0.3,
+   "lat": 30.0401,
+   "lon": 31.2301,
+   "side": "even"
+  }
+ },
+ {
+  "case": "above-range",
+  "hn": 99,
+  "result": {
+   "bracket_high": null,
+   "bracket_low": "21",
+   "confidence": 0.3,
+   "lat": 30.041,
+   "lon": 31.231,
+   "side": "odd"
+  }
+ },
+ {
+  "case": "exact-existing-odd",
+  "hn": 5,
+  "result": {
+   "bracket_high": null,
+   "bracket_low": null,
+   "confidence": 1.0,
+   "lat": 30.0404,
+   "lon": 31.2304,
+   "side": "odd"
+  }
+ },
+ {
+  "case": "exact-existing-even",
+  "hn": 6,
+  "result": {
+   "bracket_high": null,
+   "bracket_low": null,
+   "confidence": 1.0,
+   "lat": 30.0405,
+   "lon": 31.2305,
+   "side": "even"
+  }
+ }
+]
