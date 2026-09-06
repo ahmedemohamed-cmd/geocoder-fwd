@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("interpolation.json")
+_SPEC = _load_spec("interpolation.toml")
 
 logger = logging.getLogger(__name__)
 

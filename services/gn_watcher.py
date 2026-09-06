@@ -45,7 +45,7 @@ from shared.processed import claim, is_processed, load_processed, record_process
 from shared.progress import ProgressTracker
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("geonames.json")
+_SPEC = _load_spec("geonames.toml")
 
 logger = get_logger("gn-watcher")
 

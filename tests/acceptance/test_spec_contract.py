@@ -35,10 +35,10 @@ SPEC_FILES = [
     "ranking.toml",
     "autocomplete.toml",
     "es-mapping.json",
-    "categories.json",
-    "address.json",
-    "places-mapping.json",
-    "interpolation.json",
+    "categories.toml",
+    "address.toml",
+    "places-mapping.toml",
+    "interpolation.toml",
 ]
 
 
@@ -63,9 +63,9 @@ def test_tables_come_from_the_spec():
     earlier version of this test required the literal `_SPEC` in the assignment
     expression and failed a correct regeneration that used a local alias.
     """
-    assert C.GROUP_DEFS == load("categories.json")["GROUP_DEFS"]
-    assert C.CATEGORY_SYNONYMS == load("categories.json")["CATEGORY_SYNONYMS"]
-    assert PM.LAYER_FEATURE == load("places-mapping.json")["LAYER_FEATURE"]
+    assert C.GROUP_DEFS == load("categories.toml")["GROUP_DEFS"]
+    assert C.CATEGORY_SYNONYMS == load("categories.toml")["CATEGORY_SYNONYMS"]
+    assert PM.LAYER_FEATURE == load("places-mapping.toml")["LAYER_FEATURE"]
     assert EM.MAPPING["mappings"], "es mapping must be populated from spec"
 
     # Ranking is covered behaviourally by tests/acceptance/test_ranking_spec.py:
@@ -216,7 +216,7 @@ def build_snapshot():
         for q in ["metro", "hospital", "مستشفى", "cafe", "Starbucks", "15 Tahrir", ""]
     ]
 
-    interp = load("interpolation.json")
+    interp = load("interpolation.toml")
     out["interp_street_prefixes"] = sorted(interp["_STREET_PREFIXES"])
     out["interp_ar_delete"] = sorted(interp["_AR_DELETE"])
     return json.loads(json.dumps(out, sort_keys=True, default=str, ensure_ascii=False))

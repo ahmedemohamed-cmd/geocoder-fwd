@@ -136,7 +136,7 @@ def build_snapshot():
 
 
 def test_spec_files_load():
-    for name in ("routing.toml", "geonames.json", "matching.toml"):
+    for name in ("routing.toml", "geonames.toml", "matching.toml"):
         assert load(name), f"spec/{name} missing or empty"
 
 

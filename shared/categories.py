@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("categories.json")
+_SPEC = _load_spec("categories.toml")
 
 CATEGORY_KEYS = _SPEC["CATEGORY_KEYS"]
 GROUP_DEFS = _SPEC["GROUP_DEFS"]

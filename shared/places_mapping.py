@@ -42,7 +42,7 @@ import re
 from shared.google_maps import place_osm_id
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("places-mapping.json")
+_SPEC = _load_spec("places-mapping.toml")
 
 GOOGLE_SOURCE = "google"
 PG_SOURCE = "places_pg"
