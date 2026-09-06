@@ -1,0 +1,426 @@
+[
+ {
+  "body": {
+   "trip": {
+    "language": "ar",
+    "legs": [
+     {
+      "maneuvers": [
+       {
+        "instruction": "اتجه شرقاً على Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 1
+       },
+       {
+        "instruction": "لقد وصلت إلى وجهتك.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 4
+       },
+       {
+        "instruction": "انعطف يميناً نحو Ramses Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 10
+       },
+       {
+        "instruction": "انعطف يساراً نحو Corniche El Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 15
+       },
+       {
+        "instruction": "انحرف يساراً نحو Qasr Al Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 16
+       },
+       {
+        "instruction": "خذ المنحدر نحو July 26 Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 17
+       },
+       {
+        "instruction": "ابقَ على اليمين نحو Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 23
+       },
+       {
+        "instruction": "ادخل الدوار وخذ المخرج الأول.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 26
+       },
+       {
+        "instruction": "اخرج من الدوار نحو Salah Salem.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 27
+       },
+       {
+        "instruction": "وجهتك على اليمين.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 5
+       }
+      ]
+     }
+    ],
+    "units": "kilometers"
+   }
+  },
+  "case": "arabic-km",
+  "status": 200
+ },
+ {
+  "body": {
+   "trip": {
+    "language": "ar",
+    "legs": [
+     {
+      "maneuvers": [
+       {
+        "instruction": "اتجه شرقاً على Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 1
+       },
+       {
+        "instruction": "لقد وصلت إلى وجهتك.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 4
+       },
+       {
+        "instruction": "انعطف يميناً نحو Ramses Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 10
+       },
+       {
+        "instruction": "انعطف يساراً نحو Corniche El Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 15
+       },
+       {
+        "instruction": "انحرف يساراً نحو Qasr Al Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 16
+       },
+       {
+        "instruction": "خذ المنحدر نحو July 26 Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 17
+       },
+       {
+        "instruction": "ابقَ على اليمين نحو Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 23
+       },
+       {
+        "instruction": "ادخل الدوار وخذ المخرج الأول.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 26
+       },
+       {
+        "instruction": "اخرج من الدوار نحو Salah Salem.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 27
+       },
+       {
+        "instruction": "وجهتك على اليمين.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 5
+       }
+      ]
+     }
+    ],
+    "units": "miles"
+   }
+  },
+  "case": "arabic-miles",
+  "status": 200
+ },
+ {
+  "body": {
+   "trip": {
+    "language": "en",
+    "legs": [
+     {
+      "maneuvers": [
+       {
+        "instruction": "Drive east on Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 1
+       },
+       {
+        "instruction": "You have arrived at your destination.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 4
+       },
+       {
+        "instruction": "Turn right onto Ramses Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 10
+       },
+       {
+        "instruction": "Turn left onto Corniche El Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 15
+       },
+       {
+        "instruction": "Turn sharp left onto Qasr Al Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 16
+       },
+       {
+        "instruction": "Bear right onto July 26 Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 17
+       },
+       {
+        "instruction": "Keep left to take the ramp toward Downtown.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 23
+       },
+       {
+        "instruction": "Enter the roundabout and take the 3rd exit.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 26
+       },
+       {
+        "instruction": "Exit the roundabout onto Salah Salem.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 27
+       },
+       {
+        "instruction": "Make a U-turn.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 5
+       }
+      ]
+     }
+    ],
+    "units": "kilometers"
+   }
+  },
+  "case": "english-untouched",
+  "status": 200
+ },
+ {
+  "body": {
+   "trip": {
+    "language": "en",
+    "legs": [
+     {
+      "maneuvers": [
+       {
+        "instruction": "Drive east on Tahrir Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 1
+       },
+       {
+        "instruction": "You have arrived at your destination.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 4
+       },
+       {
+        "instruction": "Turn right onto Ramses Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 10
+       },
+       {
+        "instruction": "Turn left onto Corniche El Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 15
+       },
+       {
+        "instruction": "Turn sharp left onto Qasr Al Nil.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 16
+       },
+       {
+        "instruction": "Bear right onto July 26 Street.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 17
+       },
+       {
+        "instruction": "Keep left to take the ramp toward Downtown.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 23
+       },
+       {
+        "instruction": "Enter the roundabout and take the 3rd exit.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 26
+       },
+       {
+        "instruction": "Exit the roundabout onto Salah Salem.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 27
+       },
+       {
+        "instruction": "Make a U-turn.",
+        "length": 1.234,
+        "street_names": [
+         "Tahrir Street"
+        ],
+        "time": 60,
+        "type": 5
+       }
+      ]
+     }
+    ],
+    "units": "kilometers"
+   }
+  },
+  "case": "no-language",
+  "status": 200
+ }
+]
