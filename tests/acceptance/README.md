@@ -51,6 +51,15 @@ need a live indexed Elasticsearch, so they are not part of this suite — but a
 regeneration is not acceptable until they pass against
 `docs/quality-baseline.md`. Snapshot equality proves faithfulness, not quality.
 
-Pipeline-stage tests still call watcher parse functions directly. The stronger
-contract is the NATS element message those stages publish (AD-1). Testing at
-that boundary instead is open work.
+Pipeline-stage coverage now tests at the right boundary: `test_geonames_contract.py`
+feeds a TSV through the public `publish_tsv` entry point with a fake JetStream
+and pins the **element message published to NATS** (AD-1), not the parse
+function. `test_routing_contract.py` does the same for narration, driving
+POST /route and pinning what a client receives.
+
+Both were worth doing carefully. The routing golden was captured wrong on the
+first attempt: patching `routing.proxy` bypassed the Arabic translation, which
+happens *inside* proxy, so the snapshot pinned untranslated English. The fix was
+to patch at the httpx seam — and the reason it was caught at all is that the
+file asserts the headline behaviour independently of the snapshot. **A golden
+alone will happily pin a bug.**

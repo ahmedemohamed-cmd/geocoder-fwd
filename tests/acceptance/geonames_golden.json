@@ -1,0 +1,1259 @@
+[
+ {
+  "message": {
+   "admin_level": 4,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn1",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "ADM1",
+    "name": "Place ADM1",
+    "place": "state",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 4,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn2",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "ADM1H",
+    "name": "Place ADM1H",
+    "place": "state",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn3",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "ADM2",
+    "name": "Place ADM2",
+    "place": "region",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn4",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "ADM2H",
+    "name": "Place ADM2H",
+    "place": "region",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn5",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PCLD",
+    "name": "Place PCLD",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn6",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PCLF",
+    "name": "Place PCLF",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn7",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PCLI",
+    "name": "Place PCLI",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn8",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PCLS",
+    "name": "Place PCLS",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn9",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPL",
+    "name": "Place PPL",
+    "place": "village",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn10",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLA",
+    "name": "Place PPLA",
+    "place": "city",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn11",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLA2",
+    "name": "Place PPLA2",
+    "place": "city",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn12",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLA3",
+    "name": "Place PPLA3",
+    "place": "town",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn13",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLA4",
+    "name": "Place PPLA4",
+    "place": "town",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn14",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLA5",
+    "name": "Place PPLA5",
+    "place": "town",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn15",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLC",
+    "name": "Place PPLC",
+    "place": "city",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn16",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLF",
+    "name": "Place PPLF",
+    "place": "hamlet",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn17",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLL",
+    "name": "Place PPLL",
+    "place": "hamlet",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn18",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLQ",
+    "name": "Place PPLQ",
+    "place": "hamlet",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn19",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLR",
+    "name": "Place PPLR",
+    "place": "hamlet",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn20",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLS",
+    "name": "Place PPLS",
+    "place": "village",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn21",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLW",
+    "name": "Place PPLW",
+    "place": "hamlet",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn22",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLX",
+    "name": "Place PPLX",
+    "place": "neighbourhood",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 4,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn23",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM1",
+    "name": "Admin ADM1",
+    "place": "state",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 4,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn24",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM1H",
+    "name": "Admin ADM1H",
+    "place": "state",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn25",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM2",
+    "name": "Admin ADM2",
+    "place": "region",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn26",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM2H",
+    "name": "Admin ADM2H",
+    "place": "region",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 7,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn27",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM3",
+    "name": "Admin ADM3",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 7,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn28",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM3H",
+    "name": "Admin ADM3H",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 8,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn29",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM4",
+    "name": "Admin ADM4",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 8,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn30",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM4H",
+    "name": "Admin ADM4H",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 9,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn31",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM5",
+    "name": "Admin ADM5",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 9,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn32",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADM5H",
+    "name": "Admin ADM5H",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn33",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADMD",
+    "name": "Admin ADMD",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 6,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn34",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ADMDH",
+    "name": "Admin ADMDH",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn35",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "PCLD",
+    "name": "Admin PCLD",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn36",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "PCLF",
+    "name": "Admin PCLF",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn37",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "PCLH",
+    "name": "Admin PCLH",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn38",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "PCLI",
+    "name": "Admin PCLI",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 2,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn39",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "PCLS",
+    "name": "Admin PCLS",
+    "place": "country",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn40",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "boundary": "administrative",
+    "geonames:feature_class": "A",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class A",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn41",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "H",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class H",
+    "natural": "water",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn42",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "L",
+    "geonames:feature_code": "ZZZZ",
+    "landuse": "area",
+    "name": "Class L",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn43",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class P",
+    "place": "locality",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn44",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "R",
+    "geonames:feature_code": "ZZZZ",
+    "highway": "road",
+    "name": "Class R",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn45",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "building": "yes",
+    "geonames:feature_class": "S",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class S",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn46",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "T",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class T",
+    "natural": "peak",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn47",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "U",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class U",
+    "natural": "water",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn48",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "V",
+    "geonames:feature_code": "ZZZZ",
+    "name": "Class V",
+    "natural": "wood",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn49",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "X",
+    "geonames:feature_code": "NOPE",
+    "name": "Unknown",
+    "population": "1000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ },
+ {
+  "message": {
+   "admin_level": 0,
+   "area_km2": 0.0,
+   "geom": {
+    "coordinates": [
+     31.0,
+     30.0
+    ],
+    "type": "Point"
+   },
+   "osm_id": "gn53",
+   "osm_type": "node",
+   "tags": {
+    "addr:country": "EG",
+    "geonames:feature_class": "P",
+    "geonames:feature_code": "PPLC",
+    "name": "Megacity",
+    "place": "city",
+    "population": "9500000",
+    "source": "geonames"
+   }
+  },
+  "subject": "osm.elements"
+ }
+]
