@@ -177,3 +177,66 @@ if __name__ == "__main__":
     if "--update" in sys.argv:
         GOLDEN.write_text(json.dumps(build_cases(), indent=1, sort_keys=True))
         print(f"rewrote {GOLDEN} — now measure against docs/quality-baseline.md")
+
+
+# ── intent, asserted independently of the golden ──────────────────────────
+# A snapshot proves nothing changed; it never proves the values were right. If
+# the golden were regenerated from a broken implementation it would pin the
+# breakage silently. These assert what ranking is FOR, in relations that must
+# hold whatever the individual numbers are.
+
+
+def _rank(tags, admin=None, area=0.0):
+    return R.compute_offline_rank(tags, admin, area)
+
+
+def test_rank_is_always_within_the_documented_scale():
+    """The spec says signals are normalised and scaled to 0..10."""
+    for tags, admin, area in [
+        ({}, None, 0.0),
+        ({"place": "continent"}, 2, 1e6),
+        ({"amenity": "restaurant", "name": "X", "phone": "1", "brand": "Nike"}, None, 0.0),
+        ({"population": "99999999"}, 2, 1e7),
+    ]:
+        r = _rank(tags, admin, area)
+        assert 0.0 <= r <= 10.0, f"rank {r} outside 0..10 for {tags}"
+
+
+def test_more_important_places_outrank_less_important_ones():
+    assert _rank({"place": "country"}) > _rank({"place": "village"})
+    assert _rank({"place": "city"}) > _rank({"place": "hamlet"})
+    assert _rank({"place": "city"}) > _rank({"place": "isolated_dwelling"})
+
+
+def test_a_higher_administrative_rank_scores_higher():
+    """admin_level counts DOWN: 2 is a country, 10 a suburb."""
+    assert _rank({}, admin=2) > _rank({}, admin=4) > _rank({}, admin=8)
+
+
+def test_population_and_area_raise_importance():
+    assert _rank({"place": "city", "population": "5000000"}) > _rank({"place": "city"})
+    assert _rank({"place": "city"}, area=10000.0) > _rank({"place": "city"}, area=1.0)
+
+
+def test_wikipedia_and_wikidata_raise_importance():
+    plain = _rank({"place": "town"})
+    assert _rank({"place": "town", "wikidata": "Q1"}) > plain
+    assert _rank({"place": "town", "wikidata": "Q1", "wikipedia": "en:X"}) > _rank(
+        {"place": "town", "wikidata": "Q1"}
+    )
+
+
+def test_a_named_poi_with_evidence_beats_a_bare_node():
+    """The named-POI floor exists so a real curated place never sits at zero."""
+    assert _rank({"name": "Somewhere", "phone": "123"}) > _rank({"name": "Somewhere"})
+    assert _rank({"name": "Somewhere", "phone": "123"}) > _rank({})
+
+
+def test_generic_buildings_add_nothing():
+    """building=yes is deliberately unscored: millions of them would be noise."""
+    assert _rank({"building": "yes"}) == _rank({})
+    assert _rank({"building": "hospital"}) > _rank({"building": "yes"})
+
+
+def test_an_unknown_office_still_outranks_no_office():
+    assert _rank({"office": "zzz-unknown"}) > _rank({})

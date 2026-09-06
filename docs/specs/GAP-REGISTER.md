@@ -134,6 +134,23 @@ Items are evidence-backed unless marked *unverified*.
   budgets per endpoint, a dependency-audit gate, a secret-scanning step.
 - **Why:** an unmeasurable requirement cannot fail, so it cannot hold.
 
+### G-18 — Housenumber parsing only supports the leading-number convention
+
+- **As-built:** `parse_address_query` extracts a housenumber only when it
+  precedes the street. This works in every language tested, including
+  Arabic-Indic digits (`١٥ شارع التحرير`). A trailing housenumber never parses:
+  `شارع التحرير 15`, `rue de la Paix 15` and `Hauptstrasse 12` all return the
+  whole string as the street with no housenumber.
+- **Desired:** parse both conventions, or state deliberately that trailing-number
+  addresses are out of scope.
+- **Why:** trailing is the standard form across much of Europe — *Via Roma 12*,
+  *Hauptstraße 12*, *Calle Mayor 12*. The index is global (~43.8M docs), so those
+  queries silently lose both exact matching and interpolation. It compounds
+  G-12: a Cairo-only baseline cannot see this at all, because Egyptian addresses
+  use the leading form.
+- **Found by:** writing an intent assertion beside a golden. The snapshot had
+  pinned the behaviour happily for weeks.
+
 ## Regeneration readiness
 
 Resolved 2026-09-05: the intent behind G-14 is that **code is machine-authored
