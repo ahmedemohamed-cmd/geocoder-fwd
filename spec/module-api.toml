@@ -1,0 +1,291 @@
+# Module API specification — the cross-module public contract
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# Every name below is imported by another production module. A regeneration
+# must keep these import paths and names; it is free to change anything else.
+#
+# This file exists because the regeneration experiment failed on an import:
+# shared/autocomplete.py needs categories.CATEGORY_QUERY_TERMS, a derived export
+# that appeared in no spec. The data was specified; the surface was not.
+
+"billing.auth" = [
+  "current_identity",
+  "get_pool",
+  "get_redis",
+  "require_admin",
+  "require_tenant",
+]
+
+"billing.models" = [
+  "AdminCreate",
+  "AdminOut",
+  "AdminUpdate",
+  "CurrentUsage",
+  "Identity",
+  "InvoiceOut",
+  "KeyCreate",
+  "KeyCreated",
+  "KeyOut",
+  "KeyUpdate",
+  "KeyUsage",
+  "LoginRequest",
+  "PlanCreate",
+  "PlanOut",
+  "PlanUpdate",
+  "ResetMfaRequest",
+  "ResetPasswordRequest",
+  "TenantCreate",
+  "TenantOut",
+  "TenantUpdate",
+  "TenantUserCreate",
+  "TenantUserOut",
+  "TenantUserUpdate",
+  "TokenResponse",
+  "UsageHistoryRow",
+  "WeightOut",
+  "WeightUpsert",
+]
+
+"billing.spec" = [
+  "SPEC_DIR",
+  "load",
+]
+
+"billing.weights" = [
+  "MILLI_PER_CREDIT",
+]
+
+"services" = [
+  "nearby",
+]
+
+"services.cache_service" = [
+  "ResultCache",
+]
+
+"services.enrichment" = [
+  "address_needs_refresh",
+  "enrich_address",
+  "schedule_enrichment",
+]
+
+"services.geocoder_models" = [
+  "InsertMessage",
+  "PlaceCreate",
+  "PlaceResponse",
+  "ProbeBatch",
+  "ProbePing",
+]
+
+"services.routing" = [
+  "router",
+]
+
+"shared" = [
+  "nats_client",
+  "traffic_tile",
+]
+
+"shared.address" = [
+  "build_full_address",
+  "extract_address_components",
+  "has_address",
+  "is_address_query",
+  "normalize_address_text",
+  "parse_address_query",
+]
+
+"shared.autocomplete" = [
+  "POPULARITY_CAP",
+  "index_entry",
+  "is_category_query",
+  "query",
+  "update_score",
+  "warm_from_es",
+]
+
+"shared.categories" = [
+  "CATEGORY_KEYS",
+  "CATEGORY_QUERY_TERMS",
+  "GROUPS",
+  "VALUES_BY_GROUP",
+  "category_text",
+  "classify",
+]
+
+"shared.centroid" = [
+  "centroid_latlon",
+]
+
+"shared.config" = [
+  "AC_REDIS_FAST_PATH",
+  "BATCH_SIZE",
+  "DATA_DIR",
+  "ELASTICSEARCH_URL",
+  "EMBEDDING_DIM",
+  "EMBEDDING_MODEL",
+  "ENABLE_AI",
+  "ENABLE_DEEP",
+  "ENABLE_TRAFFIC",
+  "ENABLE_VECTORS",
+  "ES_INDEX_REPLICAS",
+  "GEOCODER_KEEPALIVE_TIMEOUT",
+  "GEOCODER_WORKERS",
+  "GEOCODE_CACHE_COORD_PRECISION",
+  "GEOCODE_CACHE_ENABLED",
+  "GEOCODE_CACHE_TTL",
+  "GN_DATA_DIR",
+  "GN_URL",
+  "GOOGLE_MAPS_API_KEY",
+  "GOOGLE_MAPS_GEOCODE_URL",
+  "GOOGLE_PLACES_SEARCH_TEXT_URL",
+  "LOG_LEVEL",
+  "MAX_CONCURRENT_BATCHES",
+  "NATS_STREAM",
+  "NATS_STREAM_REPLICAS",
+  "NATS_SUBJECT",
+  "NATS_URL",
+  "NEARBY_CACHE_COORD_PRECISION",
+  "NEARBY_CACHE_ENABLED",
+  "NEARBY_CACHE_TTL",
+  "NEARBY_DEFAULT_RADIUS_M",
+  "NEARBY_MAX_AREA_KM2",
+  "NEARBY_MAX_RADIUS_M",
+  "OA_DATA_DIR",
+  "OA_URL",
+  "OLLAMA_MODEL",
+  "OLLAMA_URL",
+  "OSM_URL",
+  "PLACES_DATA_DIR",
+  "POSTGRES_DB",
+  "POSTGRES_HOST",
+  "POSTGRES_PASSWORD",
+  "POSTGRES_PORT",
+  "POSTGRES_USER",
+  "PROCESSED_CLAIM_TTL",
+  "PROCESSED_LEDGER",
+  "REDIS_HOST",
+  "REDIS_MODE",
+  "REDIS_NODES",
+  "REDIS_PORT",
+  "SSL_VERIFY",
+  "TOMTOM_API_KEY",
+  "TOMTOM_FLOW_URL",
+  "TRAFFIC_CELLS_STREAM",
+  "TRAFFIC_CELLS_SUBJECT",
+  "TRAFFIC_CELL_WORKERS",
+  "TRAFFIC_EDGE_TTL",
+  "TRAFFIC_EWMA_ALPHA",
+  "TRAFFIC_EXTRACT_PATH",
+  "TRAFFIC_FETCH_DAILY_BUDGET",
+  "TRAFFIC_FETCH_MAX_CALLS",
+  "TRAFFIC_FETCH_NEGATIVE_TTL",
+  "TRAFFIC_FETCH_ON_DEMAND",
+  "TRAFFIC_FETCH_TTL",
+  "TRAFFIC_FETCH_WINDOW_KM",
+  "TRAFFIC_MAX_TRACE",
+  "TRAFFIC_MIN_SAMPLES",
+  "TRAFFIC_PROVIDER",
+  "TRAFFIC_PROVIDER_BBOX",
+  "TRAFFIC_PROVIDER_GRID",
+  "TRAFFIC_PROVIDER_INTERVAL",
+  "TRAFFIC_PROVIDER_WEIGHT",
+  "TRAFFIC_STREAM",
+  "TRAFFIC_SUBJECT",
+  "TRAFFIC_WRITER_SHARDS",
+  "TRAFFIC_WRITER_SHARD_INDEX",
+  "TRAFFIC_WRITE_INTERVAL",
+  "TRANSFORMERS_CACHE",
+  "VALHALLA_URL",
+  "WATCH_POLL_INTERVAL",
+]
+
+"shared.embeddings" = [
+  "build_text",
+  "embed_texts",
+  "get_model",
+]
+
+"shared.es_mapping" = [
+  "MAPPING",
+]
+
+"shared.google_maps" = [
+  "GoogleMapsError",
+  "forward_geocode",
+  "map_place_to_element",
+  "map_result_to_element",
+  "nearby_search",
+  "place_osm_id",
+  "reverse_geocode",
+]
+
+"shared.interpolation" = [
+  "InterpolatedAddress",
+  "interpolate_address",
+  "reverse_interpolate",
+]
+
+"shared.llm" = [
+  "generate_description",
+  "is_ollama_available",
+  "warm_up_model",
+]
+
+"shared.logging" = [
+  "get_logger",
+]
+
+"shared.nats_client" = [
+  "TRAFFIC_CELLS_STREAM_CFG",
+  "TRAFFIC_STREAM_CFG",
+  "connect",
+  "connect_cells",
+  "connect_traffic",
+  "ensure_stream",
+  "is_connection_error",
+  "is_transient_error",
+  "reconnect",
+  "subscribe",
+  "subscribe_cells",
+  "subscribe_traffic",
+]
+
+"shared.places_mapping" = [
+  "place_to_element",
+]
+
+"shared.processed" = [
+  "claim",
+  "is_processed",
+  "load_processed",
+  "record_processed",
+]
+
+"shared.progress" = [
+  "ProgressTracker",
+]
+
+"shared.ranking" = [
+  "compute_offline_rank",
+]
+
+"shared.redis_client" = [
+  "make_redis",
+  "make_redis_async",
+]
+
+"shared.spec" = [
+  "SPEC_DIR",
+  "load",
+]
+
+"shared.traffic_providers" = [
+  "get_provider",
+  "tomtom_point_speed",
+]
+
+"shared.valhalla" = [
+  "link_pbf_for_valhalla",
+]

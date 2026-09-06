@@ -32,7 +32,7 @@ import unicodedata
 
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("address.json")
+_SPEC = _load_spec("address.toml")
 
 # ── OSM addr: tag → logical field name ───────────────────────────────────
 ADDR_FIELD_MAP = _SPEC["ADDR_FIELD_MAP"]
@@ -48,24 +48,7 @@ _EN_ABBREVS = _SPEC["_EN_ABBREVS"]
 _AR_STREET_TYPES = _SPEC["_AR_STREET_TYPES"]
 
 # Arabic tokens that indicate a street/address context
-_AR_STREET_KEYWORDS = frozenset(
-    [
-        "شارع",
-        "طريق",
-        "ميدان",
-        "حارة",
-        "زقاق",
-        "كورنيش",
-        "حي",
-        "منطقة",
-        "مدينة",
-        "محافظة",
-        "عمارة",
-        "برج",
-        "مبنى",
-        "عمائر",
-    ]
-)
+_AR_STREET_KEYWORDS = frozenset(_SPEC["_AR_STREET_KEYWORDS"])
 
 # Arabic city/area names for detection (common ones)
 # We store both original and normalized forms to match regardless of normalization
@@ -75,52 +58,13 @@ _AR_CITY_KEYWORDS_RAW = _SPEC["_AR_CITY_KEYWORDS_RAW"]
 _FR_STREET_TYPES = _SPEC["_FR_STREET_TYPES"]
 
 # French tokens that indicate a street/address context
-_FR_STREET_KEYWORDS = frozenset(
-    [
-        "rue",
-        "avenue",
-        "boulevard",
-        "place",
-        "square",
-        "chemin",
-        "impasse",
-        "allée",
-        "cour",
-        "cours",
-        "passage",
-        "quai",
-        "route",
-        "rond-point",
-        "carrefour",
-        "voie",
-    ]
-)
+_FR_STREET_KEYWORDS = frozenset(_SPEC["_FR_STREET_KEYWORDS"])
 
 # French city/area names for detection (common ones)
 _FR_CITY_KEYWORDS_RAW = _SPEC["_FR_CITY_KEYWORDS_RAW"]
 
 # English tokens that indicate a street/address context
-_EN_STREET_KEYWORDS = frozenset(
-    [
-        "street",
-        "road",
-        "avenue",
-        "boulevard",
-        "lane",
-        "drive",
-        "place",
-        "court",
-        "square",
-        "highway",
-        "crescent",
-        "terrace",
-        "parkway",
-        "way",
-        "alley",
-        "circle",
-        "trail",
-    ]
-)
+_EN_STREET_KEYWORDS = frozenset(_SPEC["_EN_STREET_KEYWORDS"])
 
 # English city/area names for detection (common ones)
 _EN_CITY_KEYWORDS_RAW = _SPEC["_EN_CITY_KEYWORDS_RAW"]

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 from shared.spec import load as _load_spec
 
-_SPEC = _load_spec("categories.json")
+_SPEC = _load_spec("categories.toml")
 
 # First-match-wins precedence over the OSM tag keys that denote a feature's type.
 # Order matters: a bakery tagged both ``building=yes`` and ``shop=bakery`` must

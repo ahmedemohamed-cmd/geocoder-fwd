@@ -1,0 +1,79 @@
+# GeoNames specification — feature taxonomy
+#
+# THIS FILE IS SPECIFICATION, NOT CONFIGURATION. See shared/spec.py.
+#
+# GeoNames classifies places with its own two-level feature class/code scheme.
+# These tables translate it into the OSM tags the pipeline ranks on, and into
+# admin levels so GeoNames boundaries rank alongside OSM ones.
+
+# GeoNames feature code -> OSM place type, used for ranking.
+[feature_code_to_place]
+"PPLC" = "city"
+"PPLA" = "city"
+"PPLA2" = "city"
+"PPLA3" = "town"
+"PPLA4" = "town"
+"PPLA5" = "town"
+"PPL" = "village"
+"PPLS" = "village"
+"PPLX" = "neighbourhood"
+"PPLF" = "hamlet"
+"PPLL" = "hamlet"
+"PPLQ" = "hamlet"
+"PPLR" = "hamlet"
+"PPLW" = "hamlet"
+"PCLI" = "country"
+"PCLD" = "country"
+"PCLF" = "country"
+"PCLS" = "country"
+"ADM1" = "state"
+"ADM1H" = "state"
+"ADM2" = "region"
+"ADM2H" = "region"
+
+# GeoNames feature class -> the OSM tag pair that best represents it.
+[feature_class_tags]
+[feature_class_tags.A]
+"boundary" = "administrative"
+
+[feature_class_tags.H]
+"natural" = "water"
+
+[feature_class_tags.L]
+"landuse" = "area"
+
+[feature_class_tags.P]
+[feature_class_tags.R]
+"highway" = "road"
+
+[feature_class_tags.S]
+"building" = "yes"
+
+[feature_class_tags.T]
+"natural" = "peak"
+
+[feature_class_tags.U]
+"natural" = "water"
+
+[feature_class_tags.V]
+"natural" = "wood"
+
+# Administrative codes -> OSM admin_level.
+[feature_code_admin_level]
+"PCLI" = 2
+"PCLD" = 2
+"PCLF" = 2
+"PCLS" = 2
+"PCLH" = 2
+"ADM1" = 4
+"ADM1H" = 4
+"ADM2" = 6
+"ADM2H" = 6
+"ADM3" = 7
+"ADM3H" = 7
+"ADM4" = 8
+"ADM4H" = 8
+"ADM5" = 9
+"ADM5H" = 9
+"ADMD" = 6
+"ADMDH" = 6
