@@ -101,9 +101,25 @@ Any module without a golden would have regenerated silently incorrect.
 
 Before attempting more:
 
-1. Convert the six JSON specs to a commented format, or pair each with the
-   reasoning it lost.
-2. Extract the four constructor-wrapped tables the AST scan missed.
-3. Specify each contractual module's public exports, not just its data.
-4. Bring the stack up and run the recall harness. Every result here is snapshot
-   equality; none of it measures search quality.
+1. ~~Convert the six JSON specs to a commented format.~~ **Done.** Five became
+   documented TOML with their reasoning restored; `es-mapping.json` stays JSON
+   because it is an Elasticsearch API payload. Each conversion was verified by
+   round-trip equality before the loaders were switched.
+2. ~~Extract the constructor-wrapped tables the AST scan missed.~~ **Done.**
+   The three street-keyword vocabularies (47 values) are in
+   `spec/address.toml`; a rescan reports zero remaining.
+3. ~~Specify each contractual module's public exports.~~ **Done.**
+   `spec/module-api.toml` declares 191 names across 30 modules, with a test
+   that the spec cannot fall behind the code.
+4. **Run the recall harness.** Still the open item, and now unblocked: the
+   Elasticsearch volume survived and `osm_places` recovered green with
+   3,039,773 documents. Every result in this report is snapshot equality; none
+   of it measures search quality.
+
+## What the fixes do not settle
+
+Converting the specs restored the *reasoning*, which is what a human or an LLM
+needs to make the same judgement call. It does not make the specs provably
+complete. The categories rules were found by running a golden and chasing the
+divergence to zero — a module without a golden would still regenerate silently
+wrong, and most of `services/` has no golden.
