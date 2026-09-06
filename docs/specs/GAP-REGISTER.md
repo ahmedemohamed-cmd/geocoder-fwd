@@ -134,22 +134,41 @@ Items are evidence-backed unless marked *unverified*.
   budgets per endpoint, a dependency-audit gate, a secret-scanning step.
 - **Why:** an unmeasurable requirement cannot fail, so it cannot hold.
 
-### G-18 — Housenumber parsing only supports the leading-number convention
+### G-18 — Housenumber convention is locale-dependent, and the current rule is right here
+
+**Revised after checking the data. The first version of this entry was wrong.**
 
 - **As-built:** `parse_address_query` extracts a housenumber only when it
-  precedes the street. This works in every language tested, including
-  Arabic-Indic digits (`١٥ شارع التحرير`). A trailing housenumber never parses:
+  precedes the street. Trailing numbers are kept as part of the street name:
   `شارع التحرير 15`, `rue de la Paix 15` and `Hauptstrasse 12` all return the
-  whole string as the street with no housenumber.
-- **Desired:** parse both conventions, or state deliberately that trailing-number
-  addresses are out of scope.
-- **Why:** trailing is the standard form across much of Europe — *Via Roma 12*,
-  *Hauptstraße 12*, *Calle Mayor 12*. The index is global (~43.8M docs), so those
-  queries silently lose both exact matching and interpolation. It compounds
-  G-12: a Cairo-only baseline cannot see this at all, because Egyptian addresses
-  use the leading form.
-- **Found by:** writing an intent assertion beside a golden. The snapshot had
-  pinned the behaviour happily for weeks.
+  whole string as the street.
+- **Originally recorded as a defect.** It is not, in this corpus. Streets
+  *named* with a trailing number are one of the most common patterns in the
+  index:
+
+  | Street | Addresses |
+  | --- | --- |
+  | `شارع 2` | 5,986 |
+  | `شارع 1` | 5,867 |
+  | `شارع 3` | 5,490 |
+  | `شارع 9` | 4,276 |
+
+  **222 distinct street names end in a number, covering 128,933 addresses —
+  6.5% of the sampled corpus.** 128 of the 1,000 test-set entries have names
+  ending in a number (`الحى 9` — District 9, `إبنى بيتك 5`). Parsing the
+  trailing number as a housenumber would split `شارع 9` into street `شارع` plus
+  housenumber 9 and destroy every one of them.
+- **The real gap:** the rule is correct for Arabic and English and wrong for the
+  languages where trailing *is* the convention — *Via Roma 12*, *Hauptstraße 12*,
+  *Calle Mayor 12*. The index is global, so both populations are present.
+- **Desired:** locale-aware parsing, not a regex change. A trailing number is a
+  housenumber in de/it/es/nl/nordic addresses and part of the name in ar/en.
+  Any implementation must be measured against a corpus containing both — which
+  is G-12, and is why these two gaps conceal each other.
+- **How this was caught:** by checking the data before changing the parser. A
+  naive fix would have regressed 6.5% of addresses. The Cairo baseline *would*
+  have caught it — 128 of 1,000 cases are exposed — which is the baseline
+  earning its keep.
 
 ### G-19 — Fail-open error handling makes failures look like absent data
 
