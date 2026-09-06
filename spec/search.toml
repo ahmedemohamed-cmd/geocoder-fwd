@@ -27,6 +27,40 @@ rescore_window = 200
 offline_rank_weight = 1.5
 housenumber_proximity_weight = 5
 
+# ── Two-tier geo decay (see [autocomplete] below for the measurement) ──────
+# `geo` alone is a 10km-scale term: it orders results within a city but is far
+# too narrow to separate continents. With a global index that let an exact name
+# match on a distant document win outright — a Riyadh-biased "school" returned
+# five Egyptian POIs literally named "School", 1,600km away, while
+# /autocomplete (which already had both tiers) correctly returned Riyadh
+# schools 2-17km away.
+#
+# `regional` fixes that without disturbing local ranking. At a 300km scale the
+# term is essentially FLAT across one metro or country (1.000 out to 50km,
+# 0.98 at 100km) so every in-country document gains the same constant and the
+# order among them is unchanged, while another country scores ~0.
+[geocode.regional]
+scale = "300km"
+offset = "50km"
+decay = 0.5
+weight = 25
+
+# Retrieval-stage proximity (optimized effort only).
+#
+# `optimized` retrieves on the cheap text bool and applies function_score in a
+# rescore over the top window. A rescore can REORDER that window; it cannot
+# introduce documents into it. So the geo tiers above never see a nearby result
+# that text scoring already crowded out — a Riyadh-biased "school" filled the
+# whole window with Egyptian POIs named "School" before scoring ran.
+#
+# distance_feature adds proximity to the RETRIEVAL query so local documents
+# reach the window at all. pivot is deliberately wide: score is
+# boost * pivot/(pivot+distance), so at 300km a whole metro area varies by only
+# ~14% (1.00 at 0km, 0.86 at 50km) while another country lands near 0.16.
+[geocode.retrieval_proximity]
+pivot = "300km"
+boost = 15
+
 [geocode.geo]
 scale = "10km"
 offset = "1km"

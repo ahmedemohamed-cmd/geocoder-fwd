@@ -120,6 +120,7 @@ impossible to honour. Any run may record a fingerprint here.
 | Run | Docs | Deleted | Index ops | named strict@1 (high) | named strict@1 (optimized) |
 | --- | --- | --- | --- | --- | --- |
 | Frozen baseline (2026-07-13) | not recorded | — | — | 86.8% | 86.7% |
+| Gulf corpus + geo fix (2026-09-06) | 3,076,075 | — | — | 87.5% | 87.7% |
 | Verification (2026-09-05) | 3,039,773 | 103 | 103 | 86.8% | 86.5% |
 
 **High effort reproduced the baseline exactly**, on every metric. Optimized
@@ -143,6 +144,26 @@ window by raw text score first, which is exactly what shifted.
 It also confirms the regenerated modules are not implicated: `offline_rank` is
 computed at **index** time (`services/es_inserter.py`), so the values scored in
 this run were written weeks ago by the previous implementation.
+
+### Duplicate addresses make "exact osm_id" unreliable at depth
+
+The 2026-09-06 run improved every @1 metric but dropped optimized address
+exact@10 from 99.2% to 97.6%. Investigation showed this is a **measurement
+artifact, not a regression**. All four new misses are streets with many
+identically-addressed records — `1 شارع عثمان بن عفان` has **209** matching
+addresses in the index, `22 شارع عثمان بن عفان` has 124, `5 شارع احمد حسن` has
+42. The test set pins one arbitrary `osm_id` out of hundreds.
+
+In every case the returned address was 3–4x **closer to the query's bias point**
+than the expected one (4.8 km vs 15.8 km; 4.2 km vs 10.4 km; 3.7 km vs 11.3 km;
+4.2 km vs 12.2 km). Returning the nearest instance is the better answer; the
+harness scores it as a miss because it compares ids.
+
+The existing allowance for "cross-source duplicate artifacts" was written for
+strict@1 only. It applies equally to the address metrics, and at any depth.
+Before treating an address-metric drop as a regression, check whether the query
+has duplicate housenumber+street records and whether the returned result is
+closer to the bias point.
 
 **Requirement for future runs:** record the fingerprint alongside the numbers. A
 recall figure without its corpus is not comparable, and treating one as a

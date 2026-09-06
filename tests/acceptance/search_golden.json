@@ -795,121 +795,140 @@
      "index": "osm_places",
      "query": {
       "bool": {
-       "minimum_should_match": 1,
+       "must": [
+        {
+         "bool": {
+          "minimum_should_match": 1,
+          "should": [
+           {
+            "multi_match": {
+             "fields": [
+              "name^5",
+              "name.autocomplete^2",
+              "name_en^5",
+              "name_en.autocomplete^2",
+              "name_fr^5",
+              "name_fr.autocomplete^2",
+              "tags_text"
+             ],
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "name^5",
+              "name_en^5",
+              "name_fr^5"
+             ],
+             "fuzziness": "AUTO",
+             "max_expansions": 30,
+             "prefix_length": 2,
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 10,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "query": "Cairo",
+             "type": "phrase"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 15,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "operator": "and",
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "addr_street^5",
+              "addr_street.autocomplete^2",
+              "addr_city^3",
+              "addr_city.autocomplete^1.5",
+              "addr_suburb^2",
+              "addr_suburb.autocomplete",
+              "full_address^3",
+              "full_address.autocomplete^1.5"
+             ],
+             "minimum_should_match": "75%",
+             "operator": "or",
+             "query": "Cairo",
+             "type": "cross_fields"
+            }
+           },
+           {
+            "match_phrase": {
+             "full_address": {
+              "boost": 6,
+              "query": "Cairo",
+              "slop": 2
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_city": {
+              "boost": 3,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_city.autocomplete": {
+              "boost": 1.5,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "match": {
+             "name": {
+              "boost": 2,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "term": {
+             "has_address": {
+              "boost": 2,
+              "value": true
+             }
+            }
+           }
+          ]
+         }
+        }
+       ],
        "should": [
         {
-         "multi_match": {
-          "fields": [
-           "name^5",
-           "name.autocomplete^2",
-           "name_en^5",
-           "name_en.autocomplete^2",
-           "name_fr^5",
-           "name_fr.autocomplete^2",
-           "tags_text"
-          ],
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "name^5",
-           "name_en^5",
-           "name_fr^5"
-          ],
-          "fuzziness": "AUTO",
-          "max_expansions": 30,
-          "prefix_length": 2,
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 10,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "query": "Cairo",
-          "type": "phrase"
-         }
-        },
-        {
-         "multi_match": {
+         "distance_feature": {
           "boost": 15,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "operator": "and",
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "addr_street^5",
-           "addr_street.autocomplete^2",
-           "addr_city^3",
-           "addr_city.autocomplete^1.5",
-           "addr_suburb^2",
-           "addr_suburb.autocomplete",
-           "full_address^3",
-           "full_address.autocomplete^1.5"
-          ],
-          "minimum_should_match": "75%",
-          "operator": "or",
-          "query": "Cairo",
-          "type": "cross_fields"
-         }
-        },
-        {
-         "match_phrase": {
-          "full_address": {
-           "boost": 6,
-           "query": "Cairo",
-           "slop": 2
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_city": {
-           "boost": 3,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_city.autocomplete": {
-           "boost": 1.5,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "match": {
-          "name": {
-           "boost": 2,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "term": {
-          "has_address": {
-           "boost": 2,
-           "value": true
-          }
+          "field": "centroid",
+          "origin": {
+           "lat": 30.0444,
+           "lon": 31.2357
+          },
+          "pivot": "300km"
          }
         }
        ]
@@ -947,6 +966,20 @@
             }
            },
            "weight": 2
+          },
+          {
+           "gauss": {
+            "centroid": {
+             "decay": 0.5,
+             "offset": "50km",
+             "origin": {
+              "lat": 30.0444,
+              "lon": 31.2357
+             },
+             "scale": "300km"
+            }
+           },
+           "weight": 25
           },
           {
            "field_value_factor": {
@@ -1139,6 +1172,20 @@
          "weight": 2
         },
         {
+         "gauss": {
+          "centroid": {
+           "decay": 0.5,
+           "offset": "50km",
+           "origin": {
+            "lat": 30.0444,
+            "lon": 31.2357
+           },
+           "scale": "300km"
+          }
+         },
+         "weight": 25
+        },
+        {
          "field_value_factor": {
           "factor": 1,
           "field": "popularity",
@@ -1309,154 +1356,173 @@
      "index": "osm_places",
      "query": {
       "bool": {
-       "minimum_should_match": 1,
-       "should": [
-        {
-         "multi_match": {
-          "fields": [
-           "name^5",
-           "name.autocomplete^2",
-           "name_en^5",
-           "name_en.autocomplete^2",
-           "name_fr^5",
-           "name_fr.autocomplete^2",
-           "tags_text"
-          ],
-          "query": "15 Tahrir Street",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "name^5",
-           "name_en^5",
-           "name_fr^5"
-          ],
-          "fuzziness": "AUTO",
-          "max_expansions": 30,
-          "prefix_length": 2,
-          "query": "15 Tahrir Street",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 10,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "query": "15 Tahrir Street",
-          "type": "phrase"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 15,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "operator": "and",
-          "query": "15 Tahrir Street",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "addr_street^5",
-           "addr_street.autocomplete^2",
-           "addr_city^3",
-           "addr_city.autocomplete^1.5",
-           "addr_suburb^2",
-           "addr_suburb.autocomplete",
-           "full_address^3",
-           "full_address.autocomplete^1.5"
-          ],
-          "minimum_should_match": "75%",
-          "operator": "or",
-          "query": "15 Tahrir Street",
-          "type": "cross_fields"
-         }
-        },
-        {
-         "match_phrase": {
-          "full_address": {
-           "boost": 6,
-           "query": "15 Tahrir Street",
-           "slop": 2
-          }
-         }
-        },
-        {
-         "match_phrase": {
-          "addr_street": {
-           "boost": 10,
-           "query": "Tahrir Street",
-           "slop": 1
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_street": {
-           "boost": 5,
-           "fuzziness": "AUTO",
-           "query": "Tahrir Street"
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_street.autocomplete": {
-           "boost": 3,
-           "query": "Tahrir Street"
-          }
-         }
-        },
-        {
-         "match_phrase": {
-          "name": {
-           "boost": 4,
-           "query": "Tahrir Street",
-           "slop": 1
-          }
-         }
-        },
+       "must": [
         {
          "bool": {
-          "boost": 50,
-          "must": [
+          "minimum_should_match": 1,
+          "should": [
            {
-            "term": {
-             "addr_housenumber": {
-              "value": "15"
+            "multi_match": {
+             "fields": [
+              "name^5",
+              "name.autocomplete^2",
+              "name_en^5",
+              "name_en.autocomplete^2",
+              "name_fr^5",
+              "name_fr.autocomplete^2",
+              "tags_text"
+             ],
+             "query": "15 Tahrir Street",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "name^5",
+              "name_en^5",
+              "name_fr^5"
+             ],
+             "fuzziness": "AUTO",
+             "max_expansions": 30,
+             "prefix_length": 2,
+             "query": "15 Tahrir Street",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 10,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "query": "15 Tahrir Street",
+             "type": "phrase"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 15,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "operator": "and",
+             "query": "15 Tahrir Street",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "addr_street^5",
+              "addr_street.autocomplete^2",
+              "addr_city^3",
+              "addr_city.autocomplete^1.5",
+              "addr_suburb^2",
+              "addr_suburb.autocomplete",
+              "full_address^3",
+              "full_address.autocomplete^1.5"
+             ],
+             "minimum_should_match": "75%",
+             "operator": "or",
+             "query": "15 Tahrir Street",
+             "type": "cross_fields"
+            }
+           },
+           {
+            "match_phrase": {
+             "full_address": {
+              "boost": 6,
+              "query": "15 Tahrir Street",
+              "slop": 2
              }
             }
            },
            {
             "match_phrase": {
              "addr_street": {
+              "boost": 10,
               "query": "Tahrir Street",
               "slop": 1
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_street": {
+              "boost": 5,
+              "fuzziness": "AUTO",
+              "query": "Tahrir Street"
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_street.autocomplete": {
+              "boost": 3,
+              "query": "Tahrir Street"
+             }
+            }
+           },
+           {
+            "match_phrase": {
+             "name": {
+              "boost": 4,
+              "query": "Tahrir Street",
+              "slop": 1
+             }
+            }
+           },
+           {
+            "bool": {
+             "boost": 50,
+             "must": [
+              {
+               "term": {
+                "addr_housenumber": {
+                 "value": "15"
+                }
+               }
+              },
+              {
+               "match_phrase": {
+                "addr_street": {
+                 "query": "Tahrir Street",
+                 "slop": 1
+                }
+               }
+              }
+             ]
+            }
+           },
+           {
+            "term": {
+             "has_address": {
+              "boost": 2,
+              "value": true
              }
             }
            }
           ]
          }
-        },
+        }
+       ],
+       "should": [
         {
-         "term": {
-          "has_address": {
-           "boost": 2,
-           "value": true
-          }
+         "distance_feature": {
+          "boost": 15,
+          "field": "centroid",
+          "origin": {
+           "lat": 30.0444,
+           "lon": 31.2357
+          },
+          "pivot": "300km"
          }
         }
        ]
@@ -1494,6 +1560,20 @@
             }
            },
            "weight": 2
+          },
+          {
+           "gauss": {
+            "centroid": {
+             "decay": 0.5,
+             "offset": "50km",
+             "origin": {
+              "lat": 30.0444,
+              "lon": 31.2357
+             },
+             "scale": "300km"
+            }
+           },
+           "weight": 25
           },
           {
            "field_value_factor": {
@@ -2117,61 +2197,80 @@
      "index": "osm_places",
      "query": {
       "bool": {
-       "minimum_should_match": 1,
+       "must": [
+        {
+         "bool": {
+          "minimum_should_match": 1,
+          "should": [
+           {
+            "multi_match": {
+             "fields": [
+              "name^5",
+              "name.autocomplete^2",
+              "name_en^5",
+              "name_en.autocomplete^2",
+              "name_fr^5",
+              "name_fr.autocomplete^2",
+              "tags_text"
+             ],
+             "query": "مستشفي",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "name^5",
+              "name_en^5",
+              "name_fr^5"
+             ],
+             "fuzziness": "AUTO",
+             "max_expansions": 30,
+             "prefix_length": 2,
+             "query": "مستشفي",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 10,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "query": "مستشفي",
+             "type": "phrase"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 15,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "operator": "and",
+             "query": "مستشفي",
+             "type": "best_fields"
+            }
+           }
+          ]
+         }
+        }
+       ],
        "should": [
         {
-         "multi_match": {
-          "fields": [
-           "name^5",
-           "name.autocomplete^2",
-           "name_en^5",
-           "name_en.autocomplete^2",
-           "name_fr^5",
-           "name_fr.autocomplete^2",
-           "tags_text"
-          ],
-          "query": "مستشفي",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "name^5",
-           "name_en^5",
-           "name_fr^5"
-          ],
-          "fuzziness": "AUTO",
-          "max_expansions": 30,
-          "prefix_length": 2,
-          "query": "مستشفي",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 10,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "query": "مستشفي",
-          "type": "phrase"
-         }
-        },
-        {
-         "multi_match": {
+         "distance_feature": {
           "boost": 15,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "operator": "and",
-          "query": "مستشفي",
-          "type": "best_fields"
+          "field": "centroid",
+          "origin": {
+           "lat": 30.0,
+           "lon": 31.0
+          },
+          "pivot": "300km"
          }
         }
        ]
@@ -2209,6 +2308,20 @@
             }
            },
            "weight": 2
+          },
+          {
+           "gauss": {
+            "centroid": {
+             "decay": 0.5,
+             "offset": "50km",
+             "origin": {
+              "lat": 30.0,
+              "lon": 31.0
+             },
+             "scale": "300km"
+            }
+           },
+           "weight": 25
           },
           {
            "field_value_factor": {
@@ -4399,121 +4512,140 @@
      },
      "query": {
       "bool": {
-       "minimum_should_match": 1,
+       "must": [
+        {
+         "bool": {
+          "minimum_should_match": 1,
+          "should": [
+           {
+            "multi_match": {
+             "fields": [
+              "name^5",
+              "name.autocomplete^2",
+              "name_en^5",
+              "name_en.autocomplete^2",
+              "name_fr^5",
+              "name_fr.autocomplete^2",
+              "tags_text"
+             ],
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "name^5",
+              "name_en^5",
+              "name_fr^5"
+             ],
+             "fuzziness": "AUTO",
+             "max_expansions": 30,
+             "prefix_length": 2,
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 10,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "query": "Cairo",
+             "type": "phrase"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 15,
+             "fields": [
+              "name",
+              "name_en",
+              "name_fr"
+             ],
+             "operator": "and",
+             "query": "Cairo",
+             "type": "best_fields"
+            }
+           },
+           {
+            "multi_match": {
+             "boost": 4,
+             "fields": [
+              "addr_street^5",
+              "addr_street.autocomplete^2",
+              "addr_city^3",
+              "addr_city.autocomplete^1.5",
+              "addr_suburb^2",
+              "addr_suburb.autocomplete",
+              "full_address^3",
+              "full_address.autocomplete^1.5"
+             ],
+             "minimum_should_match": "75%",
+             "operator": "or",
+             "query": "Cairo",
+             "type": "cross_fields"
+            }
+           },
+           {
+            "match_phrase": {
+             "full_address": {
+              "boost": 6,
+              "query": "Cairo",
+              "slop": 2
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_city": {
+              "boost": 3,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "match": {
+             "addr_city.autocomplete": {
+              "boost": 1.5,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "match": {
+             "name": {
+              "boost": 2,
+              "query": "Cairo"
+             }
+            }
+           },
+           {
+            "term": {
+             "has_address": {
+              "boost": 2,
+              "value": true
+             }
+            }
+           }
+          ]
+         }
+        }
+       ],
        "should": [
         {
-         "multi_match": {
-          "fields": [
-           "name^5",
-           "name.autocomplete^2",
-           "name_en^5",
-           "name_en.autocomplete^2",
-           "name_fr^5",
-           "name_fr.autocomplete^2",
-           "tags_text"
-          ],
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "name^5",
-           "name_en^5",
-           "name_fr^5"
-          ],
-          "fuzziness": "AUTO",
-          "max_expansions": 30,
-          "prefix_length": 2,
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 10,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "query": "Cairo",
-          "type": "phrase"
-         }
-        },
-        {
-         "multi_match": {
+         "distance_feature": {
           "boost": 15,
-          "fields": [
-           "name",
-           "name_en",
-           "name_fr"
-          ],
-          "operator": "and",
-          "query": "Cairo",
-          "type": "best_fields"
-         }
-        },
-        {
-         "multi_match": {
-          "boost": 4,
-          "fields": [
-           "addr_street^5",
-           "addr_street.autocomplete^2",
-           "addr_city^3",
-           "addr_city.autocomplete^1.5",
-           "addr_suburb^2",
-           "addr_suburb.autocomplete",
-           "full_address^3",
-           "full_address.autocomplete^1.5"
-          ],
-          "minimum_should_match": "75%",
-          "operator": "or",
-          "query": "Cairo",
-          "type": "cross_fields"
-         }
-        },
-        {
-         "match_phrase": {
-          "full_address": {
-           "boost": 6,
-           "query": "Cairo",
-           "slop": 2
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_city": {
-           "boost": 3,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "match": {
-          "addr_city.autocomplete": {
-           "boost": 1.5,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "match": {
-          "name": {
-           "boost": 2,
-           "query": "Cairo"
-          }
-         }
-        },
-        {
-         "term": {
-          "has_address": {
-           "boost": 2,
-           "value": true
-          }
+          "field": "centroid",
+          "origin": {
+           "lat": 30.0,
+           "lon": 31.0
+          },
+          "pivot": "300km"
          }
         }
        ]
@@ -4551,6 +4683,20 @@
             }
            },
            "weight": 2
+          },
+          {
+           "gauss": {
+            "centroid": {
+             "decay": 0.5,
+             "offset": "50km",
+             "origin": {
+              "lat": 30.0,
+              "lon": 31.0
+             },
+             "scale": "300km"
+            }
+           },
+           "weight": 25
           },
           {
            "field_value_factor": {

@@ -204,6 +204,69 @@ Items are evidence-backed unless marked *unverified*.
   regeneration of either has nothing checking it, and both goldens this session
   caught real defects in modules that *did* have coverage.
 
+### G-21 — /geocode's single geo-decay fails outside Egypt [FIXED 2026-09-06]
+
+- **As-built:** `/autocomplete` uses a two-tier decay (regional 300 km @ weight
+  25, local 15 km @ weight 3). `/geocode` still uses a **single** 10 km gaussian
+  at weight 2. The two-tier fix was applied to one endpoint and not the other.
+- **Evidence.** With Riyadh and Dubai places in the index, biased to Riyadh:
+
+  ```
+  /geocode      q=school  →  5 results named "School", 1,612–1,789 km away
+                             (all in Egypt, all offline_rank 1.029)
+  /autocomplete q=school  →  Al Yasmin International School      9 km
+                             مدرسة الشيخ عبدالعزيز بن باز الثانوية  2 km
+  ```
+
+  Across 9 category terms × 2 endpoints × 3 origins: Cairo-biased `/geocode`
+  returns 0/10 far results, while Riyadh-biased returns 6–10/10 at a median of
+  ~1,624 km and Dubai-biased 8–10/10 at ~2,420 km. `/autocomplete` returns 0/10
+  far from every origin.
+- **Why it happens:** an exact name match on POIs literally called "School"
+  dominates, and a 10 km-scale term at weight 2 cannot pull local results up.
+  This is exactly the failure the two-tier decay was introduced to fix — the
+  reasoning is recorded in `spec/search.toml` under `[autocomplete]` — but
+  `/geocode` never received it.
+- **Desired:** port the two-tier decay to `/geocode`, then measure. The values
+  are already in `spec/search.toml`; this is a scoring change, so it needs a
+  before/after recall run on a corpus containing both regions.
+- **Why it was invisible:** every document was in Egypt. From Cairo, `/geocode`
+  scores perfectly. This is G-12 realised — the blind spot was hiding a
+  production defect, not a hypothetical one.
+- **Impact:** any user outside Egypt gets Egyptian results from `/geocode` for
+  category queries. Directly relevant to Gulf-market expansion.
+- **Fixed** in two parts, because the first was aimed at the wrong stage:
+  1. A regional decay tier was added to `/geocode`'s `function_score`. This
+     fixed `effort=high` and did nothing for `effort=optimized` — the default,
+     and the one being kept.
+  2. `optimized` retrieves on text alone and applies scoring in a rescore over
+     the top 200. **A rescore reorders a window; it cannot introduce documents
+     into it.** For `school` biased to Riyadh the first local result ranked
+     #579 by text, so 0 of 200 window slots held a Riyadh document and no decay
+     value could have helped. A `distance_feature` clause was added to the
+     retrieval query so proximity influences what is retrieved.
+- **Result:** Riyadh/Dubai leakage went from 6–10/10 foreign results to 0/10 on
+  every term with local data. Cairo recall *improved*: optimized named strict@1
+  86.3% → 87.7%, lenient@1 95.6% → 97.1%.
+- **Residue is data, not scoring.** Terms still leaking (`mosque`, `market`)
+  have almost nothing local to return: 12 mosques and 35 markets within 100 km
+  of Riyadh, against 56,494 and 296,571 for Cairo. The Gulf corpus is GeoNames
+  *places*; Egypt's is dense OSM *POIs*. This corpus validates direction, it
+  does not simulate a production global index.
+- **Open:** the `distance_feature` boost is 15; a sweep showed local coverage of
+  the retrieval window saturates at **40**. Raising it is untested and deferred.
+
+### G-22 — `addr_country` is not normalised
+
+- **As-built:** the field mixes ISO codes, English names and Arabic names for
+  the same country — `EG` (2,612,076), `Egypt` (76,930), `SA` (27,718),
+  `Saudi Arabia` (9,446), `المملكة العربية السعودية` (9,006) — plus 310,043
+  empty and a governorate name (`محافظة القاهرة`) leaked into the country field.
+- **Desired:** normalise to ISO 3166-1 alpha-2 at index time.
+- **Why:** the `/address` endpoint accepts a `country` filter. Filtering by `SA`
+  silently misses the 9,446 documents that say `Saudi Arabia` and the 9,006 that
+  say it in Arabic.
+
 ## Regeneration readiness
 
 Resolved 2026-09-05: the intent behind G-14 is that **code is machine-authored

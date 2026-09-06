@@ -898,6 +898,22 @@ async def geocode(
                 "weight": _SEARCH["geocode"]["geo"]["weight"],
             }
         )
+        # Regional tier: flat across a country, ~0 across countries. Keeps a
+        # distant exact-name match from beating a nearby relevant one without
+        # reordering anything locally (spec/search.toml, [geocode.regional]).
+        functions.append(
+            {
+                "gauss": {
+                    "centroid": {
+                        "origin": {"lat": lat, "lon": lon},
+                        "scale": _SEARCH["geocode"]["regional"]["scale"],
+                        "offset": _SEARCH["geocode"]["regional"]["offset"],
+                        "decay": _SEARCH["geocode"]["regional"]["decay"],
+                    }
+                },
+                "weight": _SEARCH["geocode"]["regional"]["weight"],
+            }
+        )
 
     # popularity boost (feedback-driven, capped at 1000 via /feedback endpoint)
     functions.append(
@@ -1215,7 +1231,29 @@ async def geocode(
         # stalls. The window is widened to cover the requested page so deep
         # offsets still get scored.  Exact hit counting is also skipped, since
         # it forces a full match-set traversal we don't need for ranking.
-        body["query"] = text_query
+        retrieval_query = text_query
+        if lat is not None and lon is not None:
+            # Proximity must influence RETRIEVAL here, not just the rescore:
+            # the rescore window is chosen by text score alone, so without this
+            # a distant exact-name match crowds out every nearby result before
+            # the geo tiers ever run (spec: [geocode.retrieval_proximity]).
+            prox = _SEARCH["geocode"]["retrieval_proximity"]
+            retrieval_query = {
+                "bool": {
+                    "must": [text_query],
+                    "should": [
+                        {
+                            "distance_feature": {
+                                "field": "centroid",
+                                "origin": {"lat": lat, "lon": lon},
+                                "pivot": prox["pivot"],
+                                "boost": prox["boost"],
+                            }
+                        }
+                    ],
+                }
+            }
+        body["query"] = retrieval_query
         body["rescore"] = {
             "window_size": max(_RESCORE_WINDOW, offset + limit),
             "query": {

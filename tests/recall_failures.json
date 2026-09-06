@@ -1,5 +1,5 @@
 {
- "optimized": {
+ "high": {
   "named_strict_miss": [
    {
     "kind": "named",
@@ -11,59 +11,35 @@
    },
    {
     "kind": "named",
-    "query": "Al-Obour",
-    "osm_id": "n311994035",
+    "query": "Helwan",
+    "osm_id": "n768775606",
+    "strict_rank": null,
+    "lenient_rank": 4,
+    "top": "‪Helwan university‬‏"
+   },
+   {
+    "kind": "named",
+    "query": "El Sa'aed",
+    "osm_id": "w711633662",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Obour Garden"
-   },
-   {
-    "kind": "named",
-    "query": "Al Zahraa",
-    "osm_id": "w376085481",
-    "strict_rank": null,
-    "lenient_rank": 2,
-    "top": "Al-Zahraa Private Schools"
-   },
-   {
-    "kind": "named",
-    "query": "Al Mashtal",
-    "osm_id": "w688098793",
-    "strict_rank": null,
-    "lenient_rank": null,
-    "top": "Al Mashtal Street"
-   },
-   {
-    "kind": "named",
-    "query": "City Center",
-    "osm_id": "w755926168",
-    "strict_rank": null,
-    "lenient_rank": 1,
-    "top": "City Center"
-   },
-   {
-    "kind": "named",
-    "query": "Al Tawfiq",
-    "osm_id": "w701533384",
-    "strict_rank": null,
-    "lenient_rank": null,
-    "top": "Al Tawfiq Street"
+    "top": "El Sayed"
    },
    {
     "kind": "named",
     "query": "Al Hada'ek",
     "osm_id": "w712074894",
     "strict_rank": null,
-    "lenient_rank": 8,
+    "lenient_rank": null,
     "top": "Al Hadaek Street"
    },
    {
     "kind": "named",
-    "query": "Area 3",
-    "osm_id": "w755654041",
+    "query": "El Abd",
+    "osm_id": "w701014394",
     "strict_rank": null,
-    "lenient_rank": 2,
-    "top": "Tabali Zamalek Delivery area 3"
+    "lenient_rank": 1,
+    "top": "El Abd"
    },
    {
     "kind": "named",
@@ -83,27 +59,19 @@
    },
    {
     "kind": "named",
+    "query": "Area R",
+    "osm_id": "w690453101",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Parking Area"
+   },
+   {
+    "kind": "named",
     "query": "Officer's Housing",
     "osm_id": "w692556528",
     "strict_rank": null,
     "lenient_rank": null,
     "top": "Officers Housing"
-   },
-   {
-    "kind": "named",
-    "query": "Neighborhood 5",
-    "osm_id": "w719902498",
-    "strict_rank": null,
-    "lenient_rank": 1,
-    "top": "Neighborhood 5"
-   },
-   {
-    "kind": "named",
-    "query": "Al Amal",
-    "osm_id": "w715006293",
-    "strict_rank": null,
-    "lenient_rank": null,
-    "top": "Al Amal Street"
    }
   ],
   "named_lenient_miss": [
@@ -117,27 +85,27 @@
    },
    {
     "kind": "named",
-    "query": "Al-Obour",
-    "osm_id": "n311994035",
+    "query": "El Sa'aed",
+    "osm_id": "w711633662",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Obour Garden"
+    "top": "El Sayed"
    },
    {
     "kind": "named",
-    "query": "Al Mashtal",
-    "osm_id": "w688098793",
+    "query": "Al Hada'ek",
+    "osm_id": "w712074894",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Mashtal Street"
+    "top": "Al Hadaek Street"
    },
    {
     "kind": "named",
-    "query": "Al Tawfiq",
-    "osm_id": "w701533384",
+    "query": "Area R",
+    "osm_id": "w690453101",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Tawfiq Street"
+    "top": "Parking Area"
    },
    {
     "kind": "named",
@@ -146,14 +114,236 @@
     "strict_rank": null,
     "lenient_rank": null,
     "top": "Officers Housing"
+   }
+  ],
+  "address_street_miss": [
+   {
+    "kind": "address",
+    "query": "b215 طريق القاهرة, الاسكندرية الصحراوي الجانبي القريه الذكية, Cairo",
+    "osm_id": "n13732063159",
+    "exact_rank": null,
+    "street_rank": null,
+    "interp_state": "fail",
+    "top": "Side Cairo, Alexandria Desert Road"
+   },
+   {
+    "kind": "address",
+    "query": "7` شارع النادي, Cairo",
+    "osm_id": "n13539109001",
+    "exact_rank": null,
+    "street_rank": null,
+    "interp_state": "na",
+    "top": "شارع الحي الحادي عشر"
+   }
+  ],
+  "address_exact_miss": [
+   {
+    "kind": "address",
+    "query": "16 شارع النصر, Cairo",
+    "osm_id": "n11027293553",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "16 شارع النصر"
+   },
+   {
+    "kind": "address",
+    "query": "1 شارع عثمان بن عفان, Cairo",
+    "osm_id": "n9850700146",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "1 شارع عثمان بن عفان, العجوزه, 12657, EG"
+   },
+   {
+    "kind": "address",
+    "query": "Downtown Mall Road 90, Cairo",
+    "osm_id": "n4997492280",
+    "exact_rank": null,
+    "street_rank": 2,
+    "interp_state": "na",
+    "top": "900 degrees | Downtown Mall"
+   },
+   {
+    "kind": "address",
+    "query": "b215 طريق القاهرة, الاسكندرية الصحراوي الجانبي القريه الذكية, Cairo",
+    "osm_id": "n13732063159",
+    "exact_rank": null,
+    "street_rank": null,
+    "interp_state": "fail",
+    "top": "Side Cairo, Alexandria Desert Road"
+   },
+   {
+    "kind": "address",
+    "query": "7` شارع النادي, Cairo",
+    "osm_id": "n13539109001",
+    "exact_rank": null,
+    "street_rank": null,
+    "interp_state": "na",
+    "top": "شارع الحي الحادي عشر"
+   },
+   {
+    "kind": "address",
+    "query": "2 شارع عمر بن الخطاب, Cairo",
+    "osm_id": "n6581826591",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "2 شارع عمر بن الخطاب, الدقي, 12615, EG"
+   },
+   {
+    "kind": "address",
+    "query": "5 شارع احمد حسن, Cairo",
+    "osm_id": "n9625746941",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "5 شارع احمد حسن, منشاه ناصر, 11699, EG"
+   },
+   {
+    "kind": "address",
+    "query": "6 شارع احمد حسن, Cairo",
+    "osm_id": "n9625746942",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "6 شارع احمد حسن, منشاه ناصر, 11699, EG"
+   },
+   {
+    "kind": "address",
+    "query": "22 شارع عثمان بن عفان, Cairo",
+    "osm_id": "n9771756015",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "22 شارع عثمان بن عفان, امبابه, 12664, EG"
+   },
+   {
+    "kind": "address",
+    "query": "13` شارع اللبينى, Cairo",
+    "osm_id": "n6766648981",
+    "exact_rank": null,
+    "street_rank": 2,
+    "interp_state": "fail",
+    "top": "شارع 18"
+   }
+  ]
+ },
+ "optimized": {
+  "named_strict_miss": [
+   {
+    "kind": "named",
+    "query": "Cairo",
+    "osm_id": "n271613766",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Cairo Plaza"
    },
    {
     "kind": "named",
-    "query": "Al Amal",
-    "osm_id": "w715006293",
+    "query": "Giza",
+    "osm_id": "n27565120",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "Giza"
+   },
+   {
+    "kind": "named",
+    "query": "Helwan",
+    "osm_id": "n768775606",
+    "strict_rank": null,
+    "lenient_rank": 5,
+    "top": "Helwan Prison"
+   },
+   {
+    "kind": "named",
+    "query": "Cairo Festival City",
+    "osm_id": "w26753320",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "Burger King - Cairo Festival City"
+   },
+   {
+    "kind": "named",
+    "query": "Al Hada'ek",
+    "osm_id": "w712074894",
     "strict_rank": null,
     "lenient_rank": null,
-    "top": "Al Amal Street"
+    "top": "Al Hadaek Street"
+   },
+   {
+    "kind": "named",
+    "query": "El Abd",
+    "osm_id": "w701014394",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "El Abd"
+   },
+   {
+    "kind": "named",
+    "query": "Neighborhood 1",
+    "osm_id": "w772964066",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "Neighborhood 1"
+   },
+   {
+    "kind": "named",
+    "query": "Neighborhood 3",
+    "osm_id": "w772964060",
+    "strict_rank": null,
+    "lenient_rank": 1,
+    "top": "Neighborhood 3"
+   },
+   {
+    "kind": "named",
+    "query": "Area R",
+    "osm_id": "w690453101",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Parking Area"
+   },
+   {
+    "kind": "named",
+    "query": "Officer's Housing",
+    "osm_id": "w692556528",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Officers Housing"
+   }
+  ],
+  "named_lenient_miss": [
+   {
+    "kind": "named",
+    "query": "Cairo",
+    "osm_id": "n271613766",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Cairo Plaza"
+   },
+   {
+    "kind": "named",
+    "query": "Al Hada'ek",
+    "osm_id": "w712074894",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Al Hadaek Street"
+   },
+   {
+    "kind": "named",
+    "query": "Area R",
+    "osm_id": "w690453101",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Parking Area"
+   },
+   {
+    "kind": "named",
+    "query": "Officer's Housing",
+    "osm_id": "w692556528",
+    "strict_rank": null,
+    "lenient_rank": null,
+    "top": "Officers Housing"
    }
   ],
   "address_street_miss": [],
@@ -169,12 +359,48 @@
    },
    {
     "kind": "address",
+    "query": "1 شارع عثمان بن عفان, Cairo",
+    "osm_id": "n9850700146",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "1 شارع عثمان بن عفان, العجوزه, 12657, EG"
+   },
+   {
+    "kind": "address",
     "query": "2 شارع عمر بن الخطاب, Cairo",
     "osm_id": "n6581826591",
     "exact_rank": null,
     "street_rank": 1,
     "interp_state": "na",
     "top": "2 شارع عمر بن الخطاب, الدقي, 12615, EG"
+   },
+   {
+    "kind": "address",
+    "query": "5 شارع احمد حسن, Cairo",
+    "osm_id": "n9625746941",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "5 شارع احمد حسن, منشاه ناصر, 11699, EG"
+   },
+   {
+    "kind": "address",
+    "query": "6 شارع احمد حسن, Cairo",
+    "osm_id": "n9625746942",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "6 شارع احمد حسن, منشاه ناصر, 11699, EG"
+   },
+   {
+    "kind": "address",
+    "query": "22 شارع عثمان بن عفان, Cairo",
+    "osm_id": "n9771756015",
+    "exact_rank": null,
+    "street_rank": 1,
+    "interp_state": "na",
+    "top": "22 شارع عثمان بن عفان, امبابه, 12664, EG"
    }
   ]
  }
