@@ -625,5 +625,43 @@
       "آثار",
       "موقع أثري"
     ]
+  },
+  "JUNK_VALUES": [
+    "yes",
+    "no",
+    "true",
+    "false",
+    "unknown",
+    "none"
+  ],
+  "CLASSIFY_RULES": {
+    "_comment": [
+      "Ordering rules for classify(). JSON cannot carry comments, so they are",
+      "data here — the regeneration experiment showed that leaving them as code",
+      "comments diverged 174 of 261 cases."
+    ],
+    "boundary_wins_over_tags": true,
+    "_boundary_note": "An element carrying an admin_level, or boundary=administrative, is a boundary regardless of any other tag it holds. A governorate tagged amenity=restaurant is still a boundary.",
+    "boundary_category": {
+      "key": null,
+      "value": null,
+      "group": "boundary",
+      "is_poi": false
+    },
+    "key_precedence": "CATEGORY_KEYS order",
+    "non_poi_groups": [
+      "place",
+      "boundary"
+    ],
+    "unknown_value_group_fallback": "GROUP_BY_KEY, else null",
+    "subfeatures_excluded_from": "category_text only",
+    "_subfeature_note": "Sub-features keep their category_key/category_value so /nearby can filter for them deliberately; they are dropped from free-text type search only.",
+    "boundary_key_value_from_tag_only": true,
+    "_boundary_kv_note": "boundary=administrative yields key/value 'boundary'/'administrative'. An admin_level with no boundary tag yields null key/value, group 'boundary'.",
+    "_fallback_note": "A key/value in no group and with no GROUP_BY_KEY entry has group null — highway=primary is a POI with no group, not group 'highway'.",
+    "boundary_requires_positive_admin_level": true,
+    "_admin_note": "admin_level of 0 or less is not a boundary; callers pass 0 for non-boundaries.",
+    "place_key_is_its_own_group": true,
+    "_place_note": "place=* is neither in GROUP_DEFS nor GROUP_BY_KEY: it maps to group 'place' and is never a POI. A city is a location, not a destination."
   }
 }
