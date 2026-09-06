@@ -151,6 +151,40 @@ Items are evidence-backed unless marked *unverified*.
 - **Found by:** writing an intent assertion beside a golden. The snapshot had
   pinned the behaviour happily for weeks.
 
+### G-19 — Fail-open error handling makes failures look like absent data
+
+- **As-built:** 13 broad `except Exception` handlers return an empty or null
+  default after logging. Several sit on the critical path:
+  `shared/interpolation.py:616` (address gather — logs at **debug**),
+  `services/enrichment.py:126` (PostGIS enrichment),
+  `services/cache_service.py:70` (cache read),
+  `services/traffic_aggregator.py:149` (Valhalla trace),
+  `shared/traffic_providers.py:146` (provider speed — logs **nothing**).
+- **Desired:** distinguish "no data" from "the lookup failed". At minimum, log
+  infrastructure failures at warning or above and surface a health signal.
+- **Why:** a PostGIS timeout, a connection failure, or a schema change all
+  degrade silently to "interpolation unavailable" or "no traffic here". The
+  feature stops working and nothing alerts.
+- **Found by:** writing the interpolation contract. A missing method on a test
+  fake produced eight `None` results that were indistinguishable from a street
+  with no addresses — it took a trace to tell them apart. A user reporting
+  "interpolation stopped working" would be equally hard to diagnose.
+
+### G-20 — Two modules have no testable surface
+
+- **As-built:** `services/traffic_aggregator.py` exposes only `run()`; its
+  map-matching core (`_edge_speeds_from_match`, a pure function) and its Redis
+  writer (`_update_edge`) are private, so the `tf:e:*` schema contract from
+  AD-12 cannot be exercised without standing up NATS, Valhalla and Redis.
+  `services/watcher.py` needs `osmium`, which is deliberately excluded from the
+  test environment (see the CI note in `pyproject.toml`).
+- **Desired:** for traffic, promote the pure map-matching function to the public
+  surface so AD-12 can be asserted directly. For the PBF watcher, an
+  integration-marked test against the real dependency.
+- **Why:** these are the two largest uncovered modules — 427 and 1,039 lines. A
+  regeneration of either has nothing checking it, and both goldens this session
+  caught real defects in modules that *did* have coverage.
+
 ## Regeneration readiness
 
 Resolved 2026-09-05: the intent behind G-14 is that **code is machine-authored

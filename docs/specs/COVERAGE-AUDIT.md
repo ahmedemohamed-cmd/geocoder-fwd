@@ -68,11 +68,11 @@ Honest list. Nothing below is covered by `spec/` or a contract test.
 
 | Area | Size | Why it matters |
 | --- | --- | --- |
-| **Query construction logic** | `geocode` 491 lines, `address_search` 337 | The *values* are in `search.toml`; the clause structure that assembles them is not. A regeneration would produce a different query shape with the same constants. |
+| **Query construction logic** | `geocode` 491 lines, `address_search` 337 | The *values* are in `search.toml` and the generated query bodies are pinned, but the clause structure that assembles them is not specified. |
 | **Frontend** | 8 JSX pages, `api.js`, `claims.js` | No spec of routes, states, or the admin/tenant surface. The API contract pins what it calls, not what it shows. |
-| **Ingest parsing** | `watcher.py` 992 lines, `oa/gn/places_watcher` | Feature taxonomies are specified; PBF/CSV/TSV traversal and geometry assembly are not. |
-| **Traffic map-matching** | `traffic_aggregator.py` 429 lines | Probe→edge snapping and the mmap write path into `traffic.tar`. |
-| **Interpolation geometry** | `interpolation.py` 659 lines | Vocabulary is specified; the odd/even side-aware positioning is not. |
+| **Ingest parsing** | `watcher.py` 1,039 lines | PBF traversal and geometry assembly. `osmium` is absent from the test environment by CI design, so this needs an integration-marked test (G-20). The GeoNames path is now covered by `test_geonames_contract.py`, which pins the published NATS element message. |
+| **Traffic map-matching** | `traffic_aggregator.py` 427 lines | Probe→edge snapping and the mmap write path into `traffic.tar`. No public surface to test through — see G-20. |
+| ~~Interpolation geometry~~ | — | **Now covered**: `test_interpolation_contract.py` pins eight cases through the public entry point, with intent assertions for bracket containment, parity, and confidence ordering. |
 | **Zitadel provisioning** | `provision_zitadel.py` 293 lines | Org, project, roles, MFA policy — described in prose, not as data. |
 | **Operational knobs** | ~12 constants | Batch sizes, retries, queue bounds still in service modules, violating AD-7. |
 
