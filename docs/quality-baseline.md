@@ -111,6 +111,43 @@ cannot answer — but the measured A/B showed the Redis fast path beats ES on th
 paths it owns, so do not "fix" the split by removing it. The per-source numbers
 are confounded by which queries reach each backend.
 
+## Corpus fingerprint — added 2026-09-05
+
+The frozen numbers above were recorded without stating **which index produced
+them**, which made the caveat below ("compare only runs against the same index")
+impossible to honour. Any run may record a fingerprint here.
+
+| Run | Docs | Deleted | Index ops | named strict@1 (high) | named strict@1 (optimized) |
+| --- | --- | --- | --- | --- | --- |
+| Frozen baseline (2026-07-13) | not recorded | — | — | 86.8% | 86.7% |
+| Verification (2026-09-05) | 3,039,773 | 103 | 103 | 86.8% | 86.5% |
+
+**High effort reproduced the baseline exactly**, on every metric. Optimized
+effort moved −0.2pp at strict@1 and −0.3pp at lenient@1; @5 and @10 did not
+move. Re-running optimized alone reproduced the same numbers, so this is not
+run-to-run variance.
+
+The cause is index state, not code:
+
+* 103 documents were re-indexed while the stack was up (the watchers consume
+  continuously), and 103 deleted docs were still counted in term statistics.
+* A background force-merge was collapsing 22 segments into one. Lucene's IDF is
+  computed from segment-level term statistics, so merging shifts text scores
+  slightly and reorders results that were nearly tied.
+
+That explains why only optimized effort moved. High effort orders by a per
+document `function_score` over stored fields — `offline_rank`, geo decay,
+popularity — which are unaffected by IDF. Optimized effort selects its rescore
+window by raw text score first, which is exactly what shifted.
+
+It also confirms the regenerated modules are not implicated: `offline_rank` is
+computed at **index** time (`services/es_inserter.py`), so the values scored in
+this run were written weeks ago by the previous implementation.
+
+**Requirement for future runs:** record the fingerprint alongside the numbers. A
+recall figure without its corpus is not comparable, and treating one as a
+regression wastes a debugging session.
+
 ## Caveats — read before trusting a comparison
 
 - **Cairo-only test set, global index.** Production indexes ~43.8M documents
